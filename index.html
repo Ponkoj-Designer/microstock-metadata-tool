@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microstock Metadata Management Tool - AI Workflow SaaS</title>
+  <meta name="description" content="Professional AI-powered Microstock Metadata Management Tool. Batch generate titles, descriptions, and keywords for Adobe Stock, Shutterstock, Freepik, iStock and more.">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+      <a href="#" class="brand-section">
+        <div class="brand-logo" id="brand-logo-icon">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div style="display:flex;align-items:center;gap:8px">
+            <h1>Microstock Metadata</h1>
+            <span class="badge-pill">v2.0 AI</span>
+          </div>
+          <div class="brand-subtitle"><span>AI-powered metadata workflow</span></div>
+        </div>
+      </a>
+
+      <div class="header-right-nav">
+        <nav class="nav-links-desktop">
+          <button class="nav-link-btn" id="nav-btn-tutorial">Tutorial</button>
+          <button class="nav-link-btn" id="nav-btn-contact">Contact</button>
+          <button class="nav-link-btn" id="nav-btn-pricing">Pricing</button>
+        </nav>
+        <div class="nav-cta-group">
+          <!-- AI Status Badge -->
+          <div id="ai-status-badge" class="ai-status-badge disconnected">
+            <span class="ai-dot ai-dot-disconnected"></span> AI Not Connected
+          </div>
+          <button class="btn btn-ai-settings btn-sm" id="nav-btn-ai-settings">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2h-2"/></svg>
+            AI Settings
+          </button>
+          <button class="btn btn-secondary btn-sm" id="nav-btn-login">Login</button>
+          <button class="btn btn-primary btn-sm" id="nav-btn-signup">Sign Up</button>
+          <button class="hamburger-toggle" id="hamburger-btn" title="Menu">
+            <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Mobile Nav Drawer -->
+    <div class="mobile-nav-drawer" id="mobile-nav-drawer">
+      <button class="mobile-nav-item" id="mobile-nav-tutorial">📖 Tutorial &amp; Guide</button>
+      <button class="mobile-nav-item" id="mobile-nav-contact">💬 Contact Support</button>
+      <button class="mobile-nav-item" id="mobile-nav-pricing">💎 Pricing Plans</button>
+      <button class="mobile-nav-item" id="mobile-nav-login" style="background:rgba(59,130,246,0.15);color:var(--accent-primary);border-color:rgba(59,130,246,0.3)">🔑 Login / Sign Up</button>
+    </div>
+
+    <!-- Two-Column App Layout -->
+    <div class="app-layout">
+
+      <!-- LEFT: Platform Sidebar -->
+      <aside class="app-sidebar glass-panel" id="platform-sidebar" aria-label="Microstock platform selection">
+        <input type="checkbox" id="platform-collapse" class="platform-collapse-input" autocomplete="off">
+        <label for="platform-collapse" class="platform-collapse-label">
+          <span class="platform-collapse-title">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            Platform
+            <strong id="mobile-platform-name" class="platform-collapse-current"></strong>
+          </span>
+          <span class="platform-collapse-chevr">▾</span>
+        </label>
+        <div class="platform-collapse-body">
+          <p class="platform-hint">Rules &amp; CSV columns adjust automatically per agency</p>
+          <div class="platform-tabs-scroll-wrapper">
+            <div class="platform-tabs-track" id="platform-grid"></div>
+          </div>
+          <div class="platform-specs-banner" id="platform-spec-banner"></div>
+        </div>
+      </aside>
+
+      <!-- RIGHT: Main Workspace -->
+      <main class="main-workspace">
+
+    <!-- Upload Section -->
+    <section class="glass-panel" id="upload-section" style="padding:28px">
+      <div class="asset-tabs-row">
+        <button class="asset-tab active" id="tab-images">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Images
+        </button>
+        <button class="asset-tab" id="tab-vectors">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+          Vectors
+        </button>
+        <button class="asset-tab" id="tab-videos">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          Videos <span class="badge-coming-soon">Soon</span>
+        </button>
+      </div>
+
+      <div class="upload-container" id="drop-zone">
+        <div class="upload-icon-wrapper">
+          <svg width="36" height="36" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        </div>
+        <h3 class="upload-title" id="upload-title-text">Drop your images here or browse files</h3>
+        <p class="upload-subtitle" id="upload-subtitle-text">JPG, PNG, WEBP, TIFF supported — batch 100+ files at once</p>
+        <div class="file-format-tags" id="format-tags-container">
+          <span class="format-tag">JPG</span><span class="format-tag">JPEG</span><span class="format-tag">PNG</span><span class="format-tag">WEBP</span><span class="format-tag">TIFF</span>
+        </div>
+        <div class="upload-actions-group">
+          <button class="btn btn-primary" id="btn-browse-files">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Browse Files
+          </button>
+          <button class="btn btn-secondary" id="btn-load-samples">✨ Load Sample Batch (Demo)</button>
+        </div>
+        <div class="privacy-badge">🔒 Your files are handled securely and are not permanently stored by this interface.</div>
+        <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.webp,.tiff,.tif">
+      </div>
+    </section>
+
+    <!-- Empty State -->
+    <section class="glass-panel empty-state-panel" id="empty-state">
+      <div class="empty-state-illustration">
+        <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      </div>
+      <h3 class="empty-state-title">No assets uploaded yet</h3>
+      <p class="empty-state-desc">Upload images or vectors, then click <strong>Generate Metadata</strong> to analyze them with Gemini AI and create platform-ready titles, descriptions, and keywords.</p>
+    </section>
+
+    <!-- Main Work Area -->
+    <div id="main-content-area" style="display:none">
+
+      <!-- Stats Bar -->
+      <div class="queue-stats-bar" id="stats-bar">
+        <div class="queue-stats-group">
+          <div class="stat-item">Total: <strong id="stat-total">0</strong></div>
+          <div class="stat-item">Images: <strong id="stat-images">0</strong></div>
+          <div class="stat-item">Vectors: <strong id="stat-vectors">0</strong></div>
+          <div class="stat-item">Ready: <strong id="stat-ready">0</strong></div>
+          <div class="stat-item" id="stat-failed-wrapper">Failed: <strong id="stat-failed" style="color:var(--accent-rose)">0</strong></div>
+          <div class="stat-item">Selected: <strong id="stat-selected">0</strong></div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="actions-toolbar">
+        <div class="toolbar-left">
+          <button class="btn btn-primary btn-lg" id="btn-generate-ai">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            Generate Metadata
+          </button>
+          <button class="btn btn-danger btn-sm" id="btn-stop-generation" style="display:none">
+            ⏹ Stop
+          </button>
+          <button class="btn btn-warning btn-sm" id="btn-retry-failed" style="display:none">
+            🔄 Retry Failed
+          </button>
+          <button class="btn btn-secondary" id="btn-upload-more">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Upload More
+          </button>
+          <button class="btn btn-secondary" id="btn-batch-edit">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            Batch Edit
+          </button>
+          <button class="btn btn-secondary btn-sm" id="btn-select-all">Select All</button>
+          <button class="btn btn-secondary btn-sm" id="btn-deselect-all">Deselect</button>
+          <button class="btn btn-danger btn-sm" id="btn-remove-selected">Remove Selected</button>
+          <button class="btn btn-danger btn-sm" id="btn-clear-all">Clear All</button>
+        </div>
+        <div class="toolbar-right">
+          <div class="search-input-wrapper">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" class="search-input" id="search-input" placeholder="Search files or keywords…">
+          </div>
+          <select class="select-dropdown" id="status-filter-select">
+            <option value="all">All Statuses</option>
+            <option value="ready">Ready</option>
+            <option value="waiting">Waiting</option>
+            <option value="processing">Processing</option>
+            <option value="failed">Failed</option>
+          </select>
+          <button class="btn btn-secondary" id="btn-toggle-view">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+            Grid View
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="generation-progress-bar-container" id="progress-bar-container">
+        <div class="progress-info">
+          <span id="progress-text">Processing…</span>
+          <span id="progress-stats-counter" style="color:var(--accent-cyan);font-weight:700">0 / 0</span>
+          <span id="progress-percent-text">0%</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+
+      <!-- Table View -->
+      <section class="table-wrapper" id="table-view-container" style="margin-top:16px">
+        <table class="meta-table">
+          <thead>
+            <tr>
+              <th class="col-thumb">Asset</th>
+              <th class="col-filename">File</th>
+              <th class="col-title">Title</th>
+              <th class="col-desc">Description</th>
+              <th class="col-keywords">Keywords</th>
+              <th class="col-category">Category</th>
+              <th class="col-status">Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="metadata-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- Grid View -->
+      <section class="image-grid" id="grid-view-container" style="display:none;margin-top:16px"></section>
+
+      <!-- CSV Export Bar -->
+      <section class="glass-panel" style="margin-top:24px;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">
+        <div>
+          <h4 style="font-size:1rem;font-weight:700;margin-bottom:2px">Export Platform-Ready CSV</h4>
+          <p style="font-size:0.8125rem;color:var(--text-secondary)">Download CSV with exact column headers for your microstock agency dashboard.</p>
+        </div>
+        <div style="display:flex;gap:12px">
+          <button class="btn btn-secondary" id="btn-preview-csv">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            Preview CSV
+          </button>
+          <button class="btn btn-success btn-lg" id="btn-export-csv">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Export CSV
+          </button>
+        </div>
+      </section>
+    </div>
+
+      </main>
+    </div><!-- end app-layout -->
+
+  </div><!-- end app-container -->
+
+  <!-- ════════════════════════════════════════════════════════
+       MODALS
+  ════════════════════════════════════════════════════════ -->
+
+  <!-- AI Settings Modal (BYOK) -->
+  <div class="modal-overlay" id="modal-ai-settings">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-header">
+        <h3 class="modal-title">🤖 AI Settings — Gemini BYOK</h3>
+        <button class="modal-close-btn" id="btn-close-ai-settings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="byok-notice">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Use your own Gemini API key. AI usage applies to your Gemini account quota. Your key is held in memory only — never stored permanently.
+        </div>
+
+        <div>
+          <label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">AI Provider</label>
+          <div class="ai-provider-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#4285F4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span style="font-weight:700">Google Gemini</span>
+            <span class="badge-pill" style="margin-left:auto">gemini-3.6-flash</span>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">
+            Gemini API Key
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--accent-primary);text-decoration:none;font-weight:500;margin-left:8px;font-size:0.75rem">Get free API key →</a>
+          </label>
+          <div style="position:relative;display:flex;gap:8px">
+            <input type="password" id="gemini-api-key-input" class="inline-input" placeholder="AIza••••••••••••••••••••••••••••••••••••" autocomplete="off" spellcheck="false" style="flex:1;font-family:monospace">
+            <button class="btn btn-secondary btn-sm" id="btn-toggle-key-visibility" title="Show/hide key" style="flex-shrink:0">👁</button>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="btn-save-api-key">Save Key</button>
+          <button class="btn btn-secondary" id="btn-test-connection">Test Connection</button>
+          <button class="btn btn-danger btn-sm" id="btn-clear-api-key">Clear Key</button>
+        </div>
+
+        <div class="connection-status-box">
+          <span style="font-size:0.8125rem;font-weight:600;color:var(--text-secondary)">Status:</span>
+          <span id="connection-status-text" style="font-size:0.8125rem"><span style="color:var(--text-muted)">● Not Connected</span></span>
+        </div>
+
+        <div style="padding:12px 16px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border-glass);font-size:0.8rem;color:var(--text-muted);line-height:1.6">
+          <strong style="color:var(--text-secondary)">Privacy:</strong> Your API key is stored in browser memory only for this session. It is never saved to disk, localStorage, or any server. Refreshing the page clears it.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tutorial Modal -->
+  <div class="modal-overlay" id="modal-tutorial">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-header">
+        <h3 class="modal-title">📖 Workflow Tutorial &amp; Guide</h3>
+        <button class="modal-close-btn" id="btn-close-tutorial">✕</button>
+      </div>
+      <div class="modal-body" id="tutorial-step-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-tutorial-prev">Previous</button>
+        <button class="btn btn-primary" id="btn-tutorial-next">Next Step</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Modal -->
+  <div class="modal-overlay" id="modal-contact">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-header">
+        <h3 class="modal-title">💬 Contact Support</h3>
+        <button class="modal-close-btn" id="btn-close-contact">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="contact-form" style="display:flex;flex-direction:column;gap:14px">
+          <div>
+            <label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">Your Name</label>
+            <input type="text" id="contact-name" class="inline-input" placeholder="e.g. Alex Rivera" required>
+          </div>
+          <div>
+            <label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">Email</label>
+            <input type="email" id="contact-email" class="inline-input" placeholder="alex@example.com" required>
+          </div>
+          <div>
+            <label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">Message</label>
+            <textarea id="contact-message" class="inline-textarea" style="min-height:100px" placeholder="How can we help your microstock workflow?" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Send Message</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pricing Modal -->
+  <div class="modal-overlay" id="modal-pricing">
+    <div class="modal-box" style="max-width:780px">
+      <div class="modal-header">
+        <h3 class="modal-title">💎 SaaS Pricing Plans</h3>
+        <button class="modal-close-btn" id="btn-close-pricing">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="pricing-grid">
+          <div class="pricing-card">
+            <div><h4 style="font-size:1.125rem;font-weight:800">FREE</h4><p style="font-size:0.8125rem;color:var(--text-secondary);margin-top:4px">For casual contributors</p></div>
+            <div class="pricing-price">৳0 <span>lifetime</span></div>
+            <ul class="pricing-feature-list"><li>BYOK Gemini AI</li><li>10 credits lifetime</li><li>Basic CSV export</li><li>All platforms</li></ul>
+            <button class="btn btn-secondary" onclick="document.getElementById('modal-pricing').classList.remove('active')">Current Plan</button>
+          </div>
+          <div class="pricing-card popular">
+            <div><h4 style="font-size:1.125rem;font-weight:800;color:var(--accent-primary)">PRO</h4><p style="font-size:0.8125rem;color:var(--text-secondary);margin-top:4px">For active contributors</p></div>
+            <div class="pricing-price">৳200 <span>/ month</span></div>
+            <ul class="pricing-feature-list"><li>500 images per month</li><li>All 8 platforms</li><li>Advanced keyword ordering</li><li>Priority processing</li></ul>
+            <button class="btn btn-primary" onclick="showToast('Pro Plan selected (Demo)','info')">Upgrade to Pro</button>
+          </div>
+          <div class="pricing-card">
+            <div><h4 style="font-size:1.125rem;font-weight:800">BUSINESS</h4><p style="font-size:0.8125rem;color:var(--text-secondary);margin-top:4px">For studios &amp; agencies</p></div>
+            <div class="pricing-price">৳500 <span>/ month</span></div>
+            <ul class="pricing-feature-list"><li>Unlimited images</li><li>Custom CSV schema</li><li>Multi-user workspace</li><li>Priority AI engine</li></ul>
+            <button class="btn btn-secondary" onclick="showToast('Business Plan (Demo)','info')">Contact Sales</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth Modal -->
+  <div class="modal-overlay" id="modal-auth">
+    <div class="modal-box" style="max-width:440px">
+      <div class="modal-header">
+        <h3 class="modal-title">🔑 Account Portal</h3>
+        <button class="modal-close-btn" id="btn-close-auth">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="auth-tabs">
+          <button class="auth-tab-btn active" id="auth-tab-login">Login</button>
+          <button class="auth-tab-btn" id="auth-tab-signup">Sign Up</button>
+        </div>
+        <form id="auth-login-form" style="display:flex;flex-direction:column;gap:14px">
+          <div><label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">Email</label><input type="email" class="inline-input" placeholder="contributor@example.com" required></div>
+          <div><label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">Password</label><input type="password" class="inline-input" placeholder="••••••••" required></div>
+          <button type="submit" class="btn btn-primary">Login to Account</button>
+        </form>
+        <form id="auth-signup-form" style="display:none;flex-direction:column;gap:14px">
+          <div><label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">Full Name</label><input type="text" class="inline-input" placeholder="John Doe" required></div>
+          <div><label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">Email</label><input type="email" class="inline-input" placeholder="john@example.com" required></div>
+          <div><label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px">Password</label><input type="password" class="inline-input" placeholder="••••••••" required></div>
+          <button type="submit" class="btn btn-primary">Create Account</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- CSV Preview Modal -->
+  <div class="modal-overlay" id="modal-csv-preview">
+    <div class="modal-box" style="max-width:900px">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          CSV Export Preview
+        </h3>
+        <button class="modal-close-btn" id="btn-close-csv-modal">✕</button>
+      </div>
+      <div class="modal-body" id="csv-preview-modal-body">
+        <!-- Rendered via JS -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-close-csv-cancel">Cancel</button>
+        <button class="btn btn-success" id="btn-download-csv-modal">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Download CSV
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Edit Modal -->
+  <div class="modal-overlay" id="modal-batch-edit">
+    <div class="modal-box" style="max-width:500px">
+      <div class="modal-header">
+        <h3 class="modal-title">Batch Edit Metadata</h3>
+        <button class="modal-close-btn" id="btn-close-batch-edit">✕</button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px">Append Keywords to All / Selected</label>
+          <input type="text" id="batch-append-keywords" class="inline-input" placeholder="e.g. 4k, ultra hd, commercial use">
+        </div>
+        <div>
+          <label style="font-size:0.8125rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px">Set Category for All / Selected</label>
+          <select id="batch-set-category" class="inline-select">
+            <option value="">Keep Existing</option>
+            <option>Landscapes</option><option>Technology</option><option>Business</option>
+            <option>Food</option><option>Buildings and Architecture</option>
+            <option>Graphic Resources</option><option>People</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-batch-edit').classList.remove('active')">Cancel</button>
+        <button class="btn btn-primary" id="btn-apply-batch-edit">Apply to Selected</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal-box" style="max-width:540px">
+      <div class="modal-header">
+        <h3 class="modal-title">Application Settings</h3>
+        <button class="modal-close-btn" id="btn-close-settings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div>
+            <label style="font-size:0.875rem;font-weight:700">CSV Encoding</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:0.8125rem;cursor:pointer;margin-top:8px">
+              <input type="checkbox" id="setting-bom-check" checked>
+              Include UTF-8 BOM for Excel compatibility
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-save-settings">Save Preferences</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Inspector Modal -->
+  <div class="modal-overlay" id="modal-detail">
+    <div class="modal-box" style="max-width:800px">
+      <div class="modal-header">
+        <h3 class="modal-title">Asset Metadata Inspector</h3>
+        <button class="modal-close-btn" id="btn-close-detail">✕</button>
+      </div>
+      <div class="modal-body" id="detail-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="document.getElementById('modal-detail').classList.remove('active')">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initApp } from './js/app.js';
+    document.addEventListener('DOMContentLoaded', initApp);
+
+    // Sync the mobile collapsible platform selector label with the selected platform
+    (function syncPlatformLabel() {
+      const grid = document.getElementById('platform-grid');
+      const label = document.getElementById('mobile-platform-name');
+      if (!grid || !label) return;
+      const update = () => {
+        const sel = grid.querySelector('.platform-pill-tab.selected .pill-platform-name');
+        label.textContent = sel ? sel.textContent : '';
+      };
+      new MutationObserver(update).observe(grid, { childList: true, subtree: true });
+      update();
+    })();
+
+    // Close CSV cancel button
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('btn-close-csv-cancel')?.addEventListener('click', () => {
+        document.getElementById('modal-csv-preview')?.classList.remove('active');
+      });
+    });
+  </script>
+</body>
+</html>

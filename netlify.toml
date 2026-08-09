@@ -1,0 +1,14 @@
+[build]
+  publish = "."
+
+[functions]
+  node_bundler = "esbuild"
+
+# Preserve the existing /api/* routes by proxying them to the Netlify Function.
+# status = 200 (proxy rewrite) keeps the /api/* URL in the browser while the
+# function serves the existing Express routes unchanged.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api"
+  status = 200
+  force = true

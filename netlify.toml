@@ -9,6 +9,12 @@
 # function serves the existing Express routes unchanged.
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api"
+  to = "/.netlify/functions/api/:splat"
   status = 200
   force = true
+
+# SPA Fallback: Route all other requests to index.html so the frontend router can handle them
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

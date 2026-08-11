@@ -8,6 +8,7 @@
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODEL = 'gemini-3.6-flash';
 const REQUEST_TIMEOUT_MS = 45000;
+const VIDEO_TIMEOUT_MS = 240000;
 
 // ── In-memory key store (cleared on page refresh) ──────────────────────────
 let _sessionKey = null;
@@ -420,7 +421,7 @@ export async function generateMetadataForImage(item, platform, apiKey) {
         'x-platform': JSON.stringify(platform)
       },
       body: item.file // raw binary Blob
-    }, REQUEST_TIMEOUT_MS);
+    }, VIDEO_TIMEOUT_MS);
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {

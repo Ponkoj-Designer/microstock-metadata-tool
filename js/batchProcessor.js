@@ -8,7 +8,7 @@
 const MAX_CONCURRENT = 3;
 
 /**
- * Process items with a controlled concurrency queue.
+ * Process items with a controlled concurrency queue and automatic retries.
  *
  * @param {Array}    items          - Array of items to process
  * @param {Function} processFn      - async (item, index) => result
@@ -16,6 +16,7 @@ const MAX_CONCURRENT = 3;
  * @param {Function} onItemDone    - (item, index, result, error) => void
  * @param {Function} onProgress    - (completed, total) => void
  * @param {Function} shouldStop    - () => boolean  (for cancellation)
+ * @param {Number}   concurrencyLimit - max parallel tasks
  */
 export async function runBatchQueue({
   items,
@@ -23,7 +24,8 @@ export async function runBatchQueue({
   onItemStart,
   onItemDone,
   onProgress,
-  shouldStop
+  shouldStop,
+  concurrencyLimit = 3
 }) {
   const total = items.length;
   let completed = 0;
@@ -35,21 +37,50 @@ export async function runBatchQueue({
       const i = index++;
       const item = items[i];
       onItemStart && onItemStart(item, i);
-      try {
-        const result = await processFn(item, i);
-        onItemDone && onItemDone(item, i, result, null);
-      } catch (err) {
-        onItemDone && onItemDone(item, i, null, err);
+      
+      let attempts = 0;
+      const maxAttempts = 3;
+      let lastErr = null;
+      let result = null;
+
+      while (attempts < maxAttempts) {
+        if (shouldStop && shouldStop()) break;
+        try {
+          result = await processFn(item, i);
+          lastErr = null;
+          break; // Success! Break retry loop
+        } catch (err) {
+          lastErr = err;
+          attempts++;
+          
+          // Do not retry on explicit missing API keys or Auth errors
+          const errMsg = err.message || '';
+          if (errMsg.toLowerCase().includes('api key') || errMsg.toLowerCase().includes('unauthorized')) {
+             break; 
+          }
+
+          if (attempts < maxAttempts) {
+            // Exponential backoff: 2s, 4s...
+            const delayMs = Math.pow(2, attempts) * 1000;
+            await new Promise(r => setTimeout(r, delayMs));
+          }
+        }
       }
+
+      if (lastErr && (!shouldStop || !shouldStop())) {
+        onItemDone && onItemDone(item, i, null, lastErr);
+      } else if (!lastErr && (!shouldStop || !shouldStop())) {
+        onItemDone && onItemDone(item, i, result, null);
+      }
+
       completed++;
       onProgress && onProgress(completed, total);
     }
   }
 
-  // Spawn up to MAX_CONCURRENT workers
   const workers = [];
-  const concurrency = Math.min(MAX_CONCURRENT, total);
-  for (let w = 0; w < concurrency; w++) {
+  const activeConcurrency = Math.min(concurrencyLimit, total);
+  for (let w = 0; w < activeConcurrency; w++) {
     workers.push(worker());
   }
   await Promise.all(workers);

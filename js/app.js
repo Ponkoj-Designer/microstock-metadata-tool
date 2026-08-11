@@ -5,7 +5,7 @@
 
 import { PLATFORMS } from './platforms.js';
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, getSessionKey, testConnection, generateMetadataForImage, isGeminiAnalyzable } from './geminiClient.js?v=4';
+import { setApiKey, hasApiKey, clearApiKey, getSessionKey, testConnection, generateMetadataForImage, isGeminiAnalyzable } from './geminiClient.js?v=5';
 import { runBatchQueue } from './batchProcessor.js';
 import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
@@ -609,9 +609,11 @@ async function triggerAiGeneration() {
   if (progressBar) progressBar.classList.add('active');
 
   let successCount = 0, failCount = 0;
+  const isVideoBatch = state.activeAssetTab === 'videos';
 
   await runBatchQueue({
     items: toProcess,
+    concurrencyLimit: isVideoBatch ? 2 : 3,
     shouldStop: () => state.stopBatch,
 
     onItemStart: (item) => {

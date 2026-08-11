@@ -101,10 +101,57 @@ export async function testGeminiKey(providedKey) {
   }
 }
 
+// ── Shared prompt-building helpers (used by both image and video endpoints) ──
+
+function buildKwTarget(effectiveKwMax, kwMin) {
+  if (effectiveKwMax >= 49) return '42 to 47';
+  if (effectiveKwMax >= 40) return `${effectiveKwMax}`;
+  if (kwMin)                return `${kwMin} to ${effectiveKwMax}`;
+  return `5 to ${effectiveKwMax}`;
+}
+
+function buildCategoryOptions(platformObj) {
+  return Array.isArray(platformObj.categories) && platformObj.categories.length > 0
+    ? platformObj.categories.join(', ')
+    : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources';
+}
+
+function buildGenerationPrompt({ platformObj, kwTarget, titleLimit, categoryOptions, settings, mode, filename }) {
+  let prompt = '';
+
+  if (mode === 'img2prompt') {
+    prompt = `You are an expert AI art prompt engineer for text-to-image AI generators like Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
+Analyze this visual asset accurately and generate a hyper-detailed, highly descriptive AI image prompt.
+STRICT INSTRUCTIONS:
+- Title: A vivid, comprehensive master prompt describing the core subject, environment, lighting, composition, mood, and art style.
+- Description: A detailed breakdown of visual elements, color palette, lighting atmosphere, and texture details.
+- Keywords: 20-30 visual modifier keywords, art style tags, lighting terms, and composition terms.
+- Category: The artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art, Concept Art, Portraiture).`;
+  } else {
+    prompt = `You are an expert commercial microstock metadata cataloger for ${platformObj.name}.
+Analyze this visual asset accurately and generate commercial metadata.
+STRICT INSTRUCTIONS:
+- Describe ONLY what is ACTUALLY visible in the asset.
+- Do NOT invent non-existent objects, people, or brands.
+- KEYWORD REQUIREMENT: Generate exactly ${kwTarget} unique, highly relevant keywords.
+- Order keywords by relevance: the FIRST 10 keywords MUST be the most essential visual concepts.
+- Title: Clear, descriptive, natural language title (maximum ${titleLimit} characters).
+- Description: Natural, informative 1-2 sentence visual summary.
+- Category: Select the single best matching category from this list: [${categoryOptions}].`;
+  }
+
+  if (settings?.customPrompt) {
+    prompt += `\n- USER CUSTOM OVERRIDE INSTRUCTIONS: ${settings.customPrompt}`;
+  }
+
+  prompt += `\n\nFILENAME: ${filename}\nPLATFORM: ${platformObj.name}`;
+  return prompt;
+}
+
 /**
  * Server-side metadata generation proxy for image / vector assets.
  */
-export async function generateGeminiMetadata({ apiKey: providedKey, base64Image, mimeType = 'image/jpeg', filename = 'asset.jpg', platform, mode }) {
+export async function generateGeminiMetadata({ apiKey: providedKey, base64Image, mimeType = 'image/jpeg', filename = 'asset.jpg', platform, settings, mode }) {
   const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) throw new Error('Gemini API key is required. Please provide an API key.');
 
@@ -117,40 +164,15 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
   const effectiveMime  = ALLOWED_MIME_TYPES.has(normalizedMime) ? normalizedMime : 'image/jpeg';
 
   const platformObj = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
-  const kwMax = parseInt(platformObj.keywordMax, 10) || 49;
-  const titleLimit = parseInt(platformObj.titleMaxLen, 10) || 70;
 
-  const categoryOptions = Array.isArray(platformObj.categories) && platformObj.categories.length > 0
-    ? platformObj.categories.join(', ')
-    : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources';
+  // Determine effective kwMax and titleLimit (settings override platform defaults)
+  const platformKwMax = parseInt(platformObj.keywordMax, 10) || 49;
+  const effectiveKwMax = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
+  const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
 
-  const kwTarget = kwMax >= 49 ? '42 to 47' : `5 to ${kwMax}`;
-
-  const isImg2Prompt = mode === 'img2prompt';
-  const prompt = isImg2Prompt
-    ? `You are an expert AI art prompt engineer for text-to-image AI generators like Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
-Analyze this visual asset accurately and generate a hyper-detailed, highly descriptive AI image prompt.
-STRICT INSTRUCTIONS:
-- Title: A vivid, comprehensive master prompt describing the core subject, environment, lighting, composition, mood, and art style.
-- Description: A detailed breakdown of visual elements, color palette, lighting atmosphere, and texture details.
-- Keywords: 20-30 visual modifier keywords, art style tags, lighting terms, and composition terms.
-- Category: The artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art, Concept Art, Portraiture).
-
-FILENAME: ${filename}`
-    : `You are an expert commercial microstock metadata cataloger for ${platformObj.name}.
-Analyze this visual asset accurately and generate commercial metadata.
-STRICT INSTRUCTIONS:
-- Describe ONLY what is ACTUALLY visible in the image.
-- Do NOT invent non-existent objects, people, or brands.
-- KEYWORD REQUIREMENT: Generate exactly ${kwTarget} unique, highly relevant keywords.
-- Order keywords by relevance: the FIRST 10 keywords MUST be the most essential visual concepts.
-- Title: Clear, descriptive, natural language title (maximum ${titleLimit} characters).
-- Description: Natural, informative 1-2 sentence visual summary.
-- Category: Select the single best matching category for this visual asset from this list: [${categoryOptions}].
-
-FILENAME: ${filename}
-PLATFORM: ${platformObj.name}
-KEYWORD MAX: ${kwMax}`;
+  const kwTarget = buildKwTarget(effectiveKwMax, settings?.kwMin);
+  const categoryOptions = buildCategoryOptions(platformObj);
+  const prompt = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename });
 
   const isVideo = effectiveMime.startsWith('video/');
   let mediaPart = { inline_data: { mime_type: effectiveMime, data: base64Image } };
@@ -273,7 +295,7 @@ KEYWORD MAX: ${kwMax}`;
     // Deduplicate while preserving relevance order
     const seen = new Set();
     keywords = keywords.filter(k => { if (seen.has(k)) return false; seen.add(k); return true; });
-    keywords = keywords.slice(0, kwMax);
+    keywords = keywords.slice(0, effectiveKwMax);
 
     if (!title) throw new Error('Generated metadata title was empty.');
 
@@ -294,41 +316,27 @@ KEYWORD MAX: ${kwMax}`;
 /**
  * Generate metadata using raw binary video data (bypassing Base64)
  */
-export async function generateGeminiMetadataBinary({ apiKey, buffer, mimeType, filename, platform }) {
-  if (!apiKey || typeof apiKey !== 'string') {
-    throw new Error('Valid Gemini API key is required.');
-  }
+export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer, mimeType = 'video/mp4', filename = 'video.mp4', platform, settings, mode }) {
+  const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) throw new Error('Gemini API key is required.');
+
   if (!buffer || !Buffer.isBuffer(buffer)) {
-    throw new Error('Valid video buffer is required.');
+    throw new Error('Invalid or missing binary buffer payload.');
   }
 
   const normalizedMime = (mimeType || 'video/mp4').toLowerCase();
   const effectiveMime  = ALLOWED_MIME_TYPES.has(normalizedMime) ? normalizedMime : 'video/mp4';
 
   const platformObj = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
-  const kwMax = parseInt(platformObj.keywordMax, 10) || 49;
-  const titleLimit = parseInt(platformObj.titleMaxLen, 10) || 70;
 
-  const categoryOptions = Array.isArray(platformObj.categories) && platformObj.categories.length > 0
-    ? platformObj.categories.join(', ')
-    : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources';
+  // Determine effective kwMax and titleLimit
+  const platformKwMax = parseInt(platformObj.keywordMax, 10) || 49;
+  const effectiveKwMax = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
+  const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
 
-  const kwTarget = kwMax >= 49 ? '42 to 47' : `5 to ${kwMax}`;
-
-  const prompt = `You are an expert commercial microstock metadata cataloger for ${platformObj.name}.
-Analyze this visual asset accurately and generate commercial metadata.
-STRICT INSTRUCTIONS:
-- Describe ONLY what is ACTUALLY visible in the image.
-- Do NOT invent non-existent objects, people, or brands.
-- KEYWORD REQUIREMENT: Generate exactly ${kwTarget} unique, highly relevant keywords.
-- Order keywords by relevance: the FIRST 10 keywords MUST be the most essential visual concepts.
-- Title: Clear, descriptive, natural language title (maximum ${titleLimit} characters).
-- Description: Natural, informative 1-2 sentence visual summary.
-- Category: Select the single best matching category for this visual asset from this list: [${categoryOptions}].
-
-FILENAME: ${filename}
-PLATFORM: ${platformObj.name}
-KEYWORD MAX: ${kwMax}`;
+  const kwTarget = buildKwTarget(effectiveKwMax, settings?.kwMin);
+  const categoryOptions = buildCategoryOptions(platformObj);
+  const prompt = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename });
 
   // 1. Upload video to Gemini File API
   const uploadUrl = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`;
@@ -420,7 +428,7 @@ KEYWORD MAX: ${kwMax}`;
     filename: parsed.filename || filename,
     title: parsed.title,
     description: parsed.description,
-    keywords: parsed.keywords.slice(0, kwMax),
+    keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, effectiveKwMax) : [],
     category: parsed.category
   };
 }

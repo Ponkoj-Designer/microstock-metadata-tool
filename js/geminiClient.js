@@ -134,48 +134,6 @@ export async function testConnection(apiKey) {
   }
 }
 
-// ── Build structured metadata prompt ───────────────────────────────────────
-function buildMetadataPrompt(filename, platform) {
-  let kwTarget;
-  if (platform.keywordMax >= 49) {
-    kwTarget = '42 to 47';
-  } else if (platform.keywordMax >= 40) {
-    kwTarget = `${platform.keywordMax}`;
-  } else {
-    kwTarget = `5 to ${platform.keywordMax}`;
-  }
-  const titleLimit = platform.titleMaxLen;
-  const categoriesList = platform.categories.length > 0
-    ? `Select the single best matching category for this visual asset from this list: [${platform.categories.join(', ')}]`
-    : 'Select the single best matching category for this visual asset (e.g. General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources)';
-
-  return `You are an expert commercial microstock metadata cataloger for ${platform.name}.
-
-Analyze this visual asset accurately and generate commercial metadata.
-
-STRICT INSTRUCTIONS:
-- Describe ONLY what is ACTUALLY visible in the image.
-- Do NOT invent non-existent objects, people, locations, or brands.
-- KEYWORD REQUIREMENT: Generate exactly ${kwTarget} unique, highly relevant keywords.
-- Order keywords by relevance: the FIRST 10 keywords MUST be the most essential visual concepts.
-- Title: Clear, descriptive, natural language title (maximum ${titleLimit} characters).
-- Description: Natural, informative 1-2 sentence visual summary.
-- Category: ${categoriesList}.
-
-FILENAME: ${filename}
-PLATFORM: ${platform.name}
-KEYWORD MAX: ${platform.keywordMax} (Do not exceed)
-
-Respond with a JSON object:
-{
-  "filename": "${filename}",
-  "title": "Descriptive title here",
-  "description": "Visual description here",
-  "keywords": ["keyword1", "keyword2", "keyword3"],
-  "category": "Selected Category Name"
-}`;
-}
-
 // ── File / Blob to base64 helper ───────────────────────────────────────────
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -391,7 +349,7 @@ function parseMetadataResponse(rawText, filename, platform) {
 }
 
 // ── Main Metadata Generation (Secure Server Proxy) ─────────────────────────
-export async function generateMetadataForImage(item, platform, apiKey) {
+export async function generateMetadataForImage(item, platform, apiKey, settings, mode) {
   const key = apiKey || _sessionKey;
   if (!key) throw new Error('No Gemini API key provided. Please enter your API key in AI Settings.');
 
@@ -417,8 +375,10 @@ export async function generateMetadataForImage(item, platform, apiKey) {
       headers: {
         'Content-Type': mimeType,
         'x-gemini-api-key': key,
-        'x-filename': item.name,
-        'x-platform': JSON.stringify(platform)
+        'x-filename': encodeURIComponent(item.name),
+        'x-platform': encodeURIComponent(JSON.stringify(platform)),
+        'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
+        'x-mode': mode || 'metadata'
       },
       body: item.file // raw binary Blob
     }, VIDEO_TIMEOUT_MS);
@@ -444,7 +404,9 @@ export async function generateMetadataForImage(item, platform, apiKey) {
       base64Image: base64,
       mimeType,
       filename: item.name,
-      platform
+      platform,
+      settings,
+      mode
     })
   }, REQUEST_TIMEOUT_MS);
 

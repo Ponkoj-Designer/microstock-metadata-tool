@@ -31,9 +31,13 @@ export async function runBatchQueue({
   let completed = 0;
   let index = 0;
 
+  let globalPausePromise = null;
+
   async function worker() {
     while (index < total) {
       if (shouldStop && shouldStop()) break;
+      if (globalPausePromise) await globalPausePromise;
+      
       const i = index++;
       const item = items[i];
       onItemStart && onItemStart(item, i);
@@ -45,6 +49,8 @@ export async function runBatchQueue({
 
       while (attempts < maxAttempts) {
         if (shouldStop && shouldStop()) break;
+        if (globalPausePromise) await globalPausePromise;
+        
         try {
           result = await processFn(item, i);
           lastErr = null;
@@ -53,10 +59,24 @@ export async function runBatchQueue({
           lastErr = err;
           attempts++;
           
-          // Do not retry on explicit missing API keys or Auth errors
           const errMsg = err.message || '';
+          
+          // Do not retry on explicit missing API keys or Auth errors
           if (errMsg.toLowerCase().includes('api key') || errMsg.toLowerCase().includes('unauthorized')) {
              break; 
+          }
+          
+          // Handle Rate Limits (429) globally
+          if (errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit') || errMsg.includes('429')) {
+             if (!globalPausePromise) {
+               console.warn('[BatchProcessor] Rate limit hit. Pausing queue for 30s...');
+               if (window.showToast) window.showToast('Gemini rate limit reached. Pausing queue for 30s...', 'warning');
+               globalPausePromise = new Promise(resolve => setTimeout(resolve, 30000));
+               globalPausePromise.then(() => { globalPausePromise = null; });
+             }
+             await globalPausePromise;
+             attempts--; // Don't burn an attempt on a forced rate limit pause
+             continue;
           }
 
           if (attempts < maxAttempts) {

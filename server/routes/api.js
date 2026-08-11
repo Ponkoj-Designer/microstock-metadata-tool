@@ -23,10 +23,16 @@ apiRouter.post('/gemini/test', requireAuth, async (req, res) => {
 apiRouter.post('/gemini/generate-video', requireAuth, async (req, res) => {
   const apiKey = req.headers['x-gemini-api-key'] || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
   const mimeType = req.headers['content-type'];
-  const filename = req.headers['x-filename'] || 'video.mp4';
-  const platformStr = req.headers['x-platform'] || '{}';
+  const filename = req.headers['x-filename'] ? decodeURIComponent(req.headers['x-filename']) : 'video.mp4';
+  const platformStr = req.headers['x-platform'] ? decodeURIComponent(req.headers['x-platform']) : '{}';
+  const settingsStr = req.headers['x-settings'] ? decodeURIComponent(req.headers['x-settings']) : 'null';
+  const mode = req.headers['x-mode'] || 'metadata';
+  
   let platform = {};
   try { platform = JSON.parse(platformStr); } catch(e){}
+  
+  let settings = null;
+  try { settings = JSON.parse(settingsStr); } catch(e){}
 
   if (!apiKey) {
     return res.status(400).json({ ok: false, message: 'Gemini API key is required.' });
@@ -36,7 +42,7 @@ apiRouter.post('/gemini/generate-video', requireAuth, async (req, res) => {
   }
 
   try {
-    const data = await generateGeminiMetadataBinary({ apiKey, buffer: req.body, mimeType, filename, platform });
+    const data = await generateGeminiMetadataBinary({ apiKey, buffer: req.body, mimeType, filename, platform, settings, mode });
     return res.json({ ok: true, data });
   } catch (err) {
     return res.status(500).json({ ok: false, message: err.message || 'Gemini video generation failed.' });
@@ -45,7 +51,7 @@ apiRouter.post('/gemini/generate-video', requireAuth, async (req, res) => {
 
 // POST /api/gemini/generate — Server-side Gemini metadata proxy endpoint (Requires Auth)
 apiRouter.post('/gemini/generate', requireAuth, async (req, res) => {
-  const { base64Image, mimeType, filename, platform, mode } = req.body || {};
+  const { base64Image, mimeType, filename, platform, settings, mode } = req.body || {};
   const apiKey = req.body?.apiKey || req.headers['x-gemini-api-key'] || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
@@ -56,7 +62,7 @@ apiRouter.post('/gemini/generate', requireAuth, async (req, res) => {
   }
 
   try {
-    const data = await generateGeminiMetadata({ apiKey, base64Image, mimeType, filename, platform, mode });
+    const data = await generateGeminiMetadata({ apiKey, base64Image, mimeType, filename, platform, settings, mode });
     return res.json({ ok: true, data });
   } catch (err) {
     return res.status(500).json({ ok: false, message: err.message || 'Gemini generation failed.' });

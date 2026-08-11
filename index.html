@@ -1,606 +1,1039 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PK IT - Microstock Metadata Management Tool (Developed by Ponkoj Das)</title>
-  <meta name="description" content="Professional AI-powered Microstock Metadata Management Tool developed by Ponkoj Das for AdobeStock, Shutterstock, Freepik, Vecteezy, Depositphotos and more.">
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>PK IT - Metadata Generator (Developed by Ponkoj Das)</title>
+  <meta name="description" content="Professional AI-powered Microstock Metadata Management Tool developed by Ponkoj Das for AdobeStock, Shutterstock, Freepik, Vecteezy, Depositphotos and more."/>
+  
+  <link rel="icon" type="image/jpeg" href="mt_favicon.jpg">
+  
+  <!-- Tailwind CSS with Forms and Container Queries -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  
+  <!-- Material Symbols & Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Geist:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+  
+  <!-- Tailwind Theme Configuration -->
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "background": "#111417",
+            "secondary-container": "#db50ff",
+            "primary-fixed": "#7df4ff",
+            "on-surface": "#e1e2e7",
+            "secondary-fixed": "#fdd6ff",
+            "on-error-container": "#ffdad6",
+            "tertiary": "#fff3f2",
+            "on-primary-fixed": "#002022",
+            "surface-dim": "#111417",
+            "secondary": "#f4aeff",
+            "surface-variant": "#323539",
+            "primary-fixed-dim": "#00dbe9",
+            "surface-container-low": "#191c1f",
+            "surface": "#111417",
+            "on-error": "#690005",
+            "surface-container-lowest": "#0c0e12",
+            "error-container": "#93000a",
+            "inverse-primary": "#006970",
+            "primary-container": "#00f0ff",
+            "surface-container": "#1d2023",
+            "on-tertiary-container": "#c10018",
+            "on-tertiary-fixed-variant": "#930010",
+            "error": "#ffb4ab",
+            "on-background": "#e1e2e7",
+            "surface-bright": "#37393d",
+            "primary": "#dbfcff",
+            "on-surface-variant": "#b9cacb",
+            "on-primary-fixed-variant": "#004f54",
+            "surface-container-highest": "#323539",
+            "on-secondary-fixed-variant": "#790095",
+            "on-tertiary": "#680008",
+            "on-secondary-fixed": "#340042",
+            "secondary-fixed-dim": "#f4aeff",
+            "surface-tint": "#00dbe9",
+            "tertiary-container": "#ffcec9",
+            "tertiary-fixed-dim": "#ffb3ac",
+            "on-primary-container": "#006970",
+            "on-secondary": "#55006a",
+            "on-secondary-container": "#4b005d",
+            "surface-container-high": "#282a2e",
+            "on-primary": "#00363a",
+            "outline-variant": "#3b494b",
+            "on-tertiary-fixed": "#410003",
+            "inverse-surface": "#e1e2e7",
+            "outline": "#849495",
+            "inverse-on-surface": "#2e3134",
+            "tertiary-fixed": "#ffdad6"
+          },
+          spacing: {
+            "stack_lg": "32px",
+            "margin_desktop": "40px",
+            "topbar_height": "68px",
+            "gutter": "24px",
+            "sidebar_width": "375px",
+            "container_max": "1440px",
+            "stack_sm": "8px",
+            "stack_md": "16px"
+          },
+          fontFamily: {
+            "headline-md": ["Inter"],
+            "label-md": ["Geist"],
+            "label-sm": ["Geist"],
+            "headline-lg": ["Inter"],
+            "body-md": ["Inter"],
+            "body-lg": ["Inter"],
+            "display-lg": ["Inter"]
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    body {
+        background-color: #111417;
+        color: #e1e2e7;
+    }
+    
+    /* Custom Scrollbar for better integration */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #111417;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #3b494b;
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #4b5563;
+    }
+
+    /* Glow & Gradients */
+    .glow-cyan {
+        box-shadow: 0 0 12px 0 rgba(0, 219, 233, 0.3);
+    }
+    .text-gradient {
+        background: linear-gradient(90deg, #00dbe9, #db50ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .border-gradient {
+        position: relative;
+        background: #1d2023;
+        background-clip: padding-box;
+        border: 1px solid transparent;
+    }
+    .border-gradient::before {
+        content: '';
+        position: absolute;
+        top: 0; right: 0; bottom: 0; left: 0;
+        z-index: -1;
+        margin: -1px;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #00dbe9, #db50ff);
+    }
+    .hero-dashed-border {
+        background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='24' ry='24' stroke='%2330363D' stroke-width='2' stroke-dasharray='12%2c 12' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+        border-radius: 24px;
+    }
+    
+    /* Level 2 Surface */
+    .surface-level-2 {
+        background-color: #1d2023;
+        border: 1px solid #3b494b;
+    }
+  </style>
+
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/perf.css">
   <link rel="stylesheet" href="css/animations.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
-<body>
+<body class="flex flex-col min-h-screen antialiased bg-[#111417]">
 
+  <!-- Toast Notification Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <div class="app-container">
-
-    <!-- Header -->
-    <header class="app-header">
-      <a href="#" class="brand-section">
-        <div class="brand-logo" id="brand-logo-icon">PK</div>
-        <div class="brand-text">
-          <h1 style="font-size:1.25rem;font-weight:900;letter-spacing:-0.02em;color:var(--text-primary);margin:0;line-height:1.2">PK IT</h1>
-          <div class="brand-developer" style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);margin-top:2px">Developed by Ponkoj Das</div>
-        </div>
-      </a>
-
-      <div class="header-right-nav">
-        <nav class="nav-links-desktop">
-          <button class="nav-link-btn" id="nav-btn-tutorial">📖 Tutorial</button>
-          <button class="nav-link-btn" id="nav-btn-contact">💬 Contact</button>
-          <button class="nav-link-btn" id="nav-btn-pricing">💎 Pricing</button>
-        </nav>
-        <div class="nav-cta-group">
-          <!-- AI Status Badge -->
-          <div id="ai-status-badge" class="ai-status-badge disconnected">
-            <span class="ai-dot ai-dot-disconnected"></span> AI Not Connected
-          </div>
-          <button class="btn btn-ai-settings btn-sm" id="nav-btn-ai-settings">
-            ⚙️ AI Settings
-          </button>
-          <!-- Logged-out state -->
-          <div id="auth-logged-out" style="display:flex;align-items:center;gap:8px">
-            <button class="btn btn-secondary btn-sm" id="nav-btn-login">Login</button>
-            <button class="btn btn-primary btn-sm" id="nav-btn-signup">Sign Up</button>
-          </div>
-          <!-- Logged-in state -->
-          <div id="auth-logged-in" style="display:none;align-items:center;gap:8px">
-            <button class="btn btn-warning btn-sm" id="btn-admin-panel" style="display:none;align-items:center;gap:4px">
-              🛡️ Admin Panel
-            </button>
-            <div id="auth-user-credits-badge" class="badge-pill" style="font-size:0.75rem;font-weight:700;background:rgba(6,182,212,0.15);color:var(--accent-cyan)" title="Available Credits">⚡ 10 Credits</div>
-            <button class="btn btn-secondary btn-sm" id="btn-user-profile" style="display:flex;align-items:center;gap:6px">
-              <span id="auth-user-plan-badge" class="badge-pill" style="font-size:0.65rem;text-transform:uppercase">FREE</span>
-              <span id="auth-user-name" style="font-size:0.8125rem;font-weight:600;color:var(--text-primary);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-            </button>
-            <button class="btn btn-secondary btn-sm" id="btn-logout">Logout</button>
-          </div>
-          <button class="hamburger-toggle" id="hamburger-btn" style="display:none">☰</button>
-        </div>
-      </div>
-    </header>
-
-    <!-- Mobile Nav Drawer -->
-    <div class="mobile-nav-drawer" id="mobile-nav-drawer" style="display:none">
-      <button class="mobile-nav-item" id="mobile-nav-tutorial">📖 Tutorial &amp; Guide</button>
-      <button class="mobile-nav-item" id="mobile-nav-contact">💬 Contact Support</button>
-      <button class="mobile-nav-item" id="mobile-nav-pricing">💎 Pricing Plans</button>
-      <button class="mobile-nav-item" id="mobile-nav-login">🔑 Login / Sign Up</button>
+  <!-- TopNavBar (Fixed 68px) -->
+  <nav class="fixed top-0 w-full h-[68px] z-50 border-b border-outline-variant bg-surface-container dark:bg-surface-container flex justify-between items-center px-margin_desktop">
+    <div class="flex items-center gap-4">
+      <div id="brand-logo-icon" class="hidden"></div>
+      <span class="text-headline-md font-headline-md font-bold text-primary-fixed-dim dark:text-primary-fixed-dim">PK IT</span>
     </div>
 
-    <!-- Main Two-Column Layout -->
-    <div class="app-layout">
 
-      <!-- LEFT SIDEBAR -->
-      <aside class="app-sidebar glass-panel">
-        
-        <!-- 1. Mode Selection (Collapsible Section) -->
-        <details class="sidebar-section-accordion" open>
-          <summary class="sidebar-section-summary">
-            <span class="sidebar-section-title">⚡ Mode Selection</span>
-            <span class="accordion-arrow">▾</span>
-          </summary>
-          <div class="sidebar-section-content">
-            <div class="mode-selector-row">
-              <button class="mode-btn active" id="sidebar-mode-metadata" title="Metadata Generator">
-                <span>📝</span> Metadata
-              </button>
-              <button class="mode-btn" id="sidebar-mode-img2prompt" title="Image to Prompt">
-                <span>🖼️</span> Img to Prompt
-              </button>
-            </div>
-          </div>
-        </details>
-
-        <div class="sidebar-divider"></div>
-
-        <!-- 2. Metadata Customization (Collapsible Section) -->
-        <details class="sidebar-section-accordion" open>
-          <summary class="sidebar-section-summary">
-            <span class="sidebar-section-title">⚙️ Customization</span>
-            <span class="accordion-arrow">▾</span>
-          </summary>
-          <div class="sidebar-section-content">
-            <div class="slider-controls-stack">
-              
-              <!-- Title Words Block -->
-              <div class="slider-block">
-                <div class="slider-block-title">
-                  <span>📝 Title Words</span>
-                  <span class="info-icon" title="Minimum and maximum word count requirements for titles">ℹ️</span>
-                </div>
-                <div class="slider-block-grid">
-                  <div class="slider-mini-group">
-                    <div class="slider-mini-header">
-                      <span class="slider-mini-label">Min</span>
-                      <span class="slider-value-badge" id="val-title-min-words">5</span>
-                    </div>
-                    <input type="range" id="setting-title-min-words" class="sidebar-slider" value="5" min="1" max="50">
-                  </div>
-                  <div class="slider-mini-group">
-                    <div class="slider-mini-header">
-                      <span class="slider-mini-label">Max</span>
-                      <span class="slider-value-badge" id="val-title-max-words">20</span>
-                    </div>
-                    <input type="range" id="setting-title-max-words" class="sidebar-slider" value="20" min="1" max="200">
-                  </div>
-                </div>
-              </div>
-
-              <!-- Keywords Block -->
-              <div class="slider-block">
-                <div class="slider-block-title">
-                  <span>🏷️ Keywords</span>
-                  <span class="info-icon" title="Minimum and maximum keyword count target per agency rule">ℹ️</span>
-                </div>
-                <div class="slider-block-grid">
-                  <div class="slider-mini-group">
-                    <div class="slider-mini-header">
-                      <span class="slider-mini-label">Min</span>
-                      <span class="slider-value-badge" id="val-kw-min">15</span>
-                    </div>
-                    <input type="range" id="setting-kw-min" class="sidebar-slider" value="15" min="1" max="100">
-                  </div>
-                  <div class="slider-mini-group">
-                    <div class="slider-mini-header">
-                      <span class="slider-mini-label">Max</span>
-                      <span class="slider-value-badge" id="val-kw-max">49</span>
-                    </div>
-                    <input type="range" id="setting-kw-max" class="sidebar-slider" value="49" min="1" max="100">
-                  </div>
-                </div>
-              </div>
-
-              <!-- Description Words Block -->
-              <div class="slider-block">
-                <div class="slider-block-title">
-                  <span>📄 Description Words</span>
-                  <span class="info-icon" title="Minimum and maximum word count requirements for descriptions">ℹ️</span>
-                </div>
-                <div class="slider-block-grid">
-                  <div class="slider-mini-group">
-                    <div class="slider-mini-header">
-                      <span class="slider-mini-label">Min</span>
-                      <span class="slider-value-badge" id="val-desc-min-words">8</span>
-                    </div>
-                    <input type="range" id="setting-desc-min-words" class="sidebar-slider" value="8" min="1" max="50">
-                  </div>
-                  <div class="slider-mini-group">
-                    <div class="slider-mini-header">
-                      <span class="slider-mini-label">Max</span>
-                      <span class="slider-value-badge" id="val-desc-max-words">30</span>
-                    </div>
-                    <input type="range" id="setting-desc-max-words" class="sidebar-slider" value="30" min="1" max="100">
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </details>
-
-      </aside>
-
-      <!-- MAIN CONTENT -->
-      <main class="main-workspace">
-
-        <!-- Top Platforms Section -->
-        <section class="glass-panel platforms-section">
-          <h2 class="section-title-center">PLATFORMS</h2>
-          <div class="platform-grid-horizontal" id="platform-grid">
-            <!-- Rendered dynamically with 8 unique icons -->
-          </div>
-          <div style="margin-top:12px;font-size:0.775rem;color:var(--text-secondary);text-align:center" id="platform-spec-banner"></div>
-          <strong id="mobile-platform-name" style="display:none"></strong>
-        </section>
-
-        <!-- WORKSPACE MODE 1: Metadata Generator -->
-        <div id="workspace-metadata" class="workspace-mode-panel">
-          
-          <!-- Upload Section -->
-          <section class="glass-panel" id="upload-section" style="padding:24px">
-            <div class="asset-tabs-row">
-              <button class="asset-tab active" id="tab-images">🖼️ Images</button>
-              <button class="asset-tab" id="tab-vectors">🎨 Vectors</button>
-              <button class="asset-tab" id="tab-videos">🎬 Videos</button>
-            </div>
-
-            <div class="upload-container-box" id="drop-zone" style="cursor:pointer">
-              <div class="upload-icon-circle">
-                <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-              </div>
-              <h3 id="upload-title-text" style="font-size:1.1rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">Drop your images here or choose files</h3>
-              <p id="upload-subtitle-text" style="font-size:0.825rem;color:var(--text-secondary);margin-bottom:16px">JPG, PNG, WEBP, TIFF supported — batch 100+ files at once</p>
-              
-              <div id="format-tags-container" style="display:flex;gap:6px;justify-content:center;margin-bottom:18px">
-                <span class="badge-pill">JPG</span><span class="badge-pill">PNG</span><span class="badge-pill">WEBP</span><span class="badge-pill">TIFF</span>
-              </div>
-
-              <div style="display:flex;gap:10px;justify-content:center">
-                <button class="btn btn-primary" id="btn-browse-files">📁 Choose Files</button>
-              </div>
-
-              <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.webp,.tiff,.tif" style="display:none">
-
-              <!-- 3 Privacy & System Badges -->
-              <div class="info-cards-row">
-                <div class="info-card">
-                  <strong>🔒 Privacy Statement</strong>
-                  Files are processed securely in-memory and never permanently stored.
-                </div>
-                <div class="info-card">
-                  <strong>⚡ Local On-Device Processing</strong>
-                  Previews, thumbnails, and format checks run locally in your browser.
-                </div>
-                <div class="info-card">
-                  <strong>🚀 Unlimited Processing</strong>
-                  Batch generate unlimited assets with BYOK Gemini AI engine.
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Metadata Toolbar & Results Section -->
-          <section class="glass-panel" id="toolbar-section" style="padding:20px;margin-top:20px">
-            <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-                <button class="btn btn-primary" id="btn-generate-ai">🚀 Generate Metadata (AI)</button>
-                <button class="btn btn-secondary" id="btn-stop-generation" style="display:none">🛑 Stop</button>
-                <button class="btn btn-secondary" id="btn-retry-failed">🔄 Retry Failed</button>
-                <button class="btn btn-secondary" id="btn-batch-edit">✏️ Batch Edit</button>
-                <button class="btn btn-secondary" id="btn-clear-all">🗑️ Clear All</button>
-              </div>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-                <button class="btn btn-secondary btn-sm" id="btn-select-all">Select All</button>
-                <button class="btn btn-secondary btn-sm" id="btn-deselect-all">Deselect All</button>
-                <button class="btn btn-secondary btn-sm" id="btn-remove-selected">Remove Selected</button>
-                <button class="btn btn-secondary btn-sm" id="btn-toggle-view">Grid View</button>
-                <button class="btn btn-secondary btn-sm" id="btn-preview-csv">👁️ Preview CSV</button>
-                <button class="btn btn-success btn-sm" id="btn-export-csv">📥 Export CSV</button>
-              </div>
-            </div>
-
-            <!-- Search & Filters -->
-            <div style="display:flex;gap:10px;margin-bottom:16px">
-              <input type="text" id="search-input" class="inline-input" placeholder="Search filenames, titles, keywords…" style="flex:1">
-              <select id="status-filter-select" class="inline-input" style="width:160px">
-                <option value="all">All Statuses</option>
-                <option value="waiting">Waiting</option>
-                <option value="processing">Processing</option>
-                <option value="ready">Ready</option>
-                <option value="failed">Failed</option>
-              </select>
-            </div>
-
-            <!-- Progress Bar -->
-            <div id="progress-bar-container" style="display:none;height:6px;background:rgba(226,232,240,0.8);border-radius:4px;overflow:hidden;margin-bottom:16px">
-              <div id="progress-bar-fill" style="height:100%;width:0%;background:var(--accent-primary);transition:width 0.2s"></div>
-            </div>
-
-            <!-- View Containers -->
-            <div id="table-view-container" style="overflow-x:auto">
-              <table style="width:100%;border-collapse:collapse;font-size:0.825rem">
-                <thead>
-                  <tr style="border-bottom:1px solid var(--glass-border);text-align:left;color:var(--text-secondary)">
-                    <th style="padding:10px;width:32px"><input type="checkbox" id="table-select-all-checkbox"></th>
-                    <th style="padding:10px;width:70px">Preview</th>
-                    <th style="padding:10px;width:140px">Filename</th>
-                    <th style="padding:10px">Title &amp; Description</th>
-                    <th style="padding:10px">Keywords</th>
-                    <th style="padding:10px;width:90px">Status</th>
-                    <th style="padding:10px;width:110px;text-align:right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="metadata-table-body">
-                  <!-- Rendered dynamically -->
-                </tbody>
-              </table>
-            </div>
-
-            <div id="grid-view-container" style="display:none;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px">
-              <div id="metadata-grid" style="display:contents"></div>
-            </div>
-
-            <!-- Empty State -->
-            <div id="empty-state" style="padding:40px;text-align:center;color:var(--text-muted)">
-              <div style="font-size:2rem;margin-bottom:8px">🖼️</div>
-              <p>No media files uploaded yet. Drop files above to start cataloging metadata!</p>
-            </div>
-          </section>
-
-        </div>
-
-        <!-- WORKSPACE MODE 2: Image to Prompt Generator -->
-        <div id="workspace-img2prompt" class="workspace-mode-panel" style="display:none">
-          <section class="glass-panel" style="padding:24px">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
-              <div>
-                <h3 style="font-size:1.1rem;font-weight:800;color:var(--text-primary);margin-bottom:4px">🖼️ Image to Prompt Generator</h3>
-                <p style="font-size:0.825rem;color:var(--text-secondary)">Upload, drop, or paste (<kbd style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:4px">Ctrl+V</kbd>) images to generate rich AI prompts for Midjourney, Flux, DALL-E 3, and SD XL.</p>
-              </div>
-            </div>
-
-            <!-- Upload Box -->
-            <div class="upload-container-box" id="img2prompt-drop-zone" style="cursor:pointer">
-              <div class="upload-icon-circle">✨</div>
-              <h4 style="font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:6px">Drop images here, select files, or press Ctrl+V to paste</h4>
-              <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:16px">JPG, PNG, WEBP, TIFF supported — single or batch images</p>
-              <div style="display:flex;gap:10px;justify-content:center">
-                <button class="btn btn-primary" id="btn-browse-img2prompt">📁 Select Image(s)</button>
-              </div>
-              <input type="file" id="img2prompt-file-input" multiple accept=".jpg,.jpeg,.png,.webp,.tiff,.tif" style="display:none">
-            </div>
-
-            <!-- Batch Results Section -->
-            <div id="img2prompt-results-wrapper" style="display:none;margin-top:24px">
-              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--glass-border)">
-                <h4 style="font-size:0.95rem;font-weight:800;color:var(--text-primary)" id="img2prompt-results-title">Generated Prompts</h4>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <button class="btn btn-primary btn-sm" id="btn-generate-all-img2prompt" style="display:none">✨ Generate Prompts</button>
-                  <button class="btn btn-secondary btn-sm" id="btn-copy-all-img2prompt">📋 Copy All Prompts</button>
-                  <button class="btn btn-secondary btn-sm" id="btn-clear-img2prompt">🗑️ Clear Prompts</button>
-                </div>
-              </div>
-
-              <!-- List container for dynamic prompt cards -->
-              <div id="img2prompt-cards-list" style="display:flex;flex-direction:column;gap:16px">
-                <!-- Dynamically rendered per image -->
-              </div>
-            </div>
-          </section>
-        </div>
-
-      </main>
-
-    </div>
-  </div>
-
-  <!-- ALL MODALS PRESERVED -->
-  
-  <!-- Pricing Modal -->
-  <div class="modal-overlay" id="modal-pricing">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3 class="modal-title">💎 Subscription Plans &amp; Pricing</h3>
-        <button class="modal-close-btn" id="btn-close-pricing">✕</button>
+    <!-- Right Controls / Auth Group -->
+    <div class="flex items-center gap-4">
+      <!-- Desktop Navigation Links -->
+      <div class="hidden md:flex items-center gap-3 mr-2">
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all" id="nav-btn-tutorial">
+          Tutorial
+        </button>
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all" id="nav-btn-contact">
+          Contact
+        </button>
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all" id="nav-btn-pricing">
+          Pricing
+        </button>
       </div>
-      <div class="pricing-grid">
-        <div class="pricing-card" id="pricing-card-free">
-          <div><h4 style="font-size:1.1rem;font-weight:800">FREE</h4><p style="font-size:0.775rem;color:var(--text-secondary)">For casual contributors</p></div>
-          <div class="pricing-price">৳0 <span>lifetime</span></div>
-          <ul class="pricing-feature-list"><li>BYOK Gemini AI</li><li>10 credits lifetime</li><li>Basic CSV export</li><li>All platforms</li></ul>
-          <button class="btn btn-secondary" id="btn-plan-free">Select Free Plan</button>
-        </div>
-        <div class="pricing-card popular" id="pricing-card-pro" style="cursor:pointer">
-          <div><h4 style="font-size:1.1rem;font-weight:800;color:var(--accent-primary)">PRO</h4><p style="font-size:0.775rem;color:var(--text-secondary)">For active contributors</p></div>
-          <div class="pricing-price">৳150 <span>/ month</span></div>
-          <ul class="pricing-feature-list"><li>6,000 images per month</li><li>All 8 platforms</li><li>Advanced keyword ordering</li><li>Priority processing</li></ul>
-          <button class="btn btn-primary" id="btn-plan-pro">Upgrade to Pro</button>
-        </div>
-        <div class="pricing-card" id="pricing-card-business" style="cursor:pointer">
-          <div><h4 style="font-size:1.1rem;font-weight:800">BUSINESS</h4><p style="font-size:0.775rem;color:var(--text-secondary)">For studios &amp; agencies</p></div>
-          <div class="pricing-price">৳500 <span>/ year</span></div>
-          <ul class="pricing-feature-list"><li>18,000 images per year</li><li>Custom CSV schema</li><li>Multi-user workspace</li><li>Priority AI engine</li></ul>
-          <button class="btn btn-secondary" id="btn-plan-business">Switch to Business</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <!-- Manual Payment Modal (bKash & Nagad) -->
-  <div class="modal-overlay" id="modal-manual-payment">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3 class="modal-title">📱 Manual Payment (bKash / Nagad)</h3>
-        <button class="modal-close-btn" id="btn-close-manual-payment">✕</button>
-      </div>
-      <div style="background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);border-radius:10px;padding:14px;margin-bottom:16px">
-        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px">
-          <span style="font-weight:800;color:var(--accent-primary)">bKash / Nagad Personal Number</span>
-          <span class="badge-pill">Active</span>
-        </div>
-        <div style="font-size:1.3rem;font-weight:900;color:var(--text-primary);margin-bottom:4px">+8801741783521</div>
-        <p style="font-size:0.775rem;color:var(--text-secondary)">Send Money or Cash In to this number via bKash or Nagad.<br>• <strong>Pro Plan:</strong> ৳150 BDT (500 credits)<br>• <strong>Business Plan:</strong> ৳300 BDT (5,000 credits)</p>
-      </div>
-      <form id="manual-payment-form" style="display:flex;flex-direction:column;gap:12px">
-        <div><label class="custom-input-label">Target Subscription Plan</label><input type="text" id="manual-plan-display" class="inline-input" readonly><input type="hidden" id="manual-plan-input"></div>
-        <div><label class="custom-input-label">Payment Method</label><select id="manual-method-select" class="inline-input"><option value="bkash">bKash Personal</option><option value="nagad">Nagad Personal</option></select></div>
-        <div><label class="custom-input-label">Your Phone Number</label><input type="text" id="manual-sender-input" class="inline-input" placeholder="01712345678" required></div>
-        <div><label class="custom-input-label">Amount Paid (BDT)</label><input type="number" id="manual-amount-input" class="inline-input" readonly></div>
-        <div><label class="custom-input-label">Transaction ID (TrxID)</label><input type="text" id="manual-trx-input" class="inline-input" placeholder="e.g. 9K382LXM9P" required></div>
-        <div id="manual-payment-error" style="display:none;color:var(--accent-rose);font-size:0.8rem"></div>
-        <button type="submit" class="btn btn-primary" id="btn-submit-manual-payment">Submit Payment for Admin Review</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- Admin Dashboard Modal -->
-  <div class="modal-overlay" id="modal-admin">
-    <div class="modal-box modal-box-admin">
-      <div class="modal-header">
-        <h3 class="modal-title">🛡️ Admin Dashboard</h3>
-        <button class="modal-close-btn" id="btn-close-admin">✕</button>
-      </div>
-      <div class="admin-tabs-header">
-        <button class="btn btn-secondary btn-sm active" id="admin-tab-users">Users Management</button>
-        <button class="btn btn-secondary btn-sm" id="admin-tab-payments">Pending Payments Queue (<span id="admin-pending-badge">0</span>)</button>
+      <!-- AI Status Badge (from existing app) -->
+      <div id="ai-status-badge" class="ai-status-badge disconnected hidden sm:inline-flex">
+        <span class="ai-dot ai-dot-disconnected"></span> AI OFF
       </div>
       
-      <div id="admin-section-users">
-        <div class="admin-toolbar-row">
-          <input type="text" id="admin-user-search" class="inline-input" placeholder="Search user by name or email…">
-          <button class="btn btn-secondary btn-sm" id="btn-admin-refresh">Refresh</button>
+      <!-- AI Settings Button (from existing app) -->
+      <button class="px-3 py-1.5 rounded bg-surface-container-highest border border-outline text-on-surface-variant text-xs font-bold hover:bg-[#191c1f] hover:text-[#00dbe9] hover:border-[#00dbe9] transition-all" id="nav-btn-ai-settings" title="API Settings">
+        API
+      </button>
+
+      <!-- Logged-out state -->
+      <div id="auth-logged-out" class="hidden md:flex items-center gap-2">
+        <button class="text-on-surface hover:text-primary-fixed-dim font-label-md text-label-md px-3 py-2 rounded-lg transition-colors" id="nav-btn-login">
+          Login
+        </button>
+        <button class="bg-primary-fixed-dim text-background px-4 py-2 rounded-lg font-label-md text-label-md hover:bg-primary-container transition-colors glow-cyan" id="nav-btn-signup">
+          Sign Up
+        </button>
+      </div>
+
+      <!-- Logged-in state -->
+      <div id="auth-logged-in" class="hidden items-center gap-4">
+        <!-- Admin Panel -->
+        <button class="hidden md:flex bg-amber-500/20 border border-amber-500/40 text-amber-300 font-label-sm text-label-sm px-3 py-2 rounded-lg hover:bg-amber-500/30 transition-all items-center gap-1" id="btn-admin-panel" style="display:none">
+          <span class="material-symbols-outlined text-[16px]">shield</span> Admin
+        </button>
+        <!-- Credits -->
+        <div id="auth-user-credits-badge" class="hidden md:flex px-3 py-1.5 rounded-full font-label-sm text-label-sm bg-[#00dbe9]/10 border border-[#00dbe9]/30 text-[#00dbe9] items-center gap-1" title="Available Credits">
+          <span>⚡</span> <span>10 Credits</span>
         </div>
-        <div class="table-responsive-wrapper">
-          <table class="admin-table">
-            <thead>
-              <tr><th>User</th><th>Role</th><th>Plan</th><th>Credits</th><th>Status</th><th style="text-align:right">Action</th></tr>
-            </thead>
-            <tbody id="admin-users-list"></tbody>
-          </table>
+        <!-- Profile / Avatar -->
+        <button class="flex items-center gap-2 hover:opacity-80 transition-opacity" id="btn-user-profile">
+          <img alt="User Avatar" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeqxT1Cn2qy7Z2yjIWSF-H0_iswr9L4s39j1Eb1osy7XwiHAL_VeoP0BE5YizU61Jic4kRa4X3h6mRlV9-BCU9wqZPhgD9eG_dqQNwgzg4IOuwnySOe7JBz9bU63GEgb_0SBLKTZx4iiTEJ7UdwxnFNNXov65R7qH7wGDsEjlatA2iht6h-Rbl4Dp96WxnII_GZSF_r267z19XxFCAvS-PgRHi1DHo9z8n_odbjKwRWJpr3bpfMcEFgQ" />
+          <span id="auth-user-plan-badge" class="hidden">FREE</span>
+          <span id="auth-user-name" class="hidden">User</span>
+        </button>
+        <!-- Logout -->
+        <button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors" id="btn-logout" title="Logout">
+          <span class="material-symbols-outlined">logout</span>
+        </button>
+      </div>
+
+      <!-- Mobile Hamburger Toggle -->
+      <button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-highest transition-colors md:hidden" id="hamburger-btn" onclick="document.getElementById('sidebar').classList.toggle('-translate-x-full'); document.getElementById('mobile-overlay').classList.toggle('hidden');">
+        <span class="material-symbols-outlined">menu</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Overlay -->
+  <div id="mobile-overlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 hidden md:hidden transition-opacity" onclick="document.getElementById('sidebar').classList.add('-translate-x-full'); this.classList.add('hidden');"></div>
+
+  <!-- Mobile Nav Drawer -->
+  <div class="fixed top-[68px] left-0 w-full bg-[#1d2023] border-b border-outline-variant p-4 flex flex-col gap-3 z-40 md:hidden shadow-2xl transition-all duration-200" id="mobile-nav-drawer" style="display:none">
+    <button class="flex items-center gap-3 text-on-surface py-2 px-3 rounded-lg hover:bg-surface-container-highest" id="mobile-nav-tutorial">
+      <span class="material-symbols-outlined text-primary-fixed-dim">help</span> 📖 Tutorial &amp; Guide
+    </button>
+    <button class="flex items-center gap-3 text-on-surface py-2 px-3 rounded-lg hover:bg-surface-container-highest" id="mobile-nav-contact">
+      <span class="material-symbols-outlined text-primary-fixed-dim">mail</span> 💬 Contact Support
+    </button>
+    <button class="flex items-center gap-3 text-on-surface py-2 px-3 rounded-lg hover:bg-surface-container-highest" id="mobile-nav-pricing">
+      <span class="material-symbols-outlined text-primary-fixed-dim">workspace_premium</span> 💎 Pricing Plans
+    </button>
+    <button class="flex items-center gap-3 text-primary-fixed-dim font-bold py-2.5 px-3 rounded-lg bg-primary-fixed-dim/10 border border-primary-fixed-dim/30" id="mobile-nav-login">
+      <span class="material-symbols-outlined">login</span> 🔑 Login / Sign Up
+    </button>
+  </div>
+
+  <!-- App Layout Wrapper -->
+  <div class="flex flex-1 pt-[68px] min-h-screen">
+    <!-- SideNavBar -->
+    <aside class="fixed left-0 top-[68px] w-[280px] md:w-[375px] h-[calc(100vh-68px)] bg-[#191c1f] border-r border-[#3b494b] overflow-y-auto flex flex-col z-40 transition-transform duration-300 transform -translate-x-full md:translate-x-0" id="sidebar">
+      
+      <!-- Project Workspace Avatar Header -->
+      <div class="px-6 mb-6 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#00dbe9] to-[#db50ff] p-[1px] glow-cyan">
+          <div class="w-full h-full bg-[#1d2023] rounded-[15px] flex items-center justify-center text-primary-fixed-dim font-bold text-lg">
+            <span class="material-symbols-outlined text-[24px]">photo_library</span>
+          </div>
+        </div>
+        <div>
+          <h2 class="text-base font-semibold text-on-surface leading-tight">Microstock Tool</h2>
+          <p class="text-[10px] text-on-surface-variant uppercase tracking-wider mt-1">Develop By PONKOJ DAS</p>
         </div>
       </div>
 
-      <div id="admin-section-payments" style="display:none">
-        <div class="admin-toolbar-row" style="justify-content:flex-end">
-          <button class="btn btn-secondary btn-sm" id="btn-admin-refresh-payments">Refresh Queue</button>
+      <!-- Sidebar Modes & Options -->
+      <div class="px-4 flex gap-2 mb-2">
+        <a id="sidebar-mode-metadata" class="flex-1 flex flex-col items-center justify-center gap-1 bg-[#00dbe9]/15 border border-[#00dbe9] text-[#00dbe9] shadow-[0_0_15px_rgba(0,219,233,0.2)] rounded-lg py-3 hover:bg-[#00dbe9]/20 transition-all cursor-pointer text-center">
+          <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">data_object</span>
+          <span class="text-[10px] font-bold uppercase tracking-wider">Metadata</span>
+        </a>
+        <a id="sidebar-mode-img2prompt" class="flex-1 flex flex-col items-center justify-center gap-1 bg-[#1d2023] border border-[#3b494b] text-on-surface-variant rounded-lg py-3 hover:border-[#00dbe9]/50 hover:bg-[#191c1f] transition-all cursor-pointer text-center">
+          <span class="material-symbols-outlined text-[20px]">image_search</span>
+          <span class="text-[10px] font-bold uppercase tracking-wider">Image to Prompt</span>
+        </a>
+      </div>
+      <nav class="flex-1 flex flex-col gap-1 mt-2 overflow-y-auto">
+        
+        <!-- Customization Sliders Box (Retained for Functionality) -->
+        <div class="mx-4 mt-6 bg-[#1d2023] border border-[#3b494b] rounded-xl p-4 flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-[#3b494b] pb-2">
+            <span class="text-xs font-semibold text-on-surface flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px] text-primary-fixed-dim">tune</span> Settings
+            </span>
+            <label class="flex items-center cursor-pointer">
+              <div class="relative">
+                <input type="checkbox" id="settings-toggle" class="sr-only">
+                <div class="block bg-[#191c1f] border border-[#3b494b] w-8 h-4 rounded-full transition-colors" id="settings-toggle-bg"></div>
+                <div class="dot absolute left-[2px] top-[2px] bg-on-surface-variant w-3 h-3 rounded-full transition-transform" id="settings-toggle-dot"></div>
+              </div>
+              <div class="ml-2 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider" id="settings-toggle-text">OFF</div>
+            </label>
+          </div>
+
+          <!-- Title Words Slider Group -->
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-on-surface-variant font-medium">Title Words</span>
+              <span class="text-primary-fixed-dim font-bold text-[11px]"><span id="val-title-min-words">5</span> - <span id="val-title-max-words">20</span></span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] text-outline block mb-1">Min</label>
+                <input type="range" id="setting-title-min-words" min="1" max="50" value="5" class="w-full accent-[#00dbe9] bg-[#191c1f] h-1.5 rounded-lg cursor-pointer">
+              </div>
+              <div>
+                <label class="text-[10px] text-outline block mb-1">Max</label>
+                <input type="range" id="setting-title-max-words" min="1" max="200" value="20" class="w-full accent-[#00dbe9] bg-[#191c1f] h-1.5 rounded-lg cursor-pointer">
+              </div>
+            </div>
+          </div>
+
+          <!-- Keywords Slider Group -->
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-on-surface-variant font-medium">Keywords</span>
+              <span class="text-primary-fixed-dim font-bold text-[11px]"><span id="val-kw-min">15</span> - <span id="val-kw-max">49</span></span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] text-outline block mb-1">Min</label>
+                <input type="range" id="setting-kw-min" min="1" max="100" value="15" class="w-full accent-[#00dbe9] bg-[#191c1f] h-1.5 rounded-lg cursor-pointer">
+              </div>
+              <div>
+                <label class="text-[10px] text-outline block mb-1">Max</label>
+                <input type="range" id="setting-kw-max" min="1" max="100" value="49" class="w-full accent-[#00dbe9] bg-[#191c1f] h-1.5 rounded-lg cursor-pointer">
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Prompt Extension -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-medium text-on-surface-variant flex items-center justify-between">
+              <span>Custom Prompt Override</span>
+              <span class="text-[10px] text-outline">Optional</span>
+            </label>
+            <textarea id="setting-custom-prompt" class="w-full bg-[#191c1f] border border-[#3b494b] rounded-md p-2 text-xs text-on-surface focus:outline-none focus:border-primary-fixed-dim transition-colors !min-h-[60px]" placeholder="e.g. Focus on commercial minimalism..."></textarea>
+          </div>
         </div>
-        <div class="table-responsive-wrapper">
-          <table class="admin-table">
+
+        <!-- Admin drawer trigger if admin -->
+        <button id="btn-sidebar-admin" class="mx-4 mt-4 hidden bg-amber-500/10 border border-amber-500/30 text-amber-300 py-2.5 rounded-xl text-xs font-bold hover:bg-amber-500/20 transition-all flex justify-center items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">admin_panel_settings</span> Open Admin Control Drawer
+        </button>
+      </nav>
+
+      <!-- Sticky Footer Area -->
+      <div class="px-6 py-4 mt-auto border-t border-[#3b494b] bg-[#191c1f]">
+        <button id="btn-sidebar-upgrade" class="w-full bg-surface-container-high border border-outline-variant text-on-surface py-3 rounded-lg hover:border-secondary-container transition-colors font-label-md text-label-md mb-4 flex justify-center items-center gap-2 group">
+            Upgrade to Pro
+            <span class="material-symbols-outlined text-[18px] group-hover:text-secondary-container transition-colors">rocket_launch</span>
+        </button>
+        <div class="flex items-center justify-between">
+          <a id="nav-btn-sidebar-help" class="flex items-center gap-2 text-on-surface-variant py-2 px-2 hover:bg-surface-container-highest hover:text-on-surface transition-all rounded-md cursor-pointer flex-1">
+            <span class="material-symbols-outlined text-[18px]">help</span>
+            <span class="text-[10px] font-bold uppercase tracking-wider">Help</span>
+          </a>
+          <a id="btn-sidebar-logout" class="flex items-center gap-2 text-on-surface-variant py-2 px-2 hover:bg-surface-container-highest hover:text-error transition-all rounded-md cursor-pointer flex-1 justify-end">
+            <span class="text-[10px] font-bold uppercase tracking-wider">Logout</span>
+            <span class="material-symbols-outlined text-[18px]">logout</span>
+          </a>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Area -->
+    <main class="ml-0 md:ml-[375px] flex-1 p-4 md:p-margin_desktop w-full max-w-[100vw] md:max-w-container_max mx-auto relative flex flex-col items-center pb-24 transition-all">
+      
+      <!-- Workspace: Metadata Generator -->
+      <div id="workspace-metadata" class="w-full flex flex-col items-center">
+        <!-- Platform Selector -->
+        <div class="w-full max-w-4xl mb-6 flex flex-col items-center gap-3">
+          <div class="flex flex-wrap justify-center gap-2" id="platform-grid">
+            <!-- Rendered via JS using Ui reference button styling -->
+          </div>
+        </div>
+
+      <!-- Upload Card -->
+      <div class="w-full max-w-3xl border-gradient rounded-[24px] p-[1px] glow-cyan" id="upload-section">
+        <div class="bg-[#1d2023] rounded-[23px] p-4 md:p-6 flex flex-col items-center text-center relative overflow-hidden backdrop-blur-sm">
+          <!-- Subtle background glow behind the card -->
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-primary-fixed-dim opacity-5 rounded-full blur-3xl pointer-events-none"></div>
+          
+          <!-- Upload Hero Zone -->
+          <div class="hero-dashed-border w-full py-4 md:py-6 flex flex-col items-center justify-center gap-4 mb-4 group cursor-pointer hover:bg-surface-container-high/30 transition-colors relative" id="drop-zone">
+            <div class="w-16 h-16 rounded-full bg-surface-container-highest border border-outline-variant flex items-center justify-center group-hover:border-primary-fixed-dim group-hover:glow-cyan transition-all">
+              <span class="material-symbols-outlined text-[32px] text-primary-fixed-dim">cloud_upload</span>
+            </div>
+            <div class="flex flex-col gap-1">
+              <h2 class="text-title-lg font-bold text-on-surface" id="upload-title-text">Choose Files</h2>
+              <p class="text-body-sm text-on-surface-variant" id="upload-subtitle-text">Drag &amp; drop files here or browse your device</p>
+            </div>
+            <p class="text-[10px] font-bold text-outline uppercase tracking-wider" id="format-tags-container">JPG • PNG • WEBP • EPS • AI • SVG • MP4</p>
+            
+            <!-- Functional Buttons (Injected for functionality, styled to blend) -->
+            <div class="flex gap-3 mt-4 relative z-10">
+              <button class="bg-primary-fixed-dim text-background px-5 py-2.5 rounded-lg text-label-md font-label-md hover:bg-primary-container transition-all flex items-center gap-2 glow-cyan" id="btn-browse-files">
+                <span class="material-symbols-outlined text-[18px]">folder_open</span> Browse Files
+              </button>
+            </div>
+            <input type="file" id="file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.tiff,.tif,.eps,.ai,.svg,.pdf,.mp4">
+          </div>
+
+          <!-- Action Buttons (Tabs for Images/Vectors/Videos) -->
+          <div class="flex gap-4 w-full justify-center mt-2">
+            <button class="flex-1 max-w-[140px] py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all bg-[#00dbe9]/15 border border-[#00dbe9] text-[#00dbe9] shadow-[0_0_15px_rgba(0,219,233,0.3)] font-bold" id="tab-images">
+              <span class="material-symbols-outlined text-[18px]">image</span>
+              Images
+            </button>
+            <button class="flex-1 max-w-[140px] py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all bg-[#191c1f] border border-[#3b494b] text-on-surface-variant font-medium hover:border-[#00dbe9]/50 hover:bg-[#191c1f]/80" id="tab-vectors">
+              <span class="material-symbols-outlined text-[18px]">polyline</span>
+              Vectors
+            </button>
+            <button class="flex-1 max-w-[140px] py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all bg-[#191c1f] border border-[#3b494b] text-on-surface-variant font-medium hover:border-[#00dbe9]/50 hover:bg-[#191c1f]/80" id="tab-videos">
+              <span class="material-symbols-outlined text-[18px]">movie</span>
+              Videos
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Prominent Process Button -->
+      <div class="w-full max-w-3xl flex justify-center mt-6 mb-4 gap-4">
+        <button class="bg-gradient-to-r from-[#00dbe9] to-[#db50ff] text-white px-8 py-4 rounded-xl text-lg font-bold shadow-[0_0_20px_rgba(0,219,233,0.3)] hover:shadow-[0_0_30px_rgba(219,80,255,0.5)] hover:scale-[1.02] transition-all flex items-center gap-2" id="btn-generate-ai">
+          <span class="material-symbols-outlined text-[24px]">bolt</span> Process Metadata
+        </button>
+        <button class="bg-error/20 border border-error/50 text-error px-6 py-4 rounded-xl text-lg font-bold hover:bg-error/30 transition-all items-center gap-2" id="btn-stop-generation" style="display:none">
+          <span class="material-symbols-outlined text-[24px]">stop</span> Stop
+        </button>
+        <button class="bg-amber-500/20 border border-amber-500/40 text-amber-300 px-6 py-4 rounded-xl text-lg font-bold hover:bg-amber-500/30 transition-all items-center gap-2" id="btn-retry-failed" style="display:none">
+          <span class="material-symbols-outlined text-[24px]">refresh</span> Retry Failed
+        </button>
+      </div>
+
+      <!-- Empty State View -->
+      <div class="w-full max-w-3xl bg-[#1d2023] border border-[#3b494b] rounded-2xl p-10 flex flex-col items-center text-center gap-3 my-4" id="empty-state">
+        <div class="w-16 h-16 rounded-full bg-[#191c1f] border border-[#3b494b] flex items-center justify-center text-primary-fixed-dim">
+          <span class="material-symbols-outlined text-[32px]">photo_library</span>
+        </div>
+        <h3 class="text-base font-bold text-on-surface">No assets uploaded yet</h3>
+        <p class="text-xs text-on-surface-variant max-w-md">
+          Upload your stock photos or vector artwork above, then click <strong>Generate Metadata</strong> to automatically create platform-compliant metadata.
+        </p>
+      </div>
+
+      <!-- Main Work Area (Visible when files loaded) -->
+      <div class="w-full max-w-5xl" id="main-content-area" style="display:none">
+        
+        <!-- Queue Stats Bar -->
+        <div class="bg-[#1d2023] border border-[#3b494b] rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-3 text-xs" id="stats-bar">
+          <div class="flex items-center gap-4 flex-wrap">
+            <div>Total: <strong id="stat-total" class="text-on-surface">0</strong></div>
+            <div>Images: <strong id="stat-images" class="text-primary-fixed-dim">0</strong></div>
+            <div>Vectors: <strong id="stat-vectors" class="text-secondary-container">0</strong></div>
+            <div>Ready: <strong id="stat-ready" class="text-emerald-400">0</strong></div>
+            <div>Failed: <strong id="stat-failed" class="text-error">0</strong></div>
+            <div>Selected: <strong id="stat-selected" class="text-on-surface">0</strong></div>
+          </div>
+        </div>
+
+        <!-- Action Toolbar -->
+        <div class="bg-[#1d2023] border border-[#3b494b] rounded-xl p-4 mb-4 flex items-center justify-between flex-wrap gap-4" id="toolbar-section">
+          
+          <div class="flex items-center gap-2 flex-wrap">
+            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-3 py-2 rounded-lg text-xs font-medium hover:border-primary-fixed-dim transition-all" id="btn-upload-more">
+              + Upload More
+            </button>
+            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-3 py-2 rounded-lg text-xs font-medium hover:border-primary-fixed-dim transition-all" id="btn-batch-edit">
+              Batch Edit
+            </button>
+            <button class="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1" id="btn-select-all">Select All</button>
+            <button class="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1" id="btn-deselect-all">Deselect</button>
+            <button class="text-xs text-error hover:text-error/80 px-2 py-1" id="btn-remove-selected">Remove Selected</button>
+            <button class="text-xs text-error hover:text-error/80 px-2 py-1" id="btn-clear-all">Clear All</button>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-2.5 top-2 text-[16px] text-outline">search</span>
+              <input type="text" id="search-input" class="cyber-input text-xs !py-1.5 !pl-8 !w-[180px]" placeholder="Search filenames…">
+            </div>
+            <select id="status-filter-select" class="cyber-input text-xs !py-1.5 !w-[120px]">
+              <option value="all">All Status</option>
+              <option value="ready">Ready</option>
+              <option value="waiting">Waiting</option>
+              <option value="processing">Processing</option>
+              <option value="failed">Failed</option>
+            </select>
+            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface p-1.5 rounded-lg hover:border-primary-fixed-dim transition-all" id="btn-toggle-view" title="Toggle Grid/Table View">
+              <span class="material-symbols-outlined text-[18px]">grid_view</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Progress Bar Container -->
+        <div class="bg-[#00dbe9]/10 border border-[#00dbe9]/30 rounded-xl p-4 mb-4" id="progress-bar-container" style="display:none">
+          <div class="flex items-center justify-between text-xs mb-2">
+            <span id="progress-text" class="font-medium text-on-surface">Processing assets…</span>
+            <span id="progress-stats-counter" class="font-bold text-primary-fixed-dim">0 / 0</span>
+            <span id="progress-percent-text" class="font-bold text-primary-fixed-dim">0%</span>
+          </div>
+          <div class="w-full h-2 bg-[#191c1f] rounded-full overflow-hidden">
+            <div id="progress-fill" class="h-full bg-gradient-to-r from-[#00dbe9] to-[#db50ff] w-0 transition-all duration-200"></div>
+          </div>
+        </div>
+
+        <!-- Table View -->
+        <div class="w-full overflow-x-auto rounded-xl border border-[#3b494b] bg-[#1d2023] mb-6" id="table-view-container">
+          <table class="meta-table">
             <thead>
-              <tr><th>User</th><th>Plan</th><th>Amount</th><th>Method</th><th>Sender</th><th>TrxID</th><th>Status</th><th style="text-align:right">Action</th></tr>
+              <tr>
+                <th class="w-12">Asset</th>
+                <th class="w-44">File Name</th>
+                <th class="w-64">Title</th>
+                <th class="w-64">Description</th>
+                <th class="min-w-[240px]">Keywords</th>
+                <th class="w-36">Category</th>
+                <th class="w-24">Status</th>
+                <th class="w-28">Actions</th>
+              </tr>
             </thead>
-            <tbody id="admin-payments-list"></tbody>
+            <tbody id="metadata-table-body">
+              <!-- Rendered via JS -->
+            </tbody>
           </table>
+        </div>
+
+        <!-- Grid View -->
+        <div class="image-grid mb-6" id="grid-view-container" style="display:none">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- CSV Export Footer Bar -->
+        <div class="bg-[#1d2023] border border-[#3b494b] rounded-xl p-5 flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h4 class="text-sm font-bold text-on-surface mb-0.5">Ready for Export</h4>
+            <p class="text-xs text-on-surface-variant">Export platform-compliant CSV file with exact headers for your microstock dashboard.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2.5 rounded-lg text-xs font-semibold hover:border-primary-fixed-dim transition-all flex items-center gap-1.5" id="btn-preview-csv">
+              <span class="material-symbols-outlined text-[18px]">visibility</span> Preview CSV
+            </button>
+            <button class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-5 py-2.5 rounded-lg text-xs font-bold hover:brightness-110 transition-all flex items-center gap-1.5 shadow-md" id="btn-export-csv">
+              <span class="material-symbols-outlined text-[18px]">download</span> Export CSV
+            </button>
+          </div>
+        </div>
+
+      </div>
+      </div> <!-- End workspace-metadata -->
+
+      <!-- Workspace: Image to Prompt (Hidden by default) -->
+      <div id="workspace-img2prompt" class="w-full flex flex-col items-center" style="display:none">
+        <div class="w-full max-w-2xl border-gradient rounded-[24px] p-[1px] glow-cyan">
+          <div class="bg-[#1d2023] rounded-[23px] px-8 pt-8 pb-10 flex flex-col items-center text-center relative backdrop-blur-sm">
+            <div class="hero-dashed-border w-full min-h-[220px] flex flex-col items-center justify-center gap-3 mb-8 group cursor-pointer relative transition-all hover:bg-white/5" id="img2prompt-drop-zone">
+              <span class="material-symbols-outlined text-[40px] text-primary-fixed-dim">image_search</span>
+              <h2 class="text-title-lg font-bold text-on-surface">Image to Prompt</h2>
+              <p class="text-xs text-on-surface-variant max-w-[80%] mx-auto">Drop images here or click to browse. Supported: JPG, PNG, WEBP.</p>
+              <button id="btn-browse-img2prompt" class="bg-primary-fixed-dim text-background px-5 py-2 rounded-lg text-sm font-semibold mt-2 transition-colors pointer-events-none group-hover:bg-primary-container">Browse Images</button>
+              <input type="file" id="img2prompt-file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp">
+            </div>
+            
+            <div class="w-full flex flex-col items-center gap-5">
+              <button id="btn-generate-all-img2prompt" class="bg-gradient-to-r from-[#00dbe9] to-[#db50ff] text-white px-8 py-3.5 rounded-xl text-base font-bold shadow-[0_0_20px_rgba(0,219,233,0.3)] hover:shadow-[0_0_30px_rgba(219,80,255,0.5)] hover:-translate-y-0.5 transition-all flex items-center gap-2 w-full max-w-md justify-center">
+                <span class="material-symbols-outlined text-[20px]">bolt</span> Generate Prompts
+              </button>
+              
+              <div class="flex items-center gap-4 justify-center">
+                <button id="btn-copy-all-img2prompt" class="text-on-surface-variant hover:text-on-surface text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                  <span class="material-symbols-outlined text-[16px]">content_copy</span> Copy All
+                </button>
+                <div class="w-1 h-1 rounded-full bg-[#3b494b]"></div>
+                <button id="btn-clear-img2prompt" class="text-error hover:text-error/80 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                  <span class="material-symbols-outlined text-[16px]">delete</span> Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div id="img2prompt-results-wrapper" class="w-full max-w-3xl mt-6 hidden">
+          <h3 id="img2prompt-results-title" class="text-on-surface font-bold text-lg mb-4">Results</h3>
+          <div id="img2prompt-cards-list" class="grid grid-cols-1 gap-4"></div>
+        </div>
+      </div>
+      
+    </main>
+
+  </div>
+
+  <!-- ==========================================================================
+       MODALS SYSTEM
+       ========================================================================== -->
+
+  <!-- 1. AI BYOK Settings Modal -->
+  <div class="modal-overlay" id="modal-ai-settings">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <span class="material-symbols-outlined text-primary-fixed-dim">settings_suggest</span>
+          AI Engine Settings (Gemini BYOK)
+        </h3>
+        <button class="modal-close-btn" id="btn-close-ai-settings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="p-3 rounded-xl bg-primary-fixed-dim/10 border border-primary-fixed-dim/30 text-xs text-on-surface-variant leading-relaxed">
+          🔒 Enter your own Gemini API key. Your key is stored in browser session memory only — never sent to external servers.
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <div class="flex justify-between items-center">
+            <label class="text-xs font-bold text-on-surface">Gemini API Key</label>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-[#00dbe9] hover:text-[#00f0ff] hover:underline flex items-center gap-1 transition-colors">
+              Get API Key <span class="material-symbols-outlined text-[12px]">open_in_new</span>
+            </a>
+          </div>
+          <div class="relative flex gap-2">
+            <input type="password" id="gemini-api-key-input" class="cyber-input font-mono text-xs" placeholder="AIzaSy...">
+            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-3 rounded-lg text-xs hover:border-primary-fixed-dim" id="btn-toggle-key-visibility" type="button">👁</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold hover:bg-[#00f0ff] transition-all glow-cyan" id="btn-save-api-key">Save Key</button>
+          <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg text-xs font-semibold hover:border-primary-fixed-dim transition-all" id="btn-test-connection">Test Connection</button>
+          <button class="text-xs text-error hover:text-error/80 px-3 py-2" id="btn-clear-api-key">Clear Key</button>
+        </div>
+
+        <div class="p-3 rounded-xl bg-[#191c1f] border border-[#3b494b] text-xs flex items-center justify-between">
+          <span class="text-on-surface-variant">Connection Status:</span>
+          <span id="connection-status-text" class="font-semibold text-on-surface">● Not Connected</span>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Auth Modal -->
+  <!-- 2. Auth Modal (Login / Signup) -->
   <div class="modal-overlay" id="modal-auth">
-    <div class="modal-box" style="max-width:420px">
+    <div class="modal-box !max-w-[440px]">
       <div class="modal-header">
-        <h3 class="modal-title">🔑 Account Access</h3>
+        <h3 class="modal-title">
+          <span class="material-symbols-outlined text-primary-fixed-dim">account_circle</span> Account Portal
+        </h3>
         <button class="modal-close-btn" id="btn-close-auth">✕</button>
       </div>
-      <div id="auth-tabs-container" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
-        <button class="btn btn-secondary btn-sm active" id="auth-tab-login" style="flex:1">Log In</button>
-        <button class="btn btn-secondary btn-sm" id="auth-tab-signup" style="flex:1">Sign Up</button>
-      </div>
+      <div class="modal-body !pt-2">
+        <!-- Rounded Box-style Tabs -->
+        <div class="flex p-1 bg-[#15171a] border border-[#3b494b] rounded-xl mb-6" id="auth-tabs-container">
+          <button class="flex-1 py-2.5 text-center text-xs font-bold text-background bg-[#00dbe9] rounded-lg shadow-[0_0_15px_rgba(0,219,233,0.3)] transition-all" id="auth-tab-login">Login</button>
+          <button class="flex-1 py-2.5 text-center text-xs font-medium text-on-surface-variant hover:text-on-surface rounded-lg transition-all" id="auth-tab-signup">Sign Up</button>
+        </div>
 
-      <form id="auth-login-form" style="display:flex;flex-direction:column;gap:12px">
-        <div><label class="custom-input-label">Email Address</label><input type="email" id="login-email" class="inline-input" required></div>
-        <div><label class="custom-input-label">Password</label><input type="password" id="login-password" class="inline-input" required></div>
-        <button type="submit" class="btn btn-primary">Login</button>
-      </form>
-
-      <form id="auth-signup-form" style="display:none;flex-direction:column;gap:12px">
-        <div><label class="custom-input-label">Full Name</label><input type="text" id="signup-name" class="inline-input" required></div>
-        <div><label class="custom-input-label">Email Address</label><input type="email" id="signup-email" class="inline-input" required></div>
-        <div><label class="custom-input-label">Password</label><input type="password" id="signup-password" class="inline-input" required></div>
-        <button type="submit" class="btn btn-primary">Create Account</button>
-      </form>
-
-      <div id="auth-profile-view" style="display:none;flex-direction:column;gap:12px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <div>
-            <h4 id="profile-display-name" style="font-size:1.05rem;font-weight:800;color:var(--text-primary)">User Profile</h4>
-            <span id="profile-plan-tag" class="badge-pill">FREE PLAN</span>
+        <!-- Login Form -->
+        <form id="auth-login-form" class="flex flex-col gap-4">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-bold text-on-surface-variant tracking-wide">EMAIL ADDRESS</label>
+            <input type="email" id="login-email" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="name@example.com" required>
           </div>
-          <div style="text-align:right">
-            <div id="profile-plan-text" style="font-size:0.8rem;font-weight:700;color:var(--accent-primary)">FREE</div>
-            <div id="profile-credits-text" style="font-size:0.75rem;color:var(--text-secondary)">10 Credits</div>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-bold text-on-surface-variant tracking-wide">PASSWORD</label>
+            <input type="password" id="login-password" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="••••••••" required>
+          </div>
+          <div id="login-error" class="text-error text-xs font-medium hidden mt-1"></div>
+          <button type="submit" id="btn-login-submit" class="w-full bg-gradient-to-r from-[#00dbe9] to-[#db50ff] text-white py-3.5 rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(219,80,255,0.4)] hover:-translate-y-0.5 transition-all mt-4">
+            Login to Account
+          </button>
+        </form>
+
+        <!-- Signup Form -->
+        <form id="auth-signup-form" class="flex flex-col gap-4" style="display:none">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-bold text-on-surface-variant tracking-wide">FULL NAME</label>
+            <input type="text" id="signup-name" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="John Doe" required>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-bold text-on-surface-variant tracking-wide">EMAIL ADDRESS</label>
+            <input type="email" id="signup-email" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="name@example.com" required>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-bold text-on-surface-variant tracking-wide">PASSWORD</label>
+            <input type="password" id="signup-password" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="••••••••" required>
+          </div>
+          <div id="signup-error" class="text-error text-xs font-medium hidden mt-1"></div>
+          <button type="submit" id="btn-signup-submit" class="w-full bg-gradient-to-r from-[#00dbe9] to-[#db50ff] text-white py-3.5 rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(219,80,255,0.4)] hover:-translate-y-0.5 transition-all mt-4">
+            Create Free Account
+          </button>
+        </form>
+        
+        <!-- Authenticated View -->
+        <div id="auth-profile-view" style="display:none" class="flex-col gap-4 text-center">
+            <h4 class="text-on-surface font-bold text-sm">You are logged in</h4>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. User Profile Modal -->
+  <div class="modal-overlay" id="modal-user-profile">
+    <div class="modal-box !max-w-[480px]">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <span class="material-symbols-outlined text-primary-fixed-dim">badge</span> User Profile &amp; Credits
+        </h3>
+        <button class="modal-close-btn" id="btn-close-profile">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="p-4 rounded-xl bg-[#191c1f] border border-[#3b494b] flex flex-col gap-3 text-xs">
+          <div class="flex justify-between items-center">
+            <span class="text-on-surface-variant">User:</span>
+            <strong id="profile-display-name" class="text-on-surface"></strong>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-on-surface-variant">Current Plan:</span>
+            <span id="profile-plan-tag" class="px-2 py-0.5 rounded bg-primary-fixed-dim/20 text-primary-fixed-dim font-bold uppercase text-[10px]">FREE</span>
+            <span id="profile-plan-text" class="hidden"></span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-on-surface-variant">Remaining Credits:</span>
+            <strong id="profile-credits-text" class="text-emerald-400 font-bold text-sm">⚡ 10</strong>
+          </div>
+          <button id="btn-manage-plan-from-profile" class="mt-2 w-full bg-surface-container border border-outline-variant text-on-surface py-2 rounded-lg text-xs font-semibold hover:border-primary-fixed-dim transition-all">
+            Manage Subscription
+          </button>
+        </div>
+
+        <form id="profile-update-form" class="flex flex-col gap-3 mt-2">
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Full Name</label>
+            <input type="text" id="profile-fullname-input" class="cyber-input" required>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Email Address (Read Only)</label>
+            <input type="email" id="profile-email-input" class="cyber-input opacity-50" readonly>
+          </div>
+          <div id="profile-error" class="text-error text-xs hidden"></div>
+          <button type="submit" id="btn-save-profile" class="w-full bg-[#00dbe9] text-background py-2.5 rounded-lg text-xs font-bold hover:bg-[#00f0ff] transition-all glow-cyan mt-2">
+            Save Changes
+          </button>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold" id="btn-close-profile-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Admin Drawer Modal -->
+  <div class="modal-overlay" id="modal-admin-drawer">
+    <div class="modal-box !max-w-[700px]">
+      <div class="modal-header">
+        <h3 class="modal-title text-amber-300">
+          <span class="material-symbols-outlined">admin_panel_settings</span> System Admin Panel
+        </h3>
+        <button class="modal-close-btn" id="btn-close-admin">✕</button>
+      </div>
+      <div class="modal-body">
+        
+        <div class="flex gap-2 border-b border-outline-variant pb-2 mb-2">
+          <button id="admin-tab-users" class="px-4 py-2 text-xs font-bold text-primary-fixed-dim border-b-2 border-primary-fixed-dim">Users</button>
+          <button id="admin-tab-payments" class="px-4 py-2 text-xs font-medium text-on-surface-variant flex items-center gap-1">Payments <span id="admin-pending-badge" class="bg-error text-white text-[9px] px-1.5 rounded-full hidden">0</span></button>
+        </div>
+
+        <div id="admin-section-users">
+          <div class="flex items-center justify-between mb-3">
+            <div class="relative flex-1 max-w-[200px]">
+              <input type="text" id="admin-user-search" class="cyber-input !py-1 text-xs" placeholder="Search users...">
+              <input type="hidden" id="admin-search">
+            </div>
+            <button id="btn-admin-refresh" class="text-xs text-on-surface-variant hover:text-primary-fixed-dim flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">refresh</span> Refresh</button>
+          </div>
+          <div id="admin-users-list" class="max-h-[300px] overflow-y-auto space-y-2">
+            <!-- Rendered via JS -->
           </div>
         </div>
-        <div id="profile-error" style="display:none;color:var(--accent-rose);font-size:0.8rem"></div>
-        <form id="profile-update-form" style="display:flex;flex-direction:column;gap:12px">
-          <div><label class="custom-input-label">Full Name</label><input type="text" id="profile-fullname-input" class="inline-input"></div>
-          <div><label class="custom-input-label">Email Address</label><input type="text" id="profile-email-input" class="inline-input" readonly></div>
-          <button type="button" class="btn btn-secondary" id="btn-manage-plan-from-profile">Manage Subscription Plan</button>
-          <button type="submit" class="btn btn-primary">Save Profile</button>
+        
+        <div id="admin-section-payments" class="hidden">
+           <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-medium text-on-surface-variant">Manual Payments</span>
+            <button id="btn-admin-refresh-payments" class="text-xs text-on-surface-variant hover:text-primary-fixed-dim flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">refresh</span> Refresh</button>
+          </div>
+          <div id="admin-payments-list" class="max-h-[300px] overflow-y-auto space-y-2">
+             <!-- Rendered via JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. CSV Preview Modal -->
+  <div class="modal-overlay" id="modal-csv-preview">
+    <div class="modal-box !max-w-[850px]">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <span class="material-symbols-outlined text-primary-fixed-dim">table_view</span> CSV Export Preview
+        </h3>
+        <button class="modal-close-btn" id="btn-close-csv-modal">✕</button>
+      </div>
+      <div class="modal-body" id="csv-preview-modal-body">
+        <!-- Rendered via JS -->
+      </div>
+      <div class="modal-footer">
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg text-xs font-semibold" id="btn-close-csv-cancel">Cancel</button>
+        <button class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-5 py-2 rounded-lg text-xs font-bold hover:brightness-110 flex items-center gap-1.5" id="btn-download-csv-modal">
+          <span class="material-symbols-outlined text-[16px]">download</span> Download CSV
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Batch Edit Modal -->
+  <div class="modal-overlay" id="modal-batch-edit">
+    <div class="modal-box !max-w-[480px]">
+      <div class="modal-header">
+        <h3 class="modal-title">Batch Edit Metadata</h3>
+        <button class="modal-close-btn" id="btn-close-batch-edit">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-on-surface-variant">Append Keywords to All / Selected</label>
+          <input type="text" id="batch-append-keywords" class="cyber-input" placeholder="e.g. 4k, ultra hd, minimal design">
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-on-surface-variant">Set Category for All / Selected</label>
+          <select id="batch-set-category" class="cyber-input">
+            <option value="">Keep Existing</option>
+            <option>Landscapes</option><option>Technology</option><option>Business</option>
+            <option>Food</option><option>Buildings and Architecture</option>
+            <option>Graphic Resources</option><option>People</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg text-xs font-semibold" onclick="document.getElementById('modal-batch-edit').classList.remove('active')">Cancel</button>
+        <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold" id="btn-apply-batch-edit">Apply Edits</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. Detail Inspector Modal -->
+  <div class="modal-overlay" id="modal-detail">
+    <div class="modal-box !max-w-[780px]">
+      <div class="modal-header">
+        <h3 class="modal-title">Asset Inspector</h3>
+        <button class="modal-close-btn" id="btn-close-detail">✕</button>
+      </div>
+      <div class="modal-body" id="detail-body">
+        <!-- Rendered via JS -->
+      </div>
+      <div class="modal-footer">
+        <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold" onclick="document.getElementById('modal-detail').classList.remove('active')">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. Pricing Modal -->
+  <div class="modal-overlay" id="modal-pricing">
+    <div class="modal-box !max-w-[780px]">
+      <div class="modal-header">
+        <h3 class="modal-title text-secondary-container">
+          <span class="material-symbols-outlined">workspace_premium</span> Plans
+        </h3>
+        <button class="modal-close-btn" id="btn-close-pricing">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-[#191c1f] border border-[#3b494b] rounded-xl p-5 flex flex-col justify-between gap-4">
+            <div>
+              <h4 class="text-sm font-bold text-on-surface">FREE</h4>
+              <p class="text-xs text-on-surface-variant mt-1">For casual contributors</p>
+              <div class="text-2xl font-bold text-on-surface mt-3">৳0 <span class="text-xs font-normal text-on-surface-variant">/ month</span></div>
+            </div>
+            <ul class="text-xs text-on-surface-variant space-y-2">
+              <li>✓ BYOK Gemini AI</li>
+              <li>✓ 10 images per batch</li>
+              <li>✓ Basic CSV export</li>
+            </ul>
+            <button class="bg-surface-container-high border border-outline-variant text-on-surface py-2 rounded-lg text-xs font-semibold" onclick="document.getElementById('modal-pricing').classList.remove('active')">Current Plan</button>
+          </div>
+          
+          <div class="bg-[#1d2023] border-2 border-primary-fixed-dim rounded-xl p-5 flex flex-col justify-between gap-4 relative glow-cyan">
+            <div class="absolute -top-3 right-4 bg-primary-fixed-dim text-background text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">POPULAR</div>
+            <div>
+              <h4 class="text-sm font-bold text-primary-fixed-dim">PRO</h4>
+              <p class="text-xs text-on-surface-variant mt-1">For active stock uploaders</p>
+              <div class="text-2xl font-bold text-on-surface mt-3">৳150 <span class="text-xs font-normal text-on-surface-variant">/ month</span></div>
+            </div>
+            <ul class="text-xs text-on-surface-variant space-y-2">
+              <li>✓ 6,000 credits / month</li>
+              <li>✓ All 8 platforms</li>
+              <li>✓ Advanced keyword ordering</li>
+            </ul>
+            <button class="bg-[#00dbe9] text-background py-2 rounded-lg text-xs font-bold glow-cyan" onclick="showToast('Pro Plan selected','info')">Upgrade to Pro</button>
+          </div>
+
+          <div class="bg-[#191c1f] border border-[#3b494b] rounded-xl p-5 flex flex-col justify-between gap-4">
+            <div>
+              <h4 class="text-sm font-bold text-on-surface">BUSINESS</h4>
+              <p class="text-xs text-on-surface-variant mt-1">For stock studios &amp; agencies</p>
+              <div class="text-2xl font-bold text-on-surface mt-3">৳500 <span class="text-xs font-normal text-on-surface-variant">/ year</span></div>
+            </div>
+            <ul class="text-xs text-on-surface-variant space-y-2">
+              <li>✓ 18,000 credits / year</li>
+              <li>✓ Custom CSV schema</li>
+              <li>✓ Priority AI processing</li>
+            </ul>
+            <button class="bg-surface-container-high border border-outline-variant text-on-surface py-2 rounded-lg text-xs font-semibold" onclick="showToast('Business Plan selected','info')">Contact Sales</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. Settings Modal -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal-box !max-w-[480px]">
+      <div class="modal-header">
+        <h3 class="modal-title">General Settings</h3>
+        <button class="modal-close-btn" onclick="document.getElementById('modal-settings').classList.remove('active')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="setting-bom-check" class="w-4 h-4 rounded border-[#3b494b] bg-[#191c1f] checked:bg-[#00dbe9]">
+          <label for="setting-bom-check" class="text-xs font-medium text-on-surface">Include UTF-8 BOM in CSV export</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold" id="btn-save-settings">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. Manual Payment Modal -->
+  <div class="modal-overlay" id="modal-manual-payment">
+    <div class="modal-box !max-w-[480px]">
+      <div class="modal-header">
+        <h3 class="modal-title">Submit Manual Payment</h3>
+        <button class="modal-close-btn" id="btn-close-manual-payment">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="manual-payment-form" class="flex flex-col gap-3">
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Plan Selected</label>
+            <input type="text" id="manual-plan-display" class="cyber-input opacity-50" readonly>
+            <input type="hidden" id="manual-plan-input">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Amount (BDT/USD)</label>
+            <input type="text" id="manual-amount-input" class="cyber-input opacity-50" readonly>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Payment Method</label>
+            <select id="manual-method-select" class="cyber-input" required>
+              <option value="bkash">bKash (Personal: +8801700000000)</option>
+              <option value="nagad">Nagad (Personal: +8801700000000)</option>
+              <option value="rocket">Rocket</option>
+              <option value="bank">Bank Transfer</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Your Sender Account No. / Email</label>
+            <input type="text" id="manual-sender-input" class="cyber-input" placeholder="e.g. 017XXXXXXXX" required>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Transaction ID</label>
+            <input type="text" id="manual-trx-input" class="cyber-input" placeholder="TRX..." required>
+          </div>
+          <div id="manual-payment-error" class="text-error text-xs hidden"></div>
+          <button type="submit" id="btn-submit-manual-payment" class="w-full bg-[#00dbe9] text-background py-2.5 rounded-lg text-xs font-bold glow-cyan mt-2">
+            Submit for Review
+          </button>
         </form>
       </div>
     </div>
   </div>
 
-  <!-- AI Settings Modal -->
-  <div class="modal-overlay" id="modal-ai-settings">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3 class="modal-title">⚙️ Gemini AI Settings (BYOK)</h3>
-        <button class="modal-close-btn" id="btn-close-ai-settings">✕</button>
-      </div>
-      <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:14px">Bring Your Own Key (BYOK): API key stored in session memory only.</p>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center;">
-        <input type="password" id="gemini-api-key-input" class="inline-input" placeholder="AIzaSy..." style="flex:1;min-width:200px">
-        <button class="btn btn-secondary btn-sm" id="btn-toggle-key-visibility" title="Toggle visibility">👁️</button>
-        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="text-decoration:none; display:inline-flex; align-items:center;">Get API Key &rarr;</a>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-        <button class="btn btn-secondary btn-sm" id="btn-test-connection" style="flex:1;min-width:120px">Test Connection</button>
-        <button class="btn btn-primary btn-sm" id="btn-save-api-key">Save Key</button>
-        <button class="btn btn-secondary btn-sm" id="btn-clear-api-key">Clear Key</button>
-      </div>
-      <div id="connection-status-text" style="font-size:0.8rem;font-weight:600"></div>
-    </div>
-  </div>
-
-  <!-- Tutorial Modal -->
+  <!-- 11. Tutorial Modal -->
   <div class="modal-overlay" id="modal-tutorial">
-    <div class="modal-box">
+    <div class="modal-box !max-w-[600px]">
       <div class="modal-header">
-        <h3 class="modal-title">📖 Tool Tutorial &amp; Guide</h3>
+        <h3 class="modal-title">📖 Workflow Tutorial</h3>
         <button class="modal-close-btn" id="btn-close-tutorial">✕</button>
       </div>
-      <div style="padding:10px 0;font-size:0.85rem;line-height:1.6;color:var(--text-secondary)">
-        <p><strong>Step 1:</strong> Select your target platform (AdobeStock, Shutterstock, etc.) from top platform bar.</p>
-        <p><strong>Step 2:</strong> Add your Gemini API Key under ⚙️ AI Settings.</p>
-        <p><strong>Step 3:</strong> Drop image or vector assets and click 🚀 Generate Metadata.</p>
-        <p><strong>Step 4:</strong> Review metadata results and click 📥 Export CSV.</p>
+      <div class="modal-body" id="tutorial-step-body">
+        <!-- Rendered via JS -->
       </div>
-      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-top:16px">
-        <button class="btn btn-secondary btn-sm" id="btn-tutorial-prev">Previous</button>
-        <button class="btn btn-primary btn-sm" id="btn-tutorial-next">Next / Close</button>
+      <div class="modal-footer">
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg text-xs font-semibold" id="btn-tutorial-prev">Previous</button>
+        <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold" id="btn-tutorial-next">Next Step</button>
       </div>
     </div>
   </div>
 
-  <!-- Batch Edit Modal -->
-  <div class="modal-overlay" id="modal-batch-edit">
-    <div class="modal-box">
+  <!-- 10. Contact Modal -->
+  <div class="modal-overlay" id="modal-contact">
+    <div class="modal-box !max-w-[480px]">
       <div class="modal-header">
-        <h3 class="modal-title">✏️ Batch Edit Metadata</h3>
-        <button class="modal-close-btn" id="btn-close-batch-edit">✕</button>
+        <h3 class="modal-title">💬 Contact Support</h3>
+        <button class="modal-close-btn" id="btn-close-contact">✕</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div><label class="custom-input-label">Append Keywords (comma-separated)</label><input type="text" id="batch-append-keywords" class="inline-input" placeholder="e.g. isolated, background, high resolution"></div>
-        <div><label class="custom-input-label">Set Category</label><select id="batch-set-category" class="inline-input"><option value="">Select category…</option></select></div>
-        <button class="btn btn-primary" id="btn-apply-batch-edit">Apply to Selected Items</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- CSV Preview Modal -->
-  <div class="modal-overlay" id="modal-csv-preview">
-    <div class="modal-box" style="max-width:700px">
-      <div class="modal-header">
-        <h3 class="modal-title">👁️ CSV Export Preview</h3>
-        <button class="modal-close-btn" id="btn-close-csv-modal">✕</button>
-      </div>
-      <pre id="csv-preview-text" style="font-family:monospace;font-size:0.75rem;background:var(--bg-main);padding:14px;border-radius:8px;overflow-x:auto;max-height:300px;margin-bottom:16px;border:1px solid var(--glass-border)"></pre>
-      <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px">
-        <button class="btn btn-success" id="btn-download-csv-modal">📥 Download CSV File</button>
+      <div class="modal-body">
+        <form id="contact-form" class="flex flex-col gap-3">
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Your Name</label>
+            <input type="text" id="contact-name" class="cyber-input" placeholder="e.g. Alex Rivera" required>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Email Address</label>
+            <input type="email" id="contact-email" class="cyber-input" placeholder="alex@example.com" required>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-on-surface-variant block mb-1">Message</label>
+            <textarea id="contact-message" class="cyber-textarea" placeholder="How can we help your workflow?" required></textarea>
+          </div>
+          <button type="submit" class="bg-[#00dbe9] text-background py-2.5 rounded-lg text-xs font-bold glow-cyan mt-1">Send Message</button>
+        </form>
       </div>
     </div>
   </div>
 
-  <!-- Detail Modal -->
-  <div class="modal-overlay" id="modal-detail">
-    <div class="modal-box" style="max-width:650px">
-      <div class="modal-header">
-        <h3 class="modal-title">🔍 Asset Metadata Detail</h3>
-        <button class="modal-close-btn" id="btn-close-detail">✕</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px">
-        <img id="detail-preview-img" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--glass-border)" alt="Asset">
-        <div style="flex:1">
-          <div id="detail-filename" style="font-weight:700;margin-bottom:6px"></div>
-          <div id="detail-specs" style="font-size:0.775rem;color:var(--text-secondary)"></div>
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div><label class="custom-input-label">Title</label><input type="text" id="detail-title-input" class="inline-input"></div>
-        <div><label class="custom-input-label">Description</label><textarea id="detail-desc-input" class="inline-input" rows="3"></textarea></div>
-        <div><label class="custom-input-label">Keywords (comma-separated)</label><textarea id="detail-kw-input" class="inline-input" rows="3"></textarea></div>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="js/app.js?v=5"></script>
+  <!-- Application Controller Scripts -->
+  <script type="module">
+    import { initApp } from './js/app.js';
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      initApp();
+    });
+  </script>
 </body>
 </html>

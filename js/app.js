@@ -5,7 +5,7 @@
 
 import { PLATFORMS } from './platforms.js';
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, getSessionKey, testConnection, generateMetadataForImage, isGeminiAnalyzable } from './geminiClient.js?v=5';
+import { setApiKey, hasApiKey, clearApiKey, getSessionKey, testConnection, generateMetadataForImage, isGeminiAnalyzable } from './geminiClient.js';
 import { runBatchQueue } from './batchProcessor.js';
 import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
@@ -24,6 +24,8 @@ const state = {
   tutorialStep: 1,
   activeAssetTab: 'images',
   geminiConnected: false,
+  activeAppMode: 'metadata',
+  settingsEnabled: false,
   // Render throttle
   _renderPending: false,
   _lastStats: null
@@ -68,7 +70,6 @@ export function setBtnLoading(btn, isLoading) {
 export async function initApp() {
   renderPlatforms();
   setupEventListeners();
-  updatePlatformSpecsBanner();
   updateUI();
   renderTutorialStep();
   updateUploadZoneForTab();
@@ -91,16 +92,20 @@ function renderPlatforms() {
   grid.innerHTML = '';
   Object.values(PLATFORMS).forEach(platform => {
     const isSelected = platform.id === state.currentPlatform.id;
-    const card = document.createElement('div');
-    card.className = `platform-card${isSelected ? ' active' : ''}`;
-    card.dataset.id = platform.id;
-    card.title = `${platform.name} — ${platform.description}`;
-    card.innerHTML = `
-      <div class="platform-icon-box">${platform.logoSvg}</div>
-      <div class="platform-card-name">${platform.name}</div>
+    const tab = document.createElement('button');
+    tab.className = isSelected 
+      ? 'px-4 py-1.5 rounded-full border-gradient text-white text-xs font-semibold glow-cyan relative overflow-hidden flex items-center gap-1.5 cursor-pointer'
+      : 'px-4 py-1.5 rounded-full bg-[#191c1f] border border-[#3b494b] text-on-surface-variant text-xs hover:border-[#00dbe9] hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer';
+    tab.dataset.id = platform.id;
+    tab.type = 'button';
+    tab.title = `${platform.name} — ${platform.description}`;
+    tab.innerHTML = `
+      <span class="w-3 h-3 flex items-center justify-center">${platform.logoSvg}</span>
+      <span class="relative z-10 font-medium">${platform.name}</span>
+      ${isSelected ? '<div class="absolute inset-0 bg-[#00dbe9] opacity-20 pointer-events-none"></div>' : ''}
     `;
-    card.addEventListener('click', e => { e.preventDefault(); selectPlatform(platform.id); });
-    grid.appendChild(card);
+    tab.addEventListener('click', e => { e.preventDefault(); selectPlatform(platform.id); });
+    grid.appendChild(tab);
   });
 }
 
@@ -112,26 +117,15 @@ function selectPlatform(id) {
   showToast(`Platform: ${state.currentPlatform.name}`, 'info');
 }
 
-function updatePlatformSpecsBanner() {
-  const el = document.getElementById('platform-spec-banner');
-  if (!el) return;
-  const p = state.currentPlatform;
-  el.innerHTML = `
-    <div class="platform-spec-item">Selected: <strong style="color:${p.color}">${p.name}</strong></div>
-    <div class="platform-spec-item">Title: <strong>${p.titleMaxLen} chars max</strong></div>
-    <div class="platform-spec-item">Keywords: <strong>${p.keywordMin}–${p.keywordMax}</strong></div>
-    <div class="platform-spec-item">CSV: <strong>${p.csvColumns.join(', ')}</strong></div>`;
-}
-
 // ─── AI Status Badge ────────────────────────────────────────────────────────
 function updateAiStatusBadge() {
   const badge = document.getElementById('ai-status-badge');
   if (!badge) return;
   if (state.geminiConnected) {
-    badge.innerHTML = '<span class="ai-dot ai-dot-connected"></span> Gemini Connected';
+    badge.innerHTML = '<span class="ai-dot ai-dot-connected"></span> AI ON';
     badge.className = 'ai-status-badge connected';
   } else {
-    badge.innerHTML = '<span class="ai-dot ai-dot-disconnected"></span> AI Not Connected';
+    badge.innerHTML = '<span class="ai-dot ai-dot-disconnected"></span> AI OFF';
     badge.className = 'ai-status-badge disconnected';
   }
 }
@@ -140,25 +134,28 @@ function updateAiStatusBadge() {
 // Updates header nav to show login/signup (logged out) or username+plan+credits+admin+logout (logged in).
 // Called on page load and after any auth/plan/credit action. No visual redesign — just visibility.
 function updateAuthNav() {
-  const loggedOut   = document.getElementById('auth-logged-out');
-  const loggedIn    = document.getElementById('auth-logged-in');
-  const nameSpan    = document.getElementById('auth-user-name');
-  const planBadge   = document.getElementById('auth-user-plan-badge');
-  const creditBadge = document.getElementById('auth-user-credits-badge');
-  const adminBtn    = document.getElementById('btn-admin-panel');
-  const user        = getCurrentUser();
+  const loggedOut      = document.getElementById('auth-logged-out');
+  const loggedIn       = document.getElementById('auth-logged-in');
+  const nameSpan       = document.getElementById('auth-user-name');
+  const planBadge      = document.getElementById('auth-user-plan-badge');
+  const creditBadge    = document.getElementById('auth-user-credits-badge');
+  const adminBtn       = document.getElementById('btn-admin-panel');
+  const sidebarAdminBtn= document.getElementById('btn-sidebar-admin');
+  const user           = getCurrentUser();
 
   if (user && loggedOut && loggedIn) {
     loggedOut.style.display = 'none';
     loggedIn.style.display  = 'flex';
-    if (nameSpan)    nameSpan.textContent = user.fullName || user.email;
-    if (planBadge)   planBadge.textContent = (user.plan || 'free').toUpperCase();
-    if (creditBadge) creditBadge.textContent = `⚡ ${user.credits ?? 0} Credits`;
-    if (adminBtn)    adminBtn.style.display = user.role === 'admin' ? 'inline-flex' : 'none';
+    if (nameSpan)        nameSpan.textContent = user.fullName || user.email;
+    if (planBadge)       planBadge.textContent = (user.plan || 'free').toUpperCase();
+    if (creditBadge)     creditBadge.textContent = `⚡ ${user.credits ?? 0} Credits`;
+    if (adminBtn)        adminBtn.style.display = user.role === 'admin' ? 'inline-flex' : 'none';
+    if (sidebarAdminBtn) sidebarAdminBtn.style.display = user.role === 'admin' ? 'flex' : 'none';
   } else if (loggedOut && loggedIn) {
     loggedOut.style.display = 'flex';
     loggedIn.style.display  = 'none';
-    if (adminBtn) adminBtn.style.display = 'none';
+    if (adminBtn)        adminBtn.style.display = 'none';
+    if (sidebarAdminBtn) sidebarAdminBtn.style.display = 'none';
   }
 }
 
@@ -234,50 +231,47 @@ async function renderAdminDashboard(search = '') {
   const tbody = document.getElementById('admin-users-list');
   if (!tbody) return;
 
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-secondary)">Loading user database…</td></tr>`;
+  tbody.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-secondary)">Loading user database…</div>`;
 
   const res = await adminFetchUsers(search);
   if (!res.ok) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--accent-rose)">${escHtml(res.message)}</td></tr>`;
+    tbody.innerHTML = `<div style="text-align:center;padding:24px;color:var(--accent-rose)">${escHtml(res.message)}</div>`;
     return;
   }
 
   if (!res.users || res.users.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-secondary)">No users found matching "${escHtml(search)}"</td></tr>`;
+    tbody.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-secondary)">No users found matching "${escHtml(search)}"</div>`;
     return;
   }
 
   tbody.innerHTML = res.users.map(u => `
-    <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-      <td style="padding:10px 14px">
-        <strong style="color:var(--text-primary);display:block">${escHtml(u.fullName || 'No Name')}</strong>
-        <span style="font-size:0.75rem;color:var(--text-muted)">${escHtml(u.email)}</span>
-      </td>
-      <td style="padding:10px 14px">
-        <span class="badge-pill" style="background:${u.role === 'admin' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)'};color:${u.role === 'admin' ? '#F59E0B' : 'var(--text-secondary)'}">${u.role.toUpperCase()}</span>
-      </td>
-      <td style="padding:10px 14px">
-        <select class="admin-plan-select inline-input" data-user-id="${u.id}" style="padding:3px 8px;font-size:0.75rem">
+    <div class="p-3 bg-[#191c1f] border border-[#3b494b] rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-sm">
+      <div class="flex-1 min-w-[200px]">
+        <strong class="text-sm font-semibold text-on-surface block">${escHtml(u.fullName || 'No Name')}</strong>
+        <span class="text-xs text-on-surface-variant">${escHtml(u.email)}</span>
+      </div>
+      
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider" style="background:${u.role === 'admin' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)'};color:${u.role === 'admin' ? '#F59E0B' : 'var(--text-secondary)'}">${u.role.toUpperCase()}</span>
+        
+        <select class="admin-plan-select bg-surface-container border border-outline-variant text-on-surface rounded text-[11px] py-1 px-2" data-user-id="${u.id}">
           <option value="free" ${u.plan === 'free' ? 'selected' : ''}>FREE</option>
           <option value="pro" ${u.plan === 'pro' ? 'selected' : ''}>PRO</option>
           <option value="business" ${u.plan === 'business' ? 'selected' : ''}>BUSINESS</option>
         </select>
-      </td>
-      <td style="padding:10px 14px">
-        <div style="display:flex;align-items:center;gap:6px">
-          <strong>⚡ ${u.credits}</strong>
-          <button class="btn btn-secondary btn-sm admin-adjust-credits-btn" data-user-id="${u.id}" data-user-name="${escHtml(u.fullName || u.email)}" style="padding:2px 6px;font-size:0.7rem" title="Add or subtract credits">⚡ Edit</button>
+        
+        <div class="flex items-center gap-1 bg-[#1d2023] border border-[#3b494b] px-2 py-1 rounded text-[11px]">
+          <span class="font-bold text-[#00dbe9]">⚡ ${u.credits}</span>
+          <button class="admin-adjust-credits-btn text-on-surface hover:text-[#00dbe9] ml-1" data-user-id="${u.id}" data-user-name="${escHtml(u.fullName || u.email)}" title="Edit credits"><span class="material-symbols-outlined text-[14px]">edit</span></button>
         </div>
-      </td>
-      <td style="padding:10px 14px">
-        <span class="badge-pill" style="background:${u.isActive !== false ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'};color:${u.isActive !== false ? '#10B981' : '#EF4444'}">${u.isActive !== false ? 'ACTIVE' : 'DISABLED'}</span>
-      </td>
-      <td style="padding:10px 14px;text-align:right">
-        <button class="btn btn-sm ${u.isActive !== false ? 'btn-secondary' : 'btn-primary'} admin-toggle-status-btn" data-user-id="${u.id}" data-active="${u.isActive !== false}" style="padding:4px 8px;font-size:0.75rem">
+        
+        <span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider" style="background:${u.isActive !== false ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'};color:${u.isActive !== false ? '#10B981' : '#EF4444'}">${u.isActive !== false ? 'ACTIVE' : 'DISABLED'}</span>
+        
+        <button class="admin-toggle-status-btn px-2 py-1 rounded text-[11px] font-semibold border transition-colors ${u.isActive !== false ? 'bg-[#1d2023] border-[#3b494b] text-error hover:border-error hover:bg-error/10' : 'bg-[#00dbe9] text-[#111417] border-transparent hover:bg-[#00f0ff]'}" data-user-id="${u.id}" data-active="${u.isActive !== false}">
           ${u.isActive !== false ? 'Deactivate' : 'Reactivate'}
         </button>
-      </td>
-    </tr>
+      </div>
+    </div>
   `).join('');
 
   // Event Delegation for Admin Row Actions
@@ -340,11 +334,11 @@ async function renderAdminPaymentsList(statusFilter = null) {
   const badge     = document.getElementById('admin-pending-badge');
   if (!container) return;
 
-  container.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text-secondary)">Loading payment queue…</td></tr>';
+  container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary)">Loading payment queue…</div>';
 
   const res = await adminFetchPayments(statusFilter);
   if (!res.ok) {
-    container.innerHTML = `<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--accent-rose)">${escHtml(res.message)}</td></tr>`;
+    container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--accent-rose)">${escHtml(res.message)}</div>`;
     return;
   }
 
@@ -353,7 +347,7 @@ async function renderAdminPaymentsList(statusFilter = null) {
   if (badge) badge.textContent = pendingCount;
 
   if (payments.length === 0) {
-    container.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text-muted)">No payment submissions found in queue.</td></tr>';
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">No payment submissions found in queue.</div>';
     return;
   }
 
@@ -367,26 +361,49 @@ async function renderAdminPaymentsList(statusFilter = null) {
       : '<span class="badge-pill" style="background:rgba(239,68,68,0.15);color:#EF4444;font-size:0.7rem">REJECTED</span>';
 
     const actionButtons = isPending ? `
-      <div style="display:flex;gap:6px;justify-content:flex-end">
-        <button class="btn btn-sm btn-success admin-approve-pay-btn" data-pay-id="${p.id}" style="padding:4px 8px;font-size:0.725rem">✅ Approve</button>
-        <button class="btn btn-sm btn-danger admin-reject-pay-btn" data-pay-id="${p.id}" style="padding:4px 8px;font-size:0.725rem">✕ Reject</button>
+      <div class="flex gap-2">
+        <button class="admin-approve-pay-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white transition-colors" data-pay-id="${p.id}">✅ Approve</button>
+        <button class="admin-reject-pay-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-error/10 text-error border border-error/30 hover:bg-error hover:text-white transition-colors" data-pay-id="${p.id}">✕ Reject</button>
       </div>
     ` : `<span style="font-size:0.75rem;color:var(--text-muted)">${escHtml(p.admin_notes || p.status)}</span>`;
 
     return `
-      <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-        <td style="padding:10px 12px">
-          <strong style="color:var(--text-primary);display:block">${escHtml(p.user_name || 'User')}</strong>
-          <span style="font-size:0.75rem;color:var(--text-muted)">${escHtml(p.user_email || 'N/A')}</span>
-        </td>
-        <td style="padding:10px 12px;text-transform:uppercase;font-weight:700;color:var(--accent-primary)">${escHtml(p.plan)}</td>
-        <td style="padding:10px 12px;font-weight:700">৳${p.amount} BDT</td>
-        <td style="padding:10px 12px;text-transform:uppercase;font-weight:700;color:var(--accent-cyan)">${escHtml(p.payment_method)}</td>
-        <td style="padding:10px 12px;font-family:monospace">${escHtml(p.sender_number)}</td>
-        <td style="padding:10px 12px;font-family:monospace;font-weight:700;color:var(--accent-amber)">${escHtml(p.trx_id)}</td>
-        <td style="padding:10px 12px">${statusBadge}</td>
-        <td style="padding:10px 12px;text-align:right">${actionButtons}</td>
-      </tr>
+      <div class="p-3 bg-[#191c1f] border border-[#3b494b] rounded-xl flex flex-col gap-3 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <strong class="text-sm font-semibold text-on-surface block">${escHtml(p.user_name || 'User')}</strong>
+            <span class="text-xs text-on-surface-variant">${escHtml(p.user_email || 'N/A')}</span>
+          </div>
+          <div>${statusBadge}</div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-[#1d2023] p-2 rounded border border-[#3b494b]">
+            <div class="text-on-surface-variant mb-1 text-[10px] uppercase tracking-wider">Plan requested</div>
+            <div class="font-bold text-[#db50ff] uppercase">${escHtml(p.plan)}</div>
+          </div>
+          <div class="bg-[#1d2023] p-2 rounded border border-[#3b494b]">
+            <div class="text-on-surface-variant mb-1 text-[10px] uppercase tracking-wider">Amount Paid</div>
+            <div class="font-bold text-[#00dbe9]">৳${p.amount} BDT</div>
+          </div>
+          <div class="bg-[#1d2023] p-2 rounded border border-[#3b494b]">
+            <div class="text-on-surface-variant mb-1 text-[10px] uppercase tracking-wider">Method</div>
+            <div class="font-bold text-on-surface uppercase">${escHtml(p.payment_method)}</div>
+          </div>
+          <div class="bg-[#1d2023] p-2 rounded border border-[#3b494b]">
+            <div class="text-on-surface-variant mb-1 text-[10px] uppercase tracking-wider">Sender No.</div>
+            <div class="font-mono text-on-surface">${escHtml(p.sender_number)}</div>
+          </div>
+          <div class="col-span-2 bg-[#1d2023] p-2 rounded border border-[#3b494b]">
+            <div class="text-on-surface-variant mb-1 text-[10px] uppercase tracking-wider">Transaction ID</div>
+            <div class="font-mono font-bold text-amber-300 tracking-wider">${escHtml(p.trx_id)}</div>
+          </div>
+        </div>
+        
+        <div class="flex justify-end pt-1">
+          ${actionButtons}
+        </div>
+      </div>
     `;
   }).join('');
 
@@ -430,12 +447,19 @@ async function renderAdminPaymentsList(statusFilter = null) {
 // ─── Asset Tabs ────────────────────────────────────────────────────────────
 function switchAssetTab(name) {
   state.activeAssetTab = name;
-  ['images','vectors','videos'].forEach(t => {
+  const tabs = ['images', 'vectors', 'videos'];
+  
+  const activeClasses = 'bg-[#00dbe9]/15 border-[#00dbe9] text-[#00dbe9] shadow-[0_0_15px_rgba(0,219,233,0.3)] font-bold';
+  const inactiveClasses = 'bg-[#191c1f] border-[#3b494b] text-on-surface-variant font-medium hover:border-[#00dbe9]/50 hover:bg-[#191c1f]/80';
+  const baseClasses = 'flex-1 max-w-[140px] py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all border';
+
+  tabs.forEach(t => {
     const el = document.getElementById(`tab-${t}`);
-    if (el) el.classList.remove('active');
+    if (el) {
+      el.className = `${baseClasses} ${t === name ? activeClasses : inactiveClasses}`;
+    }
   });
-  const activeEl = document.getElementById(`tab-${name}`);
-  if (activeEl) activeEl.classList.add('active');
+  
   updateUploadZoneForTab();
 }
 
@@ -623,7 +647,8 @@ async function triggerAiGeneration() {
     },
 
     processFn: async (item) => {
-      return await generateMetadataForImage(item, state.currentPlatform);
+      const settings = state.settingsEnabled ? getActiveSettings() : null;
+      return await generateMetadataForImage(item, state.currentPlatform, null, settings, state.activeAppMode);
     },
 
     onItemDone: async (item, idx, result, err) => {
@@ -725,7 +750,7 @@ function regenerateSingleItem(id) {
     return;
   }
   const item = state.mediaItems.find(i => i.id === id);
-  if (!item) return;
+  if (!item || item.status === 'processing') return;
   item.status = 'waiting';
   item._error = null;
   throttledRender();
@@ -735,7 +760,8 @@ function regenerateSingleItem(id) {
     item.status = 'processing';
     throttledRender();
     try {
-      const result = await generateMetadataForImage(item, state.currentPlatform);
+      const settings = state.settingsEnabled ? getActiveSettings() : null;
+      const result = await generateMetadataForImage(item, state.currentPlatform, null, settings, state.activeAppMode);
       if (result && result._geminiUnsupported) {
         item.status = 'failed'; item._error = result.reason;
       } else if (result) {
@@ -888,60 +914,67 @@ function buildRowHtml(item, index, p, catOptions) {
   );
 
   const kwChips = (meta.keywords || []).slice(0, 12).map((kw, ki) =>
-    `<span class="keyword-chip">${escHtml(kw)}<span class="keyword-chip-remove" data-item-id="${item.id}" data-kw-idx="${ki}">×</span></span>`
+    `<span class="inline-flex items-center gap-1 bg-[#191c1f] border border-[#3b494b] text-[10px] px-2 py-0.5 rounded-full text-on-surface-variant hover:border-[#00dbe9] hover:text-on-surface transition-colors group">${escHtml(kw)}<span class="keyword-chip-remove cursor-pointer text-error opacity-0 group-hover:opacity-100 transition-opacity font-bold" data-item-id="${item.id}" data-kw-idx="${ki}">×</span></span>`
   ).join('');
-  const kwMore = kwCount > 12 ? `<span style="font-size:0.7rem;color:var(--text-muted);padding:2px 6px">+${kwCount - 12} more</span>` : '';
+  const kwMore = kwCount > 12 ? `<span class="text-[9px] text-[#db50ff] font-bold px-1">+${kwCount - 12}</span>` : '';
 
   const errorHtml = item._error
-    ? `<div style="font-size:0.7rem;color:var(--accent-rose);margin-top:4px;max-width:140px;word-break:break-word" title="${escHtml(item._error)}">⚠ ${escHtml(item._error.substring(0, 80))}${item._error.length > 80 ? '…' : ''}</div>`
+    ? `<div class="text-[10px] text-error mt-1.5 max-w-[150px] leading-tight" title="${escHtml(item._error)}">⚠ ${escHtml(item._error.substring(0, 60))}${item._error.length > 60 ? '…' : ''}</div>`
     : '';
 
   const rowStyle = item.status === 'failed' ? ' style="background:rgba(239,68,68,0.05)"' : '';
+  const selectedBgClass = isSelected ? 'bg-[#00dbe9]/10 border-[#00dbe9]/50' : 'border-[#3b494b]/50';
 
-  return `<tr data-row-id="${item.id}"${rowStyle}>
-    <td class="col-thumb">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" class="row-checkbox" data-id="${item.id}" ${isSelected ? 'checked' : ''}>
-        ${buildThumbHtml(item, 44)}
+  return `<tr data-row-id="${item.id}" class="border-b hover:bg-[#191c1f]/50 transition-colors ${item.status === 'failed' ? 'bg-error/5' : ''} ${selectedBgClass}">
+    <td class="p-3 align-top">
+      <div class="flex items-center gap-3">
+        <input type="checkbox" class="row-checkbox w-4 h-4 rounded border-[#3b494b] bg-[#191c1f] text-[#00dbe9] focus:ring-[#00dbe9]" data-id="${item.id}" ${isSelected ? 'checked' : ''}>
+        ${buildThumbHtml(item, 48)}
       </div>
     </td>
-    <td class="col-filename">
-      <div style="font-size:0.8125rem;font-weight:600;word-break:break-all">${escHtml(item.name)}</div>
-      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap">
+    <td class="p-3 align-top max-w-[180px]">
+      <div class="text-xs font-semibold text-on-surface truncate" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
+      <div class="flex items-center gap-2 mt-1.5 flex-wrap">
         ${buildAssetBadge(item)}
-        <span style="font-size:0.7rem;color:var(--text-muted)">${(item.size / 1048576).toFixed(1)} MB</span>
+        <span class="text-[10px] text-on-surface-variant">${(item.size / 1048576).toFixed(1)} MB</span>
       </div>
       ${errorHtml}
     </td>
-    <td class="col-title">
-      <input type="text" class="inline-input title-input" data-id="${item.id}" value="${escHtml(meta.title)}" placeholder="Enter title…" ${item.status === 'processing' ? 'disabled' : ''}>
-      <div class="char-counter ${titleLenClass}">${titleLen} / ${p.titleMaxLen}</div>
-    </td>
-    <td class="col-desc">
-      <textarea class="inline-textarea desc-textarea" data-id="${item.id}" placeholder="Enter description…" ${item.status === 'processing' ? 'disabled' : ''}>${escHtml(meta.description)}</textarea>
-    </td>
-    <td class="col-keywords">
-      <div class="keywords-chip-container">${kwChips}${kwMore}<input type="text" class="add-tag-input" data-id="${item.id}" placeholder="+ Tag…"></div>
-      <div style="font-size:0.6875rem;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;align-items:center">
-        <span class="${kwClass}" style="font-weight:${kwClass ? '700' : '400'}">${kwCount}/${p.keywordMax} kw</span>
-        <a href="#" class="copy-kw-link" data-id="${item.id}" style="color:var(--accent-primary);text-decoration:none">Copy All</a>
+    <td class="p-3 align-top min-w-[200px]">
+      <div class="relative">
+        <textarea class="title-input w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all resize-none" data-id="${item.id}" placeholder="Enter title…" rows="2" ${item.status === 'processing' ? 'disabled' : ''}>${escHtml(meta.title)}</textarea>
+        <div class="char-counter text-[9px] absolute bottom-1 right-2 ${titleLenClass}">${titleLen} / ${p.titleMaxLen}</div>
       </div>
     </td>
-    <td class="col-category">
-      <select class="inline-select category-select" data-id="${item.id}" ${item.status === 'processing' ? 'disabled' : ''}>
+    <td class="p-3 align-top min-w-[240px]">
+      <textarea class="desc-textarea w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all resize-y min-h-[50px]" data-id="${item.id}" placeholder="Enter description…" ${item.status === 'processing' ? 'disabled' : ''}>${escHtml(meta.description)}</textarea>
+    </td>
+    <td class="p-3 align-top min-w-[240px]">
+      <div class="flex flex-wrap gap-1 mb-1.5 max-h-[70px] overflow-y-auto custom-scrollbar">${kwChips}${kwMore}</div>
+      <div class="flex items-center gap-2">
+        <input type="text" class="add-tag-input flex-1 bg-[#191c1f] border border-[#3b494b] rounded-md text-[10px] text-on-surface px-2 py-1 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all" data-id="${item.id}" placeholder="+ Add Keyword">
+      </div>
+      <div class="flex justify-between items-center mt-1 text-[9px]">
+        <span class="${kwClass} ${kwClass ? 'text-error font-bold' : 'text-on-surface-variant'}">${kwCount}/${p.keywordMax} kw</span>
+        <a href="#" class="copy-kw-link text-[#00dbe9] hover:text-[#00f0ff] transition-colors" data-id="${item.id}">Copy All</a>
+      </div>
+    </td>
+    <td class="p-3 align-top min-w-[120px]">
+      <select class="category-select w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all" data-id="${item.id}" ${item.status === 'processing' ? 'disabled' : ''}>
         <option value="">Select…</option>${selectedCat}
       </select>
     </td>
-    <td class="col-status">
-      <span class="status-tag status-${item.status}">${item.status}</span>
+    <td class="p-3 align-top">
+      <span class="status-tag status-${item.status} text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider block text-center w-full shadow-sm">${item.status}</span>
     </td>
-    <td class="col-actions">
-      <div style="display:flex;gap:4px;flex-wrap:wrap">
-        <button class="btn btn-icon-only btn-sm regen-btn" data-id="${item.id}" title="Regenerate with AI" ${item.status === 'processing' ? 'disabled' : ''}>🤖</button>
-        <button class="btn btn-icon-only btn-sm view-detail-btn" data-id="${item.id}" title="View Details">👁️</button>
-        <button class="btn btn-icon-only btn-sm delete-btn" data-id="${item.id}" title="Remove">🗑️</button>
+    <td class="p-3 align-top">
+      <div class="flex gap-1.5 flex-wrap">
+        <button class="regen-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-[#db50ff] hover:border-[#db50ff] flex items-center justify-center transition-all disabled:opacity-50" data-id="${item.id}" title="Regenerate with AI" ${item.status === 'processing' ? 'disabled' : ''}><span class="material-symbols-outlined text-[14px]">autorenew</span></button>
+        <button class="view-detail-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-[#00dbe9] hover:border-[#00dbe9] flex items-center justify-center transition-all" data-id="${item.id}" title="View Details"><span class="material-symbols-outlined text-[14px]">visibility</span></button>
+        <button class="delete-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-error hover:border-error flex items-center justify-center transition-all hover:bg-error/10" data-id="${item.id}" title="Remove"><span class="material-symbols-outlined text-[14px]">delete</span></button>
       </div>
-    </td></tr>`;
+    </td>
+  </tr>`;
 }
 
 function renderTableView(items) {
@@ -1104,7 +1137,27 @@ function setupTableEventDelegation() {
 
     const rowCheckbox = e.target.closest('.row-checkbox');
     if (rowCheckbox) {
-      rowCheckbox.checked ? state.selectedItemIds.add(rowCheckbox.dataset.id) : state.selectedItemIds.delete(rowCheckbox.dataset.id);
+      const id = rowCheckbox.dataset.id;
+      if (rowCheckbox.checked) {
+        state.selectedItemIds.add(id);
+      } else {
+        state.selectedItemIds.delete(id);
+      }
+      
+      // Update the tr class immediately for visual feedback
+      const tr = rowCheckbox.closest('tr');
+      if (tr) {
+        if (rowCheckbox.checked) {
+          tr.classList.add('bg-[#00dbe9]/10', 'border-[#00dbe9]/50');
+          tr.classList.remove('border-[#3b494b]/50');
+        } else {
+          tr.classList.remove('bg-[#00dbe9]/10', 'border-[#00dbe9]/50');
+          tr.classList.add('border-[#3b494b]/50');
+        }
+        // Invalidate cache so subsequent renders retain the styling
+        _tableRowCache.delete(id);
+      }
+      
       updateStatsBar();
       return;
     }
@@ -1174,15 +1227,19 @@ function buildGridCardHtml(item, index) {
   }
 
   const borderStyle = item.status === 'failed' ? ` style="border-color:rgba(239,68,68,0.5)"` : '';
-  const selectedClass = isSelected ? ' selected' : '';
+  const selectedClass = isSelected ? ' selected border-[#00dbe9] shadow-[0_0_15px_rgba(0,219,233,0.3)] bg-[#00dbe9]/10' : ' border-[#3b494b] bg-[#1d2023]';
+  const checkboxHtml = `<input type="checkbox" class="absolute top-2 left-2 w-4 h-4 rounded border-[#3b494b] bg-[#191c1f] text-[#00dbe9] focus:ring-[#00dbe9] z-10 pointer-events-none" ${isSelected ? 'checked' : ''}>`;
 
-  return `<div class="grid-card${selectedClass}" data-card-id="${item.id}"${borderStyle}>
-    <div class="card-thumb-container">
+  return `<div class="grid-card relative border rounded-xl overflow-hidden flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:border-[#00dbe9] cursor-pointer ${selectedClass}" data-card-id="${item.id}"${borderStyle}>
+    ${checkboxHtml}
+    <div class="card-thumb-container relative w-full h-[150px] bg-[#111417] overflow-hidden">
       ${thumbHtml}
-      <span class="card-number-badge">#${index + 1}</span>
-      <div class="card-actions-overlay"><button class="card-remove-btn" data-id="${item.id}">×</button></div>
+      <span class="card-number-badge absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-mono backdrop-blur-sm">#${index + 1}</span>
+      <div class="card-actions-overlay absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex justify-end p-2">
+        <button class="card-remove-btn w-6 h-6 rounded-md bg-error text-white hover:bg-error/80 flex items-center justify-center transition-colors" data-id="${item.id}">×</button>
+      </div>
     </div>
-    <div class="card-content">
+    <div class="card-content p-3 flex-1 flex flex-col justify-between">
       <div class="card-filename" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
       <div class="card-meta-line">
         <span class="status-tag status-${item.status}">${item.status}</span>
@@ -1469,12 +1526,30 @@ function switchAuthTab(tab) {
   const signupTab  = document.getElementById('auth-tab-signup');
   const loginForm  = document.getElementById('auth-login-form');
   const signupForm = document.getElementById('auth-signup-form');
+  
+  const activeClasses = ['font-bold', 'text-background', 'bg-[#00dbe9]', 'shadow-[0_0_15px_rgba(0,219,233,0.3)]'];
+  const inactiveClasses = ['font-medium', 'text-on-surface-variant', 'hover:text-on-surface'];
+
   if (tab === 'login') {
-    loginTab?.classList.add('active');  signupTab?.classList.remove('active');
+    if (loginTab) {
+      loginTab.classList.remove(...inactiveClasses);
+      loginTab.classList.add(...activeClasses);
+    }
+    if (signupTab) {
+      signupTab.classList.remove(...activeClasses);
+      signupTab.classList.add(...inactiveClasses);
+    }
     if (loginForm)  loginForm.style.display  = 'flex';
     if (signupForm) signupForm.style.display = 'none';
   } else {
-    loginTab?.classList.remove('active'); signupTab?.classList.add('active');
+    if (loginTab) {
+      loginTab.classList.remove(...activeClasses);
+      loginTab.classList.add(...inactiveClasses);
+    }
+    if (signupTab) {
+      signupTab.classList.remove(...inactiveClasses);
+      signupTab.classList.add(...activeClasses);
+    }
     if (loginForm)  loginForm.style.display  = 'none';
     if (signupForm) signupForm.style.display = 'flex';
   }
@@ -1485,6 +1560,16 @@ function openModal(el)  { el && el.classList.add('active'); }
 function closeModal(el) { el && el.classList.remove('active'); }
 
 // ─── Settings ──────────────────────────────────────────────────────────────
+function getActiveSettings() {
+  return {
+    titleMin: parseInt(document.getElementById('setting-title-min-words')?.value) || 5,
+    titleMax: parseInt(document.getElementById('setting-title-max-words')?.value) || 20,
+    kwMin: parseInt(document.getElementById('setting-kw-min')?.value) || 15,
+    kwMax: parseInt(document.getElementById('setting-kw-max')?.value) || 49,
+    customPrompt: document.getElementById('setting-custom-prompt')?.value || ''
+  };
+}
+
 function saveSettings() {
   const bom = document.getElementById('setting-bom-check');
   if (bom) state.includeBom = bom.checked;
@@ -1547,13 +1632,32 @@ function setupEventListeners() {
     updatePricingModalUI();
   });
 
+  // Sidebar buttons
+  document.getElementById('btn-sidebar-admin')?.addEventListener('click', () => {
+    openModal(modal('modal-admin-drawer'));
+    renderAdminDashboard();
+  });
+  document.getElementById('btn-sidebar-upgrade')?.addEventListener('click', () => {
+    openModal(modal('modal-pricing'));
+  });
+  document.getElementById('nav-btn-sidebar-help')?.addEventListener('click', () => {
+    openModal(modal('modal-tutorial'));
+  });
+  document.getElementById('btn-sidebar-logout')?.addEventListener('click', async () => {
+    await logout();
+    updateAuthNav();
+    showToast('Logged out successfully', 'info');
+  });
+  document.getElementById('btn-close-profile-done')?.addEventListener('click', () => {
+    closeModal(modal('modal-user-profile'));
+  });
+
   // Admin Panel listeners
   document.getElementById('btn-admin-panel')?.addEventListener('click', () => {
-    openModal(modal('modal-admin'));
+    openModal(modal('modal-admin-drawer'));
     renderAdminDashboard();
-    renderAdminPaymentsList();
   });
-  document.getElementById('btn-close-admin')?.addEventListener('click', () => closeModal(modal('modal-admin')));
+  document.getElementById('btn-close-admin')?.addEventListener('click', () => closeModal(document.getElementById('modal-admin-drawer')));
   document.getElementById('btn-admin-refresh')?.addEventListener('click', () => {
     const searchVal = document.getElementById('admin-user-search')?.value || '';
     renderAdminDashboard(searchVal);
@@ -1652,12 +1756,39 @@ function setupEventListeners() {
     };
 
     inputEl.addEventListener('input', updateBadge);
+    updateBadge(); // Init
     inputEl.addEventListener('change', () => {
       updateBadge();
       const val = parseInt(inputEl.value, 10);
       showToast(`Customization updated: ${inputId.replace('setting-', '')} = ${val}`, 'info');
     });
   });
+
+  const settingsToggle = document.getElementById('settings-toggle');
+  if (settingsToggle) {
+    settingsToggle.addEventListener('change', (e) => {
+      state.settingsEnabled = e.target.checked;
+      const bg = document.getElementById('settings-toggle-bg');
+      const dot = document.getElementById('settings-toggle-dot');
+      const text = document.getElementById('settings-toggle-text');
+      
+      if (state.settingsEnabled) {
+        bg.classList.replace('bg-[#191c1f]', 'bg-[#00dbe9]/20');
+        bg.classList.replace('border-[#3b494b]', 'border-[#00dbe9]');
+        dot.classList.replace('bg-on-surface-variant', 'bg-[#00dbe9]');
+        dot.classList.add('translate-x-4');
+        text.textContent = 'ON';
+        text.classList.replace('text-on-surface-variant', 'text-[#00dbe9]');
+      } else {
+        bg.classList.replace('bg-[#00dbe9]/20', 'bg-[#191c1f]');
+        bg.classList.replace('border-[#00dbe9]', 'border-[#3b494b]');
+        dot.classList.replace('bg-[#00dbe9]', 'bg-on-surface-variant');
+        dot.classList.remove('translate-x-4');
+        text.textContent = 'OFF';
+        text.classList.replace('text-[#00dbe9]', 'text-on-surface-variant');
+      }
+    });
+  }
 
   // Manual Payment Modal listeners
   document.getElementById('btn-close-manual-payment')?.addEventListener('click', () => closeModal(modal('modal-manual-payment')));
@@ -2080,14 +2211,18 @@ function switchAppMode(mode) {
   const metaPanel   = document.getElementById('workspace-metadata');
   const promptPanel = document.getElementById('workspace-img2prompt');
 
+  const activeClasses = 'bg-[#00dbe9]/15 border-[#00dbe9] text-[#00dbe9] shadow-[0_0_15px_rgba(0,219,233,0.2)] hover:bg-[#00dbe9]/20';
+  const inactiveClasses = 'bg-[#1d2023] border-[#3b494b] text-on-surface-variant hover:border-[#00dbe9]/50 hover:bg-[#191c1f]';
+  const baseClasses = 'flex-1 flex flex-col items-center justify-center gap-1 rounded-lg py-3 transition-all cursor-pointer text-center border';
+
   if (mode === 'img2prompt') {
-    metaBtn?.classList.remove('active');
-    promptBtn?.classList.add('active');
+    if (metaBtn) metaBtn.className = `${baseClasses} ${inactiveClasses}`;
+    if (promptBtn) promptBtn.className = `${baseClasses} ${activeClasses}`;
     if (metaPanel) metaPanel.style.display = 'none';
     if (promptPanel) promptPanel.style.display = 'block';
   } else {
-    promptBtn?.classList.remove('active');
-    metaBtn?.classList.add('active');
+    if (promptBtn) promptBtn.className = `${baseClasses} ${inactiveClasses}`;
+    if (metaBtn) metaBtn.className = `${baseClasses} ${activeClasses}`;
     if (promptPanel) promptPanel.style.display = 'none';
     if (metaPanel) metaPanel.style.display = 'block';
   }

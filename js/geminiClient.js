@@ -24,6 +24,11 @@ export function clearApiKey() {
   _sessionKey = null;
 }
 
+/** Returns the raw session key (needed to forward it in direct fetch calls). */
+export function getSessionKey() {
+  return _sessionKey;
+}
+
 /** Returns a redacted version safe for display / logging */
 export function getRedactedKey(key) {
   const target = key || _sessionKey;
@@ -100,32 +105,31 @@ function classifyGeminiError(status, body) {
   return `Gemini API request failed (${status}).`;
 }
 
-// ── Test connection (minimal token usage) ──────────────────────────────────
+// ── Test connection (minimal token usage via server proxy) ──────────────────
 export async function testConnection(apiKey) {
   const keyToTest = apiKey ? apiKey.trim() : _sessionKey;
   if (!keyToTest || keyToTest.length === 0) {
     return { ok: false, message: 'Please enter your Gemini API key in the input box.' };
   }
 
-  const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(keyToTest)}`;
   try {
-    const res = await fetchWithTimeout(url, {
+    const res = await fetchWithTimeout('/api/gemini/test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: 'p' }] }],
-        generationConfig: { maxOutputTokens: 1, temperature: 0 }
-      })
+      headers: {
+        'Content-Type': 'application/json',
+        'x-gemini-api-key': keyToTest
+      },
+      body: JSON.stringify({ apiKey: keyToTest })
     }, 15000);
 
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { ok: false, message: classifyGeminiError(res.status, data) };
+    if (!res.ok || !data.ok) {
+      return { ok: false, message: data.message || 'Gemini API key verification failed.' };
     }
     return { ok: true, message: 'Gemini Connected' };
   } catch (err) {
-    if (err.name === 'AbortError') return { ok: false, message: 'Connection timed out connecting to Gemini API (15s).' };
-    return { ok: false, message: `Network error: ${err.message || 'Unable to reach Gemini API servers.'}` };
+    if (err.name === 'AbortError') return { ok: false, message: 'Connection timed out connecting to Gemini API proxy (15s).' };
+    return { ok: false, message: `Network error: ${err.message || 'Unable to reach backend AI server.'}` };
   }
 }
 
@@ -141,8 +145,8 @@ function buildMetadataPrompt(filename, platform) {
   }
   const titleLimit = platform.titleMaxLen;
   const categoriesList = platform.categories.length > 0
-    ? `Choose one category from: ${platform.categories.join(', ')}`
-    : 'Choose a general category suitable for microstock agencies';
+    ? `Select the single best matching category for this visual asset from this list: [${platform.categories.join(', ')}]`
+    : 'Select the single best matching category for this visual asset (e.g. General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources)';
 
   return `You are an expert commercial microstock metadata cataloger for ${platform.name}.
 
@@ -167,7 +171,7 @@ Respond with a JSON object:
   "title": "Descriptive title here",
   "description": "Visual description here",
   "keywords": ["keyword1", "keyword2", "keyword3"],
-  "category": "Category"
+  "category": "Selected Category Name"
 }`;
 }
 
@@ -291,7 +295,7 @@ function getGeminiMimeType(item, ext) {
   return mimeMap[ext] || item.type || 'image/jpeg';
 }
 
-const GEMINI_SUPPORTED_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'eps', 'ai', 'svg', 'pdf']);
+const GEMINI_SUPPORTED_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'eps', 'ai', 'svg', 'pdf', 'mp4', 'mov', 'avi', 'webm']);
 
 export function isGeminiAnalyzable(ext) {
   return GEMINI_SUPPORTED_EXTS.has(ext.toLowerCase());
@@ -341,7 +345,16 @@ function parseMetadataResponse(rawText, filename, platform) {
   // Extract & validate fields
   const title = String(parsed.title || parsed.name || '').substring(0, platform.titleMaxLen).trim();
   const description = String(parsed.description || title || '').trim();
-  const category = String(parsed.category || 'General').trim();
+
+  let rawCat = String(parsed.category || '').trim();
+  const catList = Array.isArray(platform.categories) && platform.categories.length > 0
+    ? platform.categories
+    : ['General', 'Abstract', 'Animals', 'Architecture', 'Business', 'Food', 'Landscapes', 'Nature', 'People', 'Technology', 'Graphic Resources'];
+
+  let category = catList.find(c => c.toLowerCase() === rawCat.toLowerCase())
+    || catList.find(c => c.toLowerCase().includes(rawCat.toLowerCase()) || rawCat.toLowerCase().includes(c.toLowerCase()))
+    || rawCat
+    || catList[0];
 
   // Keywords cleanup & normalization
   let keywords = [];
@@ -372,11 +385,11 @@ function parseMetadataResponse(rawText, filename, platform) {
     title,
     description: description || title,
     keywords,
-    category: category || 'General'
+    category
   };
 }
 
-// ── Main Metadata Generation ───────────────────────────────────────────────
+// ── Main Metadata Generation (Secure Server Proxy) ─────────────────────────
 export async function generateMetadataForImage(item, platform, apiKey) {
   const key = apiKey || _sessionKey;
   if (!key) throw new Error('No Gemini API key provided. Please enter your API key in AI Settings.');
@@ -390,54 +403,56 @@ export async function generateMetadataForImage(item, platform, apiKey) {
     };
   }
 
-  // Obtain base64 payload & mimeType (handles EPS vector rasterization automatically)
-  const { base64, mimeType } = await getImageBase64(item, ext);
-  const prompt = buildMetadataPrompt(item.name, platform);
-  const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
+  // Route based on asset type
+  if (item.assetType === 'video') {
+    // Binary stream for videos to prevent UI freezing
+    const mimeType = getGeminiMimeType(item, ext);
+    
+    // We expect item.file to exist, but fallback if not
+    if (!item.file) throw new Error('Video file object is missing.');
 
-  // Use Gemini Structured JSON Output Schema
-  const body = {
-    contents: [{
-      parts: [
-        { text: prompt },
-        { inline_data: { mime_type: mimeType, data: base64 } }
-      ]
-    }],
-    generationConfig: {
-      temperature: 0.35,
-      maxOutputTokens: 2048,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          filename:    { type: 'STRING' },
-          title:       { type: 'STRING' },
-          description: { type: 'STRING' },
-          keywords:    { type: 'ARRAY', items: { type: 'STRING' } },
-          category:    { type: 'STRING' }
-        },
-        required: ['title', 'description', 'keywords', 'category']
-      }
+    const res = await fetchWithTimeout('/api/gemini/generate-video', {
+      method: 'POST',
+      headers: {
+        'Content-Type': mimeType,
+        'x-gemini-api-key': key,
+        'x-filename': item.name,
+        'x-platform': JSON.stringify(platform)
+      },
+      body: item.file // raw binary Blob
+    }, REQUEST_TIMEOUT_MS);
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      throw new Error(data.message || 'Gemini video metadata generation failed.');
     }
-  };
+    return data.data;
+  }
 
-  const res = await fetchWithTimeout(url, {
+  // Legacy Base64 flow for images and vectors
+  const { base64, mimeType } = await getImageBase64(item, ext);
+
+  const res = await fetchWithTimeout('/api/gemini/generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-gemini-api-key': key
+    },
+    body: JSON.stringify({
+      apiKey: key,
+      base64Image: base64,
+      mimeType,
+      filename: item.name,
+      platform
+    })
   }, REQUEST_TIMEOUT_MS);
 
   const data = await res.json().catch(() => ({}));
 
-  if (!res.ok) {
-    const errMsg = classifyGeminiError(res.status, data);
+  if (!res.ok || !data.ok) {
+    const errMsg = data.message || 'Gemini metadata generation failed.';
     throw new Error(errMsg);
   }
 
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  if (!rawText) {
-    throw new Error('Gemini API returned an empty candidate content response.');
-  }
-
-  return parseMetadataResponse(rawText, item.name, platform);
+  return data.data;
 }

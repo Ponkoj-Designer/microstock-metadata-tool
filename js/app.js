@@ -4,11 +4,10 @@
  */
 
 import { PLATFORMS } from './platforms.js';
-import { SAMPLE_IMAGES } from './sampleData.js';
-import { generateMockMetadataForFile } from './mockGenerator.js'; // fallback for samples
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, testConnection, generateMetadataForImage, isGeminiAnalyzable } from './geminiClient.js';
+import { setApiKey, hasApiKey, clearApiKey, getSessionKey, testConnection, generateMetadataForImage, isGeminiAnalyzable } from './geminiClient.js?v=4';
 import { runBatchQueue } from './batchProcessor.js';
+import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
 // ─── Application State ─────────────────────────────────────────────────────
 const state = {
@@ -33,7 +32,8 @@ const state = {
 // ─── File type sets ────────────────────────────────────────────────────────
 const IMAGE_EXTS  = new Set(['jpg','jpeg','png','webp','tiff','tif']);
 const VECTOR_EXTS = new Set(['eps','ai','svg','pdf']);
-const ALL_EXTS    = new Set([...IMAGE_EXTS, ...VECTOR_EXTS]);
+const VIDEO_EXTS  = new Set(['mp4','mov','avi','webm']);
+const ALL_EXTS    = new Set([...IMAGE_EXTS, ...VECTOR_EXTS, ...VIDEO_EXTS]);
 
 // ─── Toast ─────────────────────────────────────────────────────────────────
 export function showToast(message, type = 'info') {
@@ -53,8 +53,19 @@ export function showToast(message, type = 'info') {
 }
 window.showToast = showToast;
 
+export function setBtnLoading(btn, isLoading) {
+  if (!btn) return;
+  if (isLoading) {
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
+  } else {
+    btn.classList.remove('btn-loading');
+    btn.disabled = false;
+  }
+}
+
 // ─── Init ──────────────────────────────────────────────────────────────────
-export function initApp() {
+export async function initApp() {
   renderPlatforms();
   setupEventListeners();
   updatePlatformSpecsBanner();
@@ -62,6 +73,15 @@ export function initApp() {
   renderTutorialStep();
   updateUploadZoneForTab();
   updateAiStatusBadge();
+
+  // Check for existing session (restores login state after page refresh).
+  // Auth is optional — this resolves quickly and never blocks the tool.
+  try {
+    await checkAuthState();
+  } catch (_) {
+    // Server may not be running locally — continue without auth
+  }
+  updateAuthNav();
 }
 
 // ─── Platform Selector ─────────────────────────────────────────────────────
@@ -71,21 +91,16 @@ function renderPlatforms() {
   grid.innerHTML = '';
   Object.values(PLATFORMS).forEach(platform => {
     const isSelected = platform.id === state.currentPlatform.id;
-    const tab = document.createElement('button');
-    tab.className = `platform-pill-tab${isSelected ? ' selected' : ''}`;
-    tab.dataset.id = platform.id;
-    tab.type = 'button';
-    tab.title = `${platform.name} — ${platform.description}`;
-    if (isSelected && platform.color) {
-      tab.style.borderColor = platform.color;
-      tab.style.boxShadow = `0 0 16px ${platform.colorBg}`;
-    }
-    tab.innerHTML = `
-      <span class="pill-logo-box">${platform.logoSvg}</span>
-      <span class="pill-platform-name">${platform.name}</span>
-      ${isSelected ? `<span class="pill-check-dot" style="background:${platform.color}">✓</span>` : ''}`;
-    tab.addEventListener('click', e => { e.preventDefault(); selectPlatform(platform.id); });
-    grid.appendChild(tab);
+    const card = document.createElement('div');
+    card.className = `platform-card${isSelected ? ' active' : ''}`;
+    card.dataset.id = platform.id;
+    card.title = `${platform.name} — ${platform.description}`;
+    card.innerHTML = `
+      <div class="platform-icon-box">${platform.logoSvg}</div>
+      <div class="platform-card-name">${platform.name}</div>
+    `;
+    card.addEventListener('click', e => { e.preventDefault(); selectPlatform(platform.id); });
+    grid.appendChild(card);
   });
 }
 
@@ -121,6 +136,297 @@ function updateAiStatusBadge() {
   }
 }
 
+// ─── Auth Nav State ─────────────────────────────────────────────────────────
+// Updates header nav to show login/signup (logged out) or username+plan+credits+admin+logout (logged in).
+// Called on page load and after any auth/plan/credit action. No visual redesign — just visibility.
+function updateAuthNav() {
+  const loggedOut   = document.getElementById('auth-logged-out');
+  const loggedIn    = document.getElementById('auth-logged-in');
+  const nameSpan    = document.getElementById('auth-user-name');
+  const planBadge   = document.getElementById('auth-user-plan-badge');
+  const creditBadge = document.getElementById('auth-user-credits-badge');
+  const adminBtn    = document.getElementById('btn-admin-panel');
+  const user        = getCurrentUser();
+
+  if (user && loggedOut && loggedIn) {
+    loggedOut.style.display = 'none';
+    loggedIn.style.display  = 'flex';
+    if (nameSpan)    nameSpan.textContent = user.fullName || user.email;
+    if (planBadge)   planBadge.textContent = (user.plan || 'free').toUpperCase();
+    if (creditBadge) creditBadge.textContent = `⚡ ${user.credits ?? 0} Credits`;
+    if (adminBtn)    adminBtn.style.display = user.role === 'admin' ? 'inline-flex' : 'none';
+  } else if (loggedOut && loggedIn) {
+    loggedOut.style.display = 'flex';
+    loggedIn.style.display  = 'none';
+    if (adminBtn) adminBtn.style.display = 'none';
+  }
+}
+
+// ─── Profile & Plan View Helpers ───────────────────────────────────────────
+function openAuthModal(tab = 'login') {
+  const modalEl = document.getElementById('modal-auth');
+  const tabsContainer = document.getElementById('auth-tabs-container');
+  const loginForm = document.getElementById('auth-login-form');
+  const signupForm = document.getElementById('auth-signup-form');
+  const profileView = document.getElementById('auth-profile-view');
+  const user = getCurrentUser();
+
+  if (user) {
+    if (tabsContainer) tabsContainer.style.display = 'none';
+    if (loginForm)     loginForm.style.display     = 'none';
+    if (signupForm)    signupForm.style.display    = 'none';
+    if (profileView)   profileView.style.display   = 'flex';
+    renderProfileView(user);
+  } else {
+    if (tabsContainer) tabsContainer.style.display = 'flex';
+    if (profileView)   profileView.style.display   = 'none';
+    switchAuthTab(tab);
+  }
+  openModal(modalEl);
+}
+
+function renderProfileView(user) {
+  if (!user) return;
+  const nameDisplay   = document.getElementById('profile-display-name');
+  const planTag       = document.getElementById('profile-plan-tag');
+  const fullNameInput = document.getElementById('profile-fullname-input');
+  const emailInput    = document.getElementById('profile-email-input');
+  const planText      = document.getElementById('profile-plan-text');
+  const creditsText   = document.getElementById('profile-credits-text');
+  const errorEl       = document.getElementById('profile-error');
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (nameDisplay)   nameDisplay.textContent   = user.fullName || user.email;
+  if (planTag)       planTag.textContent       = `${(user.plan || 'free').toUpperCase()} PLAN`;
+  if (fullNameInput) fullNameInput.value       = user.fullName || '';
+  if (emailInput)    emailInput.value          = user.email || '';
+  if (planText)      planText.textContent      = (user.plan || 'free').toUpperCase();
+  if (creditsText)   creditsText.textContent   = `${user.credits ?? 10} Credits`;
+}
+
+function updatePricingModalUI() {
+  const user = getCurrentUser();
+  const currentPlan = user ? (user.plan || 'free').toLowerCase() : null;
+
+  const plans = [
+    { id: 'free',     btnId: 'btn-plan-free',     label: 'Select Free Plan' },
+    { id: 'pro',      btnId: 'btn-plan-pro',      label: 'Upgrade to Pro' },
+    { id: 'business', btnId: 'btn-plan-business', label: 'Switch to Business' }
+  ];
+
+  plans.forEach(p => {
+    const btn = document.getElementById(p.btnId);
+    if (!btn) return;
+    if (currentPlan === p.id) {
+      btn.textContent = 'Active Plan ✓';
+      btn.className = 'btn btn-secondary';
+      btn.style.opacity = '0.8';
+    } else {
+      btn.style.opacity = '1';
+      btn.textContent = p.label;
+      btn.className = p.id === 'pro' ? 'btn btn-primary' : 'btn btn-secondary';
+    }
+  });
+}
+
+// ─── Admin Dashboard ───────────────────────────────────────────────────────
+async function renderAdminDashboard(search = '') {
+  const tbody = document.getElementById('admin-users-list');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-secondary)">Loading user database…</td></tr>`;
+
+  const res = await adminFetchUsers(search);
+  if (!res.ok) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--accent-rose)">${escHtml(res.message)}</td></tr>`;
+    return;
+  }
+
+  if (!res.users || res.users.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-secondary)">No users found matching "${escHtml(search)}"</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = res.users.map(u => `
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+      <td style="padding:10px 14px">
+        <strong style="color:var(--text-primary);display:block">${escHtml(u.fullName || 'No Name')}</strong>
+        <span style="font-size:0.75rem;color:var(--text-muted)">${escHtml(u.email)}</span>
+      </td>
+      <td style="padding:10px 14px">
+        <span class="badge-pill" style="background:${u.role === 'admin' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)'};color:${u.role === 'admin' ? '#F59E0B' : 'var(--text-secondary)'}">${u.role.toUpperCase()}</span>
+      </td>
+      <td style="padding:10px 14px">
+        <select class="admin-plan-select inline-input" data-user-id="${u.id}" style="padding:3px 8px;font-size:0.75rem">
+          <option value="free" ${u.plan === 'free' ? 'selected' : ''}>FREE</option>
+          <option value="pro" ${u.plan === 'pro' ? 'selected' : ''}>PRO</option>
+          <option value="business" ${u.plan === 'business' ? 'selected' : ''}>BUSINESS</option>
+        </select>
+      </td>
+      <td style="padding:10px 14px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <strong>⚡ ${u.credits}</strong>
+          <button class="btn btn-secondary btn-sm admin-adjust-credits-btn" data-user-id="${u.id}" data-user-name="${escHtml(u.fullName || u.email)}" style="padding:2px 6px;font-size:0.7rem" title="Add or subtract credits">⚡ Edit</button>
+        </div>
+      </td>
+      <td style="padding:10px 14px">
+        <span class="badge-pill" style="background:${u.isActive !== false ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'};color:${u.isActive !== false ? '#10B981' : '#EF4444'}">${u.isActive !== false ? 'ACTIVE' : 'DISABLED'}</span>
+      </td>
+      <td style="padding:10px 14px;text-align:right">
+        <button class="btn btn-sm ${u.isActive !== false ? 'btn-secondary' : 'btn-primary'} admin-toggle-status-btn" data-user-id="${u.id}" data-active="${u.isActive !== false}" style="padding:4px 8px;font-size:0.75rem">
+          ${u.isActive !== false ? 'Deactivate' : 'Reactivate'}
+        </button>
+      </td>
+    </tr>
+  `).join('');
+
+  // Event Delegation for Admin Row Actions
+  tbody.querySelectorAll('.admin-plan-select').forEach(select => {
+    select.addEventListener('change', async (e) => {
+      const userId = e.target.getAttribute('data-user-id');
+      const newPlan = e.target.value;
+      const r = await adminUpdateUserPlan(userId, newPlan);
+      if (r.ok) {
+        showToast(r.message || `User plan updated to ${newPlan.toUpperCase()}`, 'success');
+        if (userId === getCurrentUser()?.id) updateAuthNav();
+        const currentSearch = document.getElementById('admin-search')?.value || '';
+        renderAdminDashboard(currentSearch);
+      } else {
+        showToast(r.message, 'error');
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.admin-toggle-status-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const userId = e.currentTarget.getAttribute('data-user-id');
+      const currentActive = e.currentTarget.getAttribute('data-active') === 'true';
+      const r = await adminToggleUserStatus(userId, !currentActive);
+      if (r.ok) {
+        showToast(r.message, 'success');
+        renderAdminDashboard(search);
+      } else {
+        showToast(r.message, 'error');
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.admin-adjust-credits-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const userId = e.currentTarget.getAttribute('data-user-id');
+      const userName = e.currentTarget.getAttribute('data-user-name');
+      const input = prompt(`Adjust credits for ${userName} (e.g. 50 to add, -10 to remove):`, '10');
+      if (input === null) return;
+      const amount = parseInt(input, 10);
+      if (isNaN(amount) || amount === 0) {
+        showToast('Please enter a valid non-zero number of credits', 'warning');
+        return;
+      }
+      const desc = prompt(`Reason / description for adjustment:`, `Admin credit adjustment (${amount > 0 ? '+' : ''}${amount})`);
+      const r = await adminAdjustCredits(userId, amount, desc || 'Admin adjustment');
+      if (r.ok) {
+        showToast(r.message || 'Credits adjusted!', 'success');
+        renderAdminDashboard(search);
+        if (userId === getCurrentUser()?.id) updateAuthNav();
+      } else {
+        showToast(r.message, 'error');
+      }
+    });
+  });
+}
+
+async function renderAdminPaymentsList(statusFilter = null) {
+  const container = document.getElementById('admin-payments-list');
+  const badge     = document.getElementById('admin-pending-badge');
+  if (!container) return;
+
+  container.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text-secondary)">Loading payment queue…</td></tr>';
+
+  const res = await adminFetchPayments(statusFilter);
+  if (!res.ok) {
+    container.innerHTML = `<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--accent-rose)">${escHtml(res.message)}</td></tr>`;
+    return;
+  }
+
+  const payments = res.payments || [];
+  const pendingCount = payments.filter(p => p.status === 'pending').length;
+  if (badge) badge.textContent = pendingCount;
+
+  if (payments.length === 0) {
+    container.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text-muted)">No payment submissions found in queue.</td></tr>';
+    return;
+  }
+
+  container.innerHTML = payments.map(p => {
+    const isPending = p.status === 'pending';
+    const isApproved = p.status === 'approved';
+    const statusBadge = isApproved
+      ? '<span class="badge-pill" style="background:rgba(34,197,94,0.15);color:#22C55E;font-size:0.7rem">APPROVED</span>'
+      : isPending
+      ? '<span class="badge-pill" style="background:rgba(234,179,8,0.15);color:#EAB308;font-size:0.7rem">PENDING</span>'
+      : '<span class="badge-pill" style="background:rgba(239,68,68,0.15);color:#EF4444;font-size:0.7rem">REJECTED</span>';
+
+    const actionButtons = isPending ? `
+      <div style="display:flex;gap:6px;justify-content:flex-end">
+        <button class="btn btn-sm btn-success admin-approve-pay-btn" data-pay-id="${p.id}" style="padding:4px 8px;font-size:0.725rem">✅ Approve</button>
+        <button class="btn btn-sm btn-danger admin-reject-pay-btn" data-pay-id="${p.id}" style="padding:4px 8px;font-size:0.725rem">✕ Reject</button>
+      </div>
+    ` : `<span style="font-size:0.75rem;color:var(--text-muted)">${escHtml(p.admin_notes || p.status)}</span>`;
+
+    return `
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+        <td style="padding:10px 12px">
+          <strong style="color:var(--text-primary);display:block">${escHtml(p.user_name || 'User')}</strong>
+          <span style="font-size:0.75rem;color:var(--text-muted)">${escHtml(p.user_email || 'N/A')}</span>
+        </td>
+        <td style="padding:10px 12px;text-transform:uppercase;font-weight:700;color:var(--accent-primary)">${escHtml(p.plan)}</td>
+        <td style="padding:10px 12px;font-weight:700">৳${p.amount} BDT</td>
+        <td style="padding:10px 12px;text-transform:uppercase;font-weight:700;color:var(--accent-cyan)">${escHtml(p.payment_method)}</td>
+        <td style="padding:10px 12px;font-family:monospace">${escHtml(p.sender_number)}</td>
+        <td style="padding:10px 12px;font-family:monospace;font-weight:700;color:var(--accent-amber)">${escHtml(p.trx_id)}</td>
+        <td style="padding:10px 12px">${statusBadge}</td>
+        <td style="padding:10px 12px;text-align:right">${actionButtons}</td>
+      </tr>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.admin-approve-pay-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const payId = e.currentTarget.getAttribute('data-pay-id');
+      const notes = prompt('Approval notes / message for user (optional):', 'bKash/Nagad Payment Verified');
+      if (notes === null) return;
+      btn.disabled = true; btn.textContent = 'Approving…';
+      const r = await adminApprovePayment(payId, notes);
+      if (r.ok) {
+        showToast(r.message || 'Payment approved & user plan updated!', 'success');
+        renderAdminPaymentsList(statusFilter);
+        renderAdminDashboard();
+        updateAuthNav();
+      } else {
+        btn.disabled = false; btn.textContent = '✅ Approve';
+        showToast(r.message, 'error');
+      }
+    });
+  });
+
+  container.querySelectorAll('.admin-reject-pay-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const payId = e.currentTarget.getAttribute('data-pay-id');
+      const notes = prompt('Reason for rejecting payment (optional):', 'Invalid Transaction ID or Amount');
+      if (notes === null) return;
+      btn.disabled = true; btn.textContent = 'Rejecting…';
+      const r = await adminRejectPayment(payId, notes);
+      if (r.ok) {
+        showToast(r.message || 'Payment rejected.', 'info');
+        renderAdminPaymentsList(statusFilter);
+      } else {
+        btn.disabled = false; btn.textContent = '✕ Reject';
+        showToast(r.message, 'error');
+      }
+    });
+  });
+}
+
 // ─── Asset Tabs ────────────────────────────────────────────────────────────
 function switchAssetTab(name) {
   state.activeAssetTab = name;
@@ -130,7 +436,6 @@ function switchAssetTab(name) {
   });
   const activeEl = document.getElementById(`tab-${name}`);
   if (activeEl) activeEl.classList.add('active');
-  if (name === 'videos') showToast('Video support is coming soon!', 'info');
   updateUploadZoneForTab();
 }
 
@@ -150,11 +455,11 @@ function updateUploadZoneForTab() {
     if (subEl)     subEl.textContent   = 'EPS, AI, SVG, PDF — batch upload supported';
     if (tagsEl)    tagsEl.innerHTML    = ['EPS','AI','SVG','PDF'].map(f=>`<span class="format-tag">${f}</span>`).join('');
     if (fileInput) fileInput.accept    = '.eps,.ai,.svg,.pdf';
-  } else {
-    if (titleEl)   titleEl.textContent = 'Video support coming soon';
-    if (subEl)     subEl.textContent   = 'MP4, MOV footage metadata engine in development';
-    if (tagsEl)    tagsEl.innerHTML    = ['MP4','MOV'].map(f=>`<span class="format-tag" style="opacity:0.5">${f}</span>`).join('');
-    if (fileInput) fileInput.accept    = '';
+  } else if (tab === 'videos') {
+    if (titleEl)   titleEl.textContent = 'Drop your video files here or browse files';
+    if (subEl)     subEl.textContent   = 'MP4, MOV, AVI, WEBP (Max 100MB per video) — batch upload supported';
+    if (tagsEl)    tagsEl.innerHTML    = ['MP4','MOV','AVI','WEBM'].map(f=>`<span class="format-tag">${f}</span>`).join('');
+    if (fileInput) fileInput.accept    = '.mp4,.mov,.avi,.webm';
   }
 }
 
@@ -163,6 +468,7 @@ function classifyFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (IMAGE_EXTS.has(ext))  return { assetType: 'image',  format: ext.toUpperCase(), ext };
   if (VECTOR_EXTS.has(ext)) return { assetType: ext === 'pdf' ? 'pdf' : 'vector', format: ext.toUpperCase(), ext };
+  if (VIDEO_EXTS.has(ext))  return { assetType: 'video',  format: ext.toUpperCase(), ext };
   return null;
 }
 
@@ -201,7 +507,6 @@ async function createThumbnailUrl(file) {
 }
 
 async function processFiles(files) {
-  if (state.activeAssetTab === 'videos') { showToast('Video support coming soon!', 'info'); return; }
   const existingKeys = new Set(state.mediaItems.map(i => i._fileKey));
   const accepted = []; const skippedDup = []; const skippedBad = [];
 
@@ -210,6 +515,13 @@ async function processFiles(files) {
     if (!cls) { skippedBad.push(file.name); continue; }
     if (state.activeAssetTab === 'images'  && cls.assetType !== 'image')  { skippedBad.push(file.name); continue; }
     if (state.activeAssetTab === 'vectors' && cls.assetType === 'image')  { skippedBad.push(file.name); continue; }
+    if (state.activeAssetTab === 'videos'  && cls.assetType !== 'video')  { skippedBad.push(file.name); continue; }
+
+    if (cls.assetType === 'video' && file.size > 100 * 1024 * 1024) {
+      showToast(`Skipped ${file.name} - exceeds 100MB video limit`, 'warning');
+      continue;
+    }
+
     const k = fileKey(file);
     if (existingKeys.has(k)) { skippedDup.push(file.name); continue; }
     existingKeys.add(k);
@@ -252,28 +564,15 @@ async function processFiles(files) {
   showToast(`Added ${newItems.length} file(s) — ${state.mediaItems.length} total`, 'success');
 }
 
-// ─── Sample Batch ──────────────────────────────────────────────────────────
-function loadSampleBatch() {
-  const samples = JSON.parse(JSON.stringify(SAMPLE_IMAGES));
-  samples.forEach(s => {
-    s.assetType = s.assetType || 'image';
-    s.format    = s.format    || s.name.split('.').pop().toUpperCase();
-    s._fileKey  = `${s.name}::${s.size}::0`;
-    s.status    = 'ready';
-    s.ext       = s.name.split('.').pop().toLowerCase();
-    s._error    = null;
-  });
-  const existingKeys = new Set(state.mediaItems.map(i => i._fileKey));
-  const fresh = samples.filter(s => !existingKeys.has(s._fileKey));
-  if (!fresh.length) { showToast('Sample batch already loaded!', 'info'); return; }
-  state.mediaItems.push(...fresh);
-  updateUI();
-  showToast(`Loaded ${fresh.length} sample assets (demo mode)`, 'success');
-}
-
 // ─── AI Generation ─────────────────────────────────────────────────────────
 async function triggerAiGeneration() {
   if (state.mediaItems.length === 0 || state.isGenerating) return;
+
+  if (!isLoggedIn()) {
+    openAuthModal('login');
+    showToast('Please login or sign up to generate metadata with AI.', 'info');
+    return;
+  }
 
   if (!hasApiKey()) {
     openModal(document.getElementById('modal-ai-settings'));
@@ -288,13 +587,22 @@ async function triggerAiGeneration() {
     return;
   }
 
+  // Check credit balance for logged-in users before starting
+  const user = getCurrentUser();
+  if (user && (user.credits ?? 0) <= 0) {
+    showToast(`Insufficient credits balance (0 credits available). Please switch plans or request credits.`, 'error');
+    openModal(document.getElementById('modal-pricing'));
+    updatePricingModalUI();
+    return;
+  }
+
   state.isGenerating = true;
   state.stopBatch = false;
 
   const genBtn = document.getElementById('btn-generate-ai');
   const stopBtn = document.getElementById('btn-stop-generation');
   const retryBtn = document.getElementById('btn-retry-failed');
-  if (genBtn)  { genBtn.disabled = true;  genBtn.innerHTML  = `<svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="30 30"></circle></svg> Generating…`; }
+  setBtnLoading(genBtn, true);
   if (stopBtn) stopBtn.style.display = 'inline-flex';
 
   const progressBar = document.getElementById('progress-bar-container');
@@ -316,7 +624,7 @@ async function triggerAiGeneration() {
       return await generateMetadataForImage(item, state.currentPlatform);
     },
 
-    onItemDone: (item, idx, result, err) => {
+    onItemDone: async (item, idx, result, err) => {
       const stateItem = state.mediaItems.find(i => i.id === item.id);
       if (!stateItem) return;
 
@@ -338,6 +646,21 @@ async function triggerAiGeneration() {
         };
         stateItem._error = null;
         successCount++;
+
+        // Deduct 1 credit for logged-in user upon successful metadata generation
+        const curUser = getCurrentUser();
+        if (curUser) {
+          const deductRes = await deductCredit(1, `Metadata generation: ${item.name}`);
+          if (deductRes.ok) {
+            updateAuthNav();
+          } else {
+            showToast(deductRes.message || 'Credit deduction failed', 'warning');
+            if ((curUser.credits ?? 0) <= 0) {
+              state.stopBatch = true;
+              showToast('Batch stopped — out of credits!', 'error');
+            }
+          }
+        }
       }
       throttledRender();
     },
@@ -359,7 +682,7 @@ async function triggerAiGeneration() {
   state.isGenerating = false;
   state.stopBatch = false;
 
-  if (genBtn)  { genBtn.disabled = false; genBtn.innerHTML = `<svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Generate Metadata`; }
+  setBtnLoading(genBtn, false);
   if (stopBtn) stopBtn.style.display = 'none';
   if (retryBtn && failCount > 0) retryBtn.style.display = 'inline-flex';
 
@@ -382,9 +705,21 @@ function retryFailed() {
 }
 
 function regenerateSingleItem(id) {
+  if (!isLoggedIn()) {
+    openAuthModal('login');
+    showToast('Please login or sign up to generate metadata with AI.', 'info');
+    return;
+  }
   if (!hasApiKey()) {
     openModal(document.getElementById('modal-ai-settings'));
     showToast('Add Gemini API key first', 'warning');
+    return;
+  }
+  const curUser = getCurrentUser();
+  if (curUser && (curUser.credits ?? 0) <= 0) {
+    showToast('Insufficient credits to regenerate metadata (0 credits available).', 'error');
+    openModal(document.getElementById('modal-pricing'));
+    updatePricingModalUI();
     return;
   }
   const item = state.mediaItems.find(i => i.id === id);
@@ -405,6 +740,10 @@ function regenerateSingleItem(id) {
         item.status = 'ready';
         item.metadata = { title: result.title, description: result.description, keywords: result.keywords, category: result.category };
         item._error = null;
+        if (curUser) {
+          const deductRes = await deductCredit(1, `Single regen: ${item.name}`);
+          if (deductRes.ok) updateAuthNav();
+        }
         showToast(`Regenerated: ${item.name}`, 'success');
       }
     } catch (err) {
@@ -415,14 +754,21 @@ function regenerateSingleItem(id) {
   })();
 }
 
-// ─── Render (throttled to avoid layout thrashing) ──────────────────────────
+// ─── Render (throttled, RAF-gated, batched) ───────────────────────────────
+// Uses a single queued RAF so multiple synchronous calls in the same tick
+// only trigger ONE render pass. A second rAF frame is used as a read barrier
+// so we never force a synchronous style recalc before the paint.
 function throttledRender() {
   if (state._renderPending) return;
   state._renderPending = true;
   requestAnimationFrame(() => {
-    state._renderPending = false;
-    renderMetadata();
-    updateStatsBar();
+    // Yield one more frame so any pending layout from the triggering action
+    // is flushed first — prevents forced synchronous layout.
+    requestAnimationFrame(() => {
+      state._renderPending = false;
+      renderMetadata();
+      updateStatsBar();
+    });
   });
 }
 
@@ -474,8 +820,8 @@ function updateStatsBar() {
 function updateUI() {
   const hasItems = state.mediaItems.length > 0;
   const emptyState = document.getElementById('empty-state');
-  const mainArea   = document.getElementById('main-content-area');
-  if (emptyState) emptyState.style.display = hasItems ? 'none' : 'flex';
+  const mainArea   = document.getElementById('main-content-area') || document.getElementById('toolbar-section');
+  if (emptyState) emptyState.style.display = hasItems ? 'none' : 'block';
   if (mainArea)   mainArea.style.display   = hasItems ? 'block' : 'none';
   updateStatsBar();
   renderMetadata();
@@ -491,117 +837,186 @@ function renderMetadata() {
 // ─── Thumbnail helper ───────────────────────────────────────────────────────
 function buildThumbHtml(item, size = 44) {
   if (item.url) {
+    if (item.assetType === 'video') {
+      return `<video src="${item.url}" muted autoplay loop playsinline style="width:${size}px;height:${size}px;object-fit:cover;border-radius:6px;border:1px solid var(--border-glass);"></video>`;
+    }
     return `<img src="${item.url}" alt="" loading="lazy" decoding="async" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:6px;border:1px solid var(--border-glass);">`;
   }
-  const col = item.assetType === 'image' ? 'var(--accent-cyan)' : 'var(--accent-purple)';
-  return `<div style="width:${size}px;height:${size}px;border-radius:6px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.25);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;"><svg width="18" height="18" fill="none" stroke="${col}" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg><span style="font-size:0.55rem;font-weight:800;color:${col}">${item.format||''}</span></div>`;
+  let col = 'var(--accent-purple)';
+  let icon = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>`;
+  
+  if (item.assetType === 'image') col = 'var(--accent-cyan)';
+  else if (item.assetType === 'video') {
+    col = '#f43f5e'; // rose-500
+    icon = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>`;
+  }
+
+  return `<div style="width:${size}px;height:${size}px;border-radius:6px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.25);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;"><svg width="18" height="18" fill="none" stroke="${col}" viewBox="0 0 24 24">${icon}</svg><span style="font-size:0.55rem;font-weight:800;color:${col}">${item.format||''}</span></div>`;
 }
 
 function buildAssetBadge(item) {
   if (item.assetType === 'image')  return `<span class="asset-type-badge badge-image">IMAGE</span>`;
   if (item.assetType === 'pdf')    return `<span class="asset-type-badge badge-pdf">PDF</span>`;
   if (item.assetType === 'vector') return `<span class="asset-type-badge badge-vector">VECTOR</span>`;
+  if (item.assetType === 'video')  return `<span class="asset-type-badge" style="background:rgba(244,63,94,0.1);color:#f43f5e;border:1px solid rgba(244,63,94,0.2)">VIDEO</span>`;
   return '';
 }
 
-// ─── Table View ────────────────────────────────────────────────────────────
+// ─── Table View — diff-based update ────────────────────────────────────────
+// Builds the full row HTML once per item, keyed by item.id.
+// On re-render, only rows whose content has changed are replaced.
+// New items are appended; removed items are deleted. This eliminates the
+// full innerHTML wipe that caused layout thrashing on every batch tick.
+
+// Cache: item.id → last-rendered HTML fingerprint
+const _tableRowCache = new Map();
+
+function buildRowHtml(item, index, p, catOptions) {
+  const isSelected = state.selectedItemIds.has(item.id);
+  const meta = item.metadata || { title: '', description: '', keywords: [], category: '' };
+  const kwCount = (meta.keywords || []).length;
+
+  const titleLen = (meta.title || '').length;
+  const titleLenClass = titleLen > p.titleMaxLen ? 'exceeded' : (titleLen > p.titleMaxLen * 0.85 ? 'warning' : '');
+  const kwClass = kwCount > p.keywordMax ? 'exceeded' : (kwCount < p.keywordMin && kwCount > 0 ? 'warning' : '');
+
+  const selectedCat = catOptions.replace(
+    new RegExp(`value="${escHtml(meta.category).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g'),
+    `value="${escHtml(meta.category)}" selected`
+  );
+
+  const kwChips = (meta.keywords || []).slice(0, 12).map((kw, ki) =>
+    `<span class="keyword-chip">${escHtml(kw)}<span class="keyword-chip-remove" data-item-id="${item.id}" data-kw-idx="${ki}">×</span></span>`
+  ).join('');
+  const kwMore = kwCount > 12 ? `<span style="font-size:0.7rem;color:var(--text-muted);padding:2px 6px">+${kwCount - 12} more</span>` : '';
+
+  const errorHtml = item._error
+    ? `<div style="font-size:0.7rem;color:var(--accent-rose);margin-top:4px;max-width:140px;word-break:break-word" title="${escHtml(item._error)}">⚠ ${escHtml(item._error.substring(0, 80))}${item._error.length > 80 ? '…' : ''}</div>`
+    : '';
+
+  const rowStyle = item.status === 'failed' ? ' style="background:rgba(239,68,68,0.05)"' : '';
+
+  return `<tr data-row-id="${item.id}"${rowStyle}>
+    <td class="col-thumb">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" class="row-checkbox" data-id="${item.id}" ${isSelected ? 'checked' : ''}>
+        ${buildThumbHtml(item, 44)}
+      </div>
+    </td>
+    <td class="col-filename">
+      <div style="font-size:0.8125rem;font-weight:600;word-break:break-all">${escHtml(item.name)}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap">
+        ${buildAssetBadge(item)}
+        <span style="font-size:0.7rem;color:var(--text-muted)">${(item.size / 1048576).toFixed(1)} MB</span>
+      </div>
+      ${errorHtml}
+    </td>
+    <td class="col-title">
+      <input type="text" class="inline-input title-input" data-id="${item.id}" value="${escHtml(meta.title)}" placeholder="Enter title…" ${item.status === 'processing' ? 'disabled' : ''}>
+      <div class="char-counter ${titleLenClass}">${titleLen} / ${p.titleMaxLen}</div>
+    </td>
+    <td class="col-desc">
+      <textarea class="inline-textarea desc-textarea" data-id="${item.id}" placeholder="Enter description…" ${item.status === 'processing' ? 'disabled' : ''}>${escHtml(meta.description)}</textarea>
+    </td>
+    <td class="col-keywords">
+      <div class="keywords-chip-container">${kwChips}${kwMore}<input type="text" class="add-tag-input" data-id="${item.id}" placeholder="+ Tag…"></div>
+      <div style="font-size:0.6875rem;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;align-items:center">
+        <span class="${kwClass}" style="font-weight:${kwClass ? '700' : '400'}">${kwCount}/${p.keywordMax} kw</span>
+        <a href="#" class="copy-kw-link" data-id="${item.id}" style="color:var(--accent-primary);text-decoration:none">Copy All</a>
+      </div>
+    </td>
+    <td class="col-category">
+      <select class="inline-select category-select" data-id="${item.id}" ${item.status === 'processing' ? 'disabled' : ''}>
+        <option value="">Select…</option>${selectedCat}
+      </select>
+    </td>
+    <td class="col-status">
+      <span class="status-tag status-${item.status}">${item.status}</span>
+    </td>
+    <td class="col-actions">
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-icon-only btn-sm regen-btn" data-id="${item.id}" title="Regenerate with AI" ${item.status === 'processing' ? 'disabled' : ''}>🤖</button>
+        <button class="btn btn-icon-only btn-sm view-detail-btn" data-id="${item.id}" title="View Details">👁️</button>
+        <button class="btn btn-icon-only btn-sm delete-btn" data-id="${item.id}" title="Remove">🗑️</button>
+      </div>
+    </td></tr>`;
+}
+
 function renderTableView(items) {
   const tableBody = document.getElementById('metadata-table-body');
   if (!tableBody) return;
 
   if (items.length === 0) {
+    _tableRowCache.clear();
     tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">No matching assets found.</td></tr>`;
     return;
   }
 
   const p = state.currentPlatform;
-  const catOptions = (p.categories.length > 0 ? p.categories : ['General','Business','Technology','Nature','People','Food','Architecture','Graphic Resources'])
+  const catOptions = (p.categories.length > 0 ? p.categories : ['General', 'Business', 'Technology', 'Nature', 'People', 'Food', 'Architecture', 'Graphic Resources'])
     .map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
 
-  // Use DocumentFragment for performance
-  const frag = document.createDocumentFragment();
+  // Build a set of current item ids for removal detection
+  const currentIds = new Set(items.map(i => i.id));
 
-  items.forEach(item => {
-    const isSelected = state.selectedItemIds.has(item.id);
-    const meta = item.metadata || { title:'', description:'', keywords:[], category:'' };
-    const kwCount = (meta.keywords || []).length;
-    const tr = document.createElement('tr');
+  // 1. Remove rows no longer in the filtered list
+  for (const [id] of _tableRowCache) {
+    if (!currentIds.has(id)) {
+      const oldRow = tableBody.querySelector(`tr[data-row-id="${id}"]`);
+      if (oldRow) oldRow.remove();
+      _tableRowCache.delete(id);
+    }
+  }
 
-    const titleLen = (meta.title || '').length;
-    const titleLenClass = titleLen > p.titleMaxLen ? 'exceeded' : (titleLen > p.titleMaxLen * 0.85 ? 'warning' : '');
-    const kwClass = kwCount > p.keywordMax ? 'exceeded' : (kwCount < p.keywordMin && kwCount > 0 ? 'warning' : '');
+  // 2. Patch existing rows or insert new ones, in order
+  let prevEl = null; // track insertion anchor
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const html = buildRowHtml(item, i, p, catOptions);
+    const cached = _tableRowCache.get(item.id);
+    const existingRow = tableBody.querySelector(`tr[data-row-id="${item.id}"]`);
 
-    // Error row styling
-    if (item.status === 'failed') tr.style.background = 'rgba(239,68,68,0.05)';
+    if (cached === html && existingRow) {
+      // No change — ensure ordering is correct then skip
+      prevEl = existingRow;
+      continue;
+    }
 
-    const selectedCat = catOptions.replace(
-      new RegExp(`value="${escHtml(meta.category).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}"`, 'g'),
-      `value="${escHtml(meta.category)}" selected`
-    );
+    // Row needs update or insertion
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const newRow = template.content.firstElementChild;
 
-    const kwChips = (meta.keywords || []).slice(0, 12).map((kw, ki) =>
-      `<span class="keyword-chip">${escHtml(kw)}<span class="keyword-chip-remove" data-item-id="${item.id}" data-kw-idx="${ki}">×</span></span>`
-    ).join('');
-    const kwMore = kwCount > 12 ? `<span style="font-size:0.7rem;color:var(--text-muted);padding:2px 6px">+${kwCount-12} more</span>` : '';
+    if (existingRow) {
+      // Patch in-place: swap out the old row
+      tableBody.replaceChild(newRow, existingRow);
+    } else {
+      // Insert in correct position — add entry animation class
+      newRow.classList.add('row-entering');
+      if (prevEl && prevEl.nextSibling) {
+        tableBody.insertBefore(newRow, prevEl.nextSibling);
+      } else if (!prevEl) {
+        tableBody.prepend(newRow);
+      } else {
+        tableBody.appendChild(newRow);
+      }
+      // Remove entry class after animation completes to free will-change
+      newRow.addEventListener('animationend', () => newRow.classList.remove('row-entering'), { once: true });
+    }
 
-    const errorHtml = item._error
-      ? `<div style="font-size:0.7rem;color:var(--accent-rose);margin-top:4px;max-width:140px;word-break:break-word" title="${escHtml(item._error)}">⚠ ${escHtml(item._error.substring(0,80))}${item._error.length>80?'…':''}</div>`
-      : '';
+    // Apply processing row class for the shimmer strip
+    if (item.status === 'processing') {
+      newRow.classList.add('row-processing');
+    }
 
-    tr.innerHTML = `
-      <td class="col-thumb">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" class="row-checkbox" data-id="${item.id}" ${isSelected?'checked':''}>
-          ${buildThumbHtml(item,44)}
-        </div>
-      </td>
-      <td class="col-filename">
-        <div style="font-size:0.8125rem;font-weight:600;word-break:break-all">${escHtml(item.name)}</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap">
-          ${buildAssetBadge(item)}
-          <span style="font-size:0.7rem;color:var(--text-muted)">${(item.size/1048576).toFixed(1)} MB</span>
-        </div>
-        ${errorHtml}
-      </td>
-      <td class="col-title">
-        <input type="text" class="inline-input title-input" data-id="${item.id}" value="${escHtml(meta.title)}" placeholder="Enter title…" ${item.status==='processing'?'disabled':''}>
-        <div class="char-counter ${titleLenClass}">${titleLen} / ${p.titleMaxLen}</div>
-      </td>
-      <td class="col-desc">
-        <textarea class="inline-textarea desc-textarea" data-id="${item.id}" placeholder="Enter description…" ${item.status==='processing'?'disabled':''}>${escHtml(meta.description)}</textarea>
-      </td>
-      <td class="col-keywords">
-        <div class="keywords-chip-container">${kwChips}${kwMore}<input type="text" class="add-tag-input" data-id="${item.id}" placeholder="+ Tag…"></div>
-        <div style="font-size:0.6875rem;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;align-items:center">
-          <span class="${kwClass}" style="font-weight:${kwClass?'700':'400'}">${kwCount}/${p.keywordMax} kw</span>
-          <a href="#" class="copy-kw-link" data-id="${item.id}" style="color:var(--accent-primary);text-decoration:none">Copy All</a>
-        </div>
-      </td>
-      <td class="col-category">
-        <select class="inline-select category-select" data-id="${item.id}" ${item.status==='processing'?'disabled':''}>
-          <option value="">Select…</option>${selectedCat}
-        </select>
-      </td>
-      <td class="col-status">
-        <span class="status-tag status-${item.status}">${item.status}</span>
-      </td>
-      <td class="col-actions">
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn btn-icon-only btn-sm regen-btn" data-id="${item.id}" title="Regenerate with AI" ${item.status==='processing'?'disabled':''}>🤖</button>
-          <button class="btn btn-icon-only btn-sm view-detail-btn" data-id="${item.id}" title="View Details">👁️</button>
-          <button class="btn btn-icon-only btn-sm delete-btn" data-id="${item.id}" title="Remove">🗑️</button>
-        </div>
-      </td>`;
-
-    frag.appendChild(tr);
-  });
-
-  tableBody.innerHTML = '';
-  tableBody.appendChild(frag);
+    _tableRowCache.set(item.id, html);
+    prevEl = newRow;
+  }
 }
 
+
 function setupTableEventDelegation() {
-  const tableContainer = document.getElementById('table-view-container');
+  const tableContainer = document.getElementById('table-view-container') || document.getElementById('view-table-container');
   if (!tableContainer) return;
 
   tableContainer.addEventListener('input', (e) => {
@@ -611,11 +1026,12 @@ function setupTableEventDelegation() {
       if (!item) return;
       if (!item.metadata) item.metadata = {};
       item.metadata.title = titleInput.value;
+      _tableRowCache.delete(item.id); // invalidate only this row
       const ctr = titleInput.nextElementSibling;
       if (ctr) {
         const len = titleInput.value.length, max = state.currentPlatform.titleMaxLen;
         ctr.textContent = `${len} / ${max}`;
-        ctr.className = `char-counter ${len>max?'exceeded':len>max*0.85?'warning':''}`;
+        ctr.className = `char-counter ${len > max ? 'exceeded' : len > max * 0.85 ? 'warning' : ''}`;
       }
       return;
     }
@@ -623,15 +1039,21 @@ function setupTableEventDelegation() {
     const descTextarea = e.target.closest('.desc-textarea');
     if (descTextarea) {
       const item = state.mediaItems.find(i => i.id === descTextarea.dataset.id);
-      if (item && item.metadata) item.metadata.description = descTextarea.value;
+      if (item && item.metadata) {
+        item.metadata.description = descTextarea.value;
+        _tableRowCache.delete(item.id);
+      }
       return;
     }
 
     const categorySelect = e.target.closest('.category-select');
     if (categorySelect) {
       const item = state.mediaItems.find(i => i.id === categorySelect.dataset.id);
-      if (item && item.metadata) item.metadata.category = categorySelect.value;
-      throttledRender();
+      if (item && item.metadata) {
+        item.metadata.category = categorySelect.value;
+        _tableRowCache.delete(item.id);
+        // No full re-render needed — value is already saved, no DOM change required
+      }
       return;
     }
   });
@@ -641,13 +1063,14 @@ function setupTableEventDelegation() {
     if (!addTagInput) return;
     if (e.key !== 'Enter' && e.key !== ',') return;
     e.preventDefault();
-    const tag = addTagInput.value.trim().replace(/^,|,$/g,'');
+    const tag = addTagInput.value.trim().replace(/^,|,$/g, '');
     if (!tag) return;
     const item = state.mediaItems.find(i => i.id === addTagInput.dataset.id);
     if (item && item.metadata) {
       if (!item.metadata.keywords) item.metadata.keywords = [];
-      if (!item.metadata.keywords.map(k=>k.toLowerCase()).includes(tag.toLowerCase())) {
+      if (!item.metadata.keywords.map(k => k.toLowerCase()).includes(tag.toLowerCase())) {
         item.metadata.keywords.push(tag);
+        _tableRowCache.delete(item.id); // invalidate only this row
         throttledRender();
       }
     }
@@ -658,8 +1081,10 @@ function setupTableEventDelegation() {
     const keywordChipRemove = e.target.closest('.keyword-chip-remove');
     if (keywordChipRemove) {
       const item = state.mediaItems.find(i => i.id === keywordChipRemove.dataset.itemId);
-      if (item && item.metadata && item.metadata.keywords)
+      if (item && item.metadata && item.metadata.keywords) {
         item.metadata.keywords.splice(parseInt(keywordChipRemove.dataset.kwIdx, 10), 1);
+        _tableRowCache.delete(item.id); // invalidate only this row
+      }
       throttledRender();
       return;
     }
@@ -703,7 +1128,7 @@ function setupTableEventDelegation() {
 }
 
 function setupGridEventDelegation() {
-  const gridEl = document.getElementById('grid-view-container');
+  const gridEl = document.getElementById('grid-view-container') || document.getElementById('view-grid-container');
   if (!gridEl) return;
 
   gridEl.addEventListener('click', (e) => {
@@ -716,8 +1141,13 @@ function setupGridEventDelegation() {
 
     const card = e.target.closest('.grid-card');
     if (card) {
-      if (state.selectedItemIds.has(card.dataset.id)) state.selectedItemIds.delete(card.dataset.id);
-      else state.selectedItemIds.add(card.dataset.id);
+      // Use data-card-id (new diff-based attribute)
+      const id = card.dataset.cardId;
+      if (!id) return;
+      if (state.selectedItemIds.has(id)) state.selectedItemIds.delete(id);
+      else state.selectedItemIds.add(id);
+      // Invalidate cache for this card so it re-renders with correct selected class
+      _gridCardCache.delete(id);
       card.classList.toggle('selected');
       updateStatsBar();
       return;
@@ -725,53 +1155,112 @@ function setupGridEventDelegation() {
   });
 }
 
-// ─── Grid View ─────────────────────────────────────────────────────────────
+
+// ─── Grid View — diff-based update ────────────────────────────────────────
+const _gridCardCache = new Map();
+
+function buildGridCardHtml(item, index) {
+  const isSelected = state.selectedItemIds.has(item.id);
+  const meta = item.metadata || {};
+  const kwCount = (meta.keywords || []).length;
+
+  let thumbHtml;
+  if (item.url) {
+    thumbHtml = `<img src="${item.url}" class="card-thumb-img" alt="${escHtml(item.name)}" loading="lazy" decoding="async">`;
+  } else {
+    thumbHtml = `<div class="vector-placeholder-box"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg><span class="vector-format-label">${item.format}</span></div>`;
+  }
+
+  const borderStyle = item.status === 'failed' ? ` style="border-color:rgba(239,68,68,0.5)"` : '';
+  const selectedClass = isSelected ? ' selected' : '';
+
+  return `<div class="grid-card${selectedClass}" data-card-id="${item.id}"${borderStyle}>
+    <div class="card-thumb-container">
+      ${thumbHtml}
+      <span class="card-number-badge">#${index + 1}</span>
+      <div class="card-actions-overlay"><button class="card-remove-btn" data-id="${item.id}">×</button></div>
+    </div>
+    <div class="card-content">
+      <div class="card-filename" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
+      <div class="card-meta-line">
+        <span class="status-tag status-${item.status}">${item.status}</span>
+        <span style="font-size:0.7rem;color:var(--text-muted)">${(item.size / 1048576).toFixed(1)}MB · ${kwCount}kw</span>
+      </div>
+      ${item._error ? `<div style="font-size:0.65rem;color:var(--accent-rose);margin-top:4px">⚠ ${escHtml(item._error.substring(0, 60))}</div>` : ''}
+    </div></div>`;
+}
+
 function renderGridView(items) {
   const gridEl = document.getElementById('grid-view-container');
   if (!gridEl) return;
 
   if (items.length === 0) {
+    _gridCardCache.clear();
     gridEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)">No matching assets.</div>`;
     return;
   }
 
-  const frag = document.createDocumentFragment();
-  items.forEach((item, index) => {
-    const isSelected = state.selectedItemIds.has(item.id);
-    const meta = item.metadata || {};
-    const card = document.createElement('div');
-    card.className = `grid-card${isSelected?' selected':''}`;
-    card.dataset.id = item.id;
-    if (item.status === 'failed') card.style.borderColor = 'rgba(239,68,68,0.5)';
+  const currentIds = new Set(items.map(i => i.id));
 
-    let thumbHtml;
-    if (item.url) {
-      thumbHtml = `<img src="${item.url}" class="card-thumb-img" alt="${escHtml(item.name)}" loading="lazy" decoding="async">`;
-    } else {
-      thumbHtml = `<div class="vector-placeholder-box"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg><span class="vector-format-label">${item.format}</span></div>`;
+  // Remove stale cards
+  for (const [id] of _gridCardCache) {
+    if (!currentIds.has(id)) {
+      const old = gridEl.querySelector(`[data-card-id="${id}"]`);
+      if (old) old.remove();
+      _gridCardCache.delete(id);
     }
-    const kwCount = (meta.keywords || []).length;
-    card.innerHTML = `
-      <div class="card-thumb-container">
-        ${thumbHtml}
-        <span class="card-number-badge">#${index+1}</span>
-        <div class="card-actions-overlay"><button class="card-remove-btn" data-id="${item.id}">×</button></div>
-      </div>
-      <div class="card-content">
-        <div class="card-filename" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
-        <div class="card-meta-line">
-          <span class="status-tag status-${item.status}">${item.status}</span>
-          <span style="font-size:0.7rem;color:var(--text-muted)">${(item.size/1048576).toFixed(1)}MB · ${kwCount}kw</span>
-        </div>
-        ${item._error ? `<div style="font-size:0.65rem;color:var(--accent-rose);margin-top:4px">⚠ ${escHtml(item._error.substring(0,60))}</div>` : ''}
-      </div>`;
+  }
 
-    frag.appendChild(card);
-  });
+  // Patch or insert cards
+  let prevEl = null;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const html = buildGridCardHtml(item, i);
+    const cached = _gridCardCache.get(item.id);
+    const existingCard = gridEl.querySelector(`[data-card-id="${item.id}"]`);
 
-  gridEl.innerHTML = '';
-  gridEl.appendChild(frag);
+    if (cached === html && existingCard) {
+      prevEl = existingCard;
+      continue;
+    }
+
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const newCard = template.content.firstElementChild;
+
+    if (existingCard) {
+      gridEl.replaceChild(newCard, existingCard);
+    } else {
+      // New card — add entry animation
+      newCard.classList.add('card-entering');
+      if (prevEl && prevEl.nextSibling) {
+        gridEl.insertBefore(newCard, prevEl.nextSibling);
+      } else if (!prevEl) {
+        gridEl.prepend(newCard);
+      } else {
+        gridEl.appendChild(newCard);
+      }
+      newCard.addEventListener('animationend', () => newCard.classList.remove('card-entering'), { once: true });
+    }
+
+    // State-specific animation classes on the card
+    newCard.classList.remove('card-processing', 'card-just-ready', 'card-just-failed');
+    if (item.status === 'processing') {
+      newCard.classList.add('card-processing');
+    } else if (item.status === 'ready' && !existingCard) {
+      // Only flash success halo on first render as ready (new generation)
+      newCard.classList.add('card-just-ready');
+      newCard.addEventListener('animationend', () => newCard.classList.remove('card-just-ready'), { once: true });
+    } else if (item.status === 'failed' && !existingCard) {
+      newCard.classList.add('card-just-failed');
+      newCard.addEventListener('animationend', () => newCard.classList.remove('card-just-failed'), { once: true });
+    }
+
+    _gridCardCache.set(item.id, html);
+    prevEl = newCard;
+  }
 }
+
 
 // ─── Delete ────────────────────────────────────────────────────────────────
 function deleteItem(id) {
@@ -789,7 +1278,11 @@ function deselectAll() { state.selectedItemIds.clear(); renderMetadata(); update
 function removeSelected() {
   if (!state.selectedItemIds.size) { showToast('No assets selected', 'info'); return; }
   const count = state.selectedItemIds.size;
-  state.mediaItems.filter(i => state.selectedItemIds.has(i.id)).forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
+  state.mediaItems.filter(i => state.selectedItemIds.has(i.id)).forEach(i => {
+    if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url);
+    _tableRowCache.delete(i.id);
+    _gridCardCache.delete(i.id);
+  });
   state.mediaItems = state.mediaItems.filter(i => !state.selectedItemIds.has(i.id));
   state.selectedItemIds.clear();
   updateUI();
@@ -800,6 +1293,7 @@ function clearAll() {
   if (state.mediaItems.length >= 5 && !confirm(`Clear all ${state.mediaItems.length} assets?`)) return;
   state.mediaItems.forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
   state.mediaItems = []; state.selectedItemIds.clear();
+  _tableRowCache.clear(); _gridCardCache.clear();
   updateUI(); showToast('Cleared all assets', 'info');
 }
 
@@ -1005,25 +1499,167 @@ function setupEventListeners() {
   // Nav
   const modal = id => document.getElementById(id);
   document.getElementById('nav-btn-tutorial')?.addEventListener('click', () => openModal(modal('modal-tutorial')));
-  document.getElementById('nav-btn-contact')?.addEventListener('click',  () => openModal(modal('modal-contact')));
-  document.getElementById('nav-btn-pricing')?.addEventListener('click',  () => openModal(modal('modal-pricing')));
-  document.getElementById('nav-btn-login')?.addEventListener('click',    () => { switchAuthTab('login');  openModal(modal('modal-auth')); });
-  document.getElementById('nav-btn-signup')?.addEventListener('click',   () => { switchAuthTab('signup'); openModal(modal('modal-auth')); });
+  document.getElementById('nav-btn-contact')?.addEventListener('click',  (e) => {
+    e.preventDefault();
+    window.open('https://wa.me/8801741783521', '_blank', 'noopener,noreferrer');
+  });
+  document.getElementById('nav-btn-pricing')?.addEventListener('click',  () => { openModal(modal('modal-pricing')); updatePricingModalUI(); });
+  document.getElementById('nav-btn-login')?.addEventListener('click',    () => openAuthModal('login'));
+  document.getElementById('nav-btn-signup')?.addEventListener('click',   () => openAuthModal('signup'));
+  document.getElementById('btn-user-profile')?.addEventListener('click', () => openAuthModal('profile'));
 
-  // AI Settings button in header/nav
-  document.getElementById('nav-btn-ai-settings')?.addEventListener('click', () => openModal(modal('modal-ai-settings')));
+  // AI Settings button in header/nav (Requires Auth)
+  document.getElementById('nav-btn-ai-settings')?.addEventListener('click', () => {
+    if (!isLoggedIn()) {
+      openAuthModal('login');
+      showToast('Please login or sign up to access Gemini API key settings.', 'info');
+      return;
+    }
+    openModal(modal('modal-ai-settings'));
+  });
 
   // Mobile drawer
-  ['tutorial','contact','pricing'].forEach(key => {
-    document.getElementById(`mobile-nav-${key}`)?.addEventListener('click', () => {
-      modal('mobile-nav-drawer')?.classList.remove('active');
-      openModal(modal(`modal-${key}`));
-    });
+  document.getElementById('mobile-nav-tutorial')?.addEventListener('click', () => {
+    modal('mobile-nav-drawer')?.classList.remove('active');
+    openModal(modal('modal-tutorial'));
+  });
+  document.getElementById('mobile-nav-contact')?.addEventListener('click', () => {
+    modal('mobile-nav-drawer')?.classList.remove('active');
+    window.open('https://wa.me/8801741783521', '_blank', 'noopener,noreferrer');
+  });
+  document.getElementById('mobile-nav-pricing')?.addEventListener('click', () => {
+    modal('mobile-nav-drawer')?.classList.remove('active');
+    openModal(modal('modal-pricing'));
+    updatePricingModalUI();
   });
   document.getElementById('mobile-nav-login')?.addEventListener('click', () => {
     modal('mobile-nav-drawer')?.classList.remove('active');
-    switchAuthTab('login'); openModal(modal('modal-auth'));
+    openAuthModal('login');
   });
+
+  // Profile & Plan event listeners
+  document.getElementById('profile-update-form')?.addEventListener('submit', handleProfileSave);
+  document.getElementById('btn-manage-plan-from-profile')?.addEventListener('click', () => {
+    closeModal(modal('modal-auth'));
+    openModal(modal('modal-pricing'));
+    updatePricingModalUI();
+  });
+
+  // Admin Panel listeners
+  document.getElementById('btn-admin-panel')?.addEventListener('click', () => {
+    openModal(modal('modal-admin'));
+    renderAdminDashboard();
+    renderAdminPaymentsList();
+  });
+  document.getElementById('btn-close-admin')?.addEventListener('click', () => closeModal(modal('modal-admin')));
+  document.getElementById('btn-admin-refresh')?.addEventListener('click', () => {
+    const searchVal = document.getElementById('admin-user-search')?.value || '';
+    renderAdminDashboard(searchVal);
+  });
+  document.getElementById('btn-admin-refresh-payments')?.addEventListener('click', () => {
+    renderAdminPaymentsList();
+  });
+  document.getElementById('admin-user-search')?.addEventListener('input', e => {
+    renderAdminDashboard(e.target.value);
+  });
+  document.getElementById('admin-tab-users')?.addEventListener('click', () => {
+    document.getElementById('admin-tab-users')?.classList.add('active');
+    document.getElementById('admin-tab-payments')?.classList.remove('active');
+    document.getElementById('admin-section-users').style.display = 'block';
+    document.getElementById('admin-section-payments').style.display = 'none';
+  });
+  document.getElementById('admin-tab-payments')?.addEventListener('click', () => {
+    document.getElementById('admin-tab-payments')?.classList.add('active');
+    document.getElementById('admin-tab-users')?.classList.remove('active');
+    document.getElementById('admin-section-payments').style.display = 'block';
+    document.getElementById('admin-section-users').style.display = 'none';
+    renderAdminPaymentsList();
+  });
+
+  // Mode selection listeners (Metadata vs Image to Prompt)
+  document.getElementById('sidebar-mode-metadata')?.addEventListener('click', () => switchAppMode('metadata'));
+  document.getElementById('sidebar-mode-img2prompt')?.addEventListener('click', () => switchAppMode('img2prompt'));
+
+  // Image to Prompt event listeners
+  document.getElementById('btn-browse-img2prompt')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('img2prompt-file-input')?.click();
+  });
+  document.getElementById('img2prompt-file-input')?.addEventListener('change', async (e) => {
+    const files = e.target.files;
+    if (files && files.length) handleImageToPromptUploadBatch(files);
+    e.target.value = ''; // reset for re-selection
+  });
+  document.getElementById('btn-generate-all-img2prompt')?.addEventListener('click', () => {
+    processImg2PromptQueue();
+  });
+  document.getElementById('btn-copy-all-img2prompt')?.addEventListener('click', () => {
+    const readyItems = img2promptState.items.filter(i => i.status === 'ready' && i.prompt);
+    if (!readyItems.length) {
+      showToast('No generated prompts to copy', 'info');
+      return;
+    }
+    const allText = readyItems.map(i => `// ${i.name}\n${i.prompt}`).join('\n\n');
+    navigator.clipboard.writeText(allText);
+    showToast(`Copied ${readyItems.length} prompts to clipboard!`, 'success');
+  });
+  document.getElementById('btn-clear-img2prompt')?.addEventListener('click', () => {
+    img2promptState.items.forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
+    img2promptState.items = [];
+    renderImg2PromptCards();
+    showToast('Cleared all image prompts', 'info');
+  });
+  document.getElementById('img2prompt-cards-list')?.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.btn-copy-single-prompt');
+    if (copyBtn) {
+      const item = img2promptState.items.find(i => i.id === copyBtn.dataset.id);
+      if (item && item.prompt) {
+        navigator.clipboard.writeText(item.prompt);
+        showToast(`Copied prompt for ${item.name}!`, 'success');
+      }
+      return;
+    }
+
+    const removeBtn = e.target.closest('.btn-remove-prompt');
+    if (removeBtn) {
+      const id = removeBtn.dataset.id;
+      const item = img2promptState.items.find(i => i.id === id);
+      if (item && item.url && item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
+      img2promptState.items = img2promptState.items.filter(i => i.id !== id);
+      renderImg2PromptCards();
+    }
+  });
+
+  // Customization sliders listeners & value badge sync
+  const sliderMap = {
+    'setting-title-min-words': 'val-title-min-words',
+    'setting-title-max-words': 'val-title-max-words',
+    'setting-kw-min': 'val-kw-min',
+    'setting-kw-max': 'val-kw-max',
+    'setting-desc-min-words': 'val-desc-min-words',
+    'setting-desc-max-words': 'val-desc-max-words'
+  };
+
+  Object.entries(sliderMap).forEach(([inputId, badgeId]) => {
+    const inputEl = document.getElementById(inputId);
+    const badgeEl = document.getElementById(badgeId);
+    if (!inputEl) return;
+
+    const updateBadge = () => {
+      if (badgeEl) badgeEl.textContent = inputEl.value;
+    };
+
+    inputEl.addEventListener('input', updateBadge);
+    inputEl.addEventListener('change', () => {
+      updateBadge();
+      const val = parseInt(inputEl.value, 10);
+      showToast(`Customization updated: ${inputId.replace('setting-', '')} = ${val}`, 'info');
+    });
+  });
+
+  // Manual Payment Modal listeners
+  document.getElementById('btn-close-manual-payment')?.addEventListener('click', () => closeModal(modal('modal-manual-payment')));
+  document.getElementById('manual-payment-form')?.addEventListener('submit', handleManualPaymentSubmit);
 
   // Tutorial
   document.getElementById('btn-close-tutorial')?.addEventListener('click', () => closeModal(modal('modal-tutorial')));
@@ -1046,10 +1682,22 @@ function setupEventListeners() {
   // Pricing, Auth
   document.getElementById('btn-close-pricing')?.addEventListener('click', () => closeModal(modal('modal-pricing')));
   document.getElementById('btn-close-auth')?.addEventListener('click',    () => closeModal(modal('modal-auth')));
+
+  // Pricing Plan buttons & cards click handlers
+  ['free', 'pro', 'business'].forEach(planId => {
+    document.getElementById(`btn-plan-${planId}`)?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleSelectPlan(planId);
+    });
+    document.getElementById(`pricing-card-${planId}`)?.addEventListener('click', () => {
+      handleSelectPlan(planId);
+    });
+  });
+
   document.getElementById('auth-tab-login')?.addEventListener('click',    () => switchAuthTab('login'));
   document.getElementById('auth-tab-signup')?.addEventListener('click',   () => switchAuthTab('signup'));
-  document.getElementById('auth-login-form')?.addEventListener('submit',  e => { e.preventDefault(); closeModal(modal('modal-auth')); showToast('Logged in!', 'success'); });
-  document.getElementById('auth-signup-form')?.addEventListener('submit', e => { e.preventDefault(); closeModal(modal('modal-auth')); showToast('Account created!', 'success'); });
+  document.getElementById('auth-login-form')?.addEventListener('submit',  handleLoginSubmit);
+  document.getElementById('auth-signup-form')?.addEventListener('submit', handleSignupSubmit);
 
   // AI Settings Modal
   document.getElementById('btn-close-ai-settings')?.addEventListener('click', () => closeModal(modal('modal-ai-settings')));
@@ -1080,18 +1728,21 @@ function setupEventListeners() {
     dropZone.addEventListener('dragleave', e => { dragCounter--; if (dragCounter<=0){dragCounter=0;dropZone.classList.remove('drag-over');} });
     dropZone.addEventListener('drop', e => {
       e.preventDefault(); e.stopPropagation(); dragCounter=0; dropZone.classList.remove('drag-over');
-      if (state.activeAssetTab === 'videos') { showToast('Video support coming soon!','info'); return; }
       processFiles(Array.from(e.dataTransfer.files));
+    });
+    dropZone.addEventListener('click', e => {
+      // Prevent double trigger if they clicked the existing button or info cards
+      if (e.target.closest('#btn-browse-files') || e.target.closest('.info-card')) return;
+      document.getElementById('file-input')?.click();
     });
   }
 
   // File input
-  document.getElementById('btn-browse-files')?.addEventListener('click', () => {
-    if (state.activeAssetTab==='videos'){showToast('Video support coming soon!','info');return;}
+  document.getElementById('btn-browse-files')?.addEventListener('click', (e) => {
+    e.stopPropagation(); // prevent bubbling to dropZone
     document.getElementById('file-input')?.click();
   });
   document.getElementById('btn-upload-more')?.addEventListener('click', () => {
-    if (state.activeAssetTab==='videos'){showToast('Video support coming soon!','info');return;}
     updateUploadZoneForTab();
     document.getElementById('file-input')?.click();
   });
@@ -1100,7 +1751,6 @@ function setupEventListeners() {
     if (files.length) processFiles(files);
     e.target.value = '';
   });
-  document.getElementById('btn-load-samples')?.addEventListener('click', loadSampleBatch);
 
   // Toolbar
   document.getElementById('btn-generate-ai')?.addEventListener('click',     triggerAiGeneration);
@@ -1124,6 +1774,9 @@ function setupEventListeners() {
   document.getElementById('status-filter-select')?.addEventListener('change', e => {
     state.statusFilter = e.target.value; throttledRender();
   });
+
+  // Logout
+  document.getElementById('btn-logout')?.addEventListener('click', handleLogout);
 
   // Delegated event listeners
   setupTableEventDelegation();
@@ -1158,8 +1811,18 @@ function handleSaveApiKey() {
   setApiKey(input.value.trim());
   input.value = ''; // clear from DOM
   input.type = 'password';
-  showToast('API key saved for this session', 'success');
-  updateConnectionStatus('saved');
+  state.geminiConnected = true;
+  updateAiStatusBadge();
+  // Flash the badge with the just-connected radiate animation
+  const badge = document.getElementById('ai-status-badge');
+  if (badge) {
+    badge.classList.remove('just-connected');
+    void badge.offsetWidth; // force reflow to restart animation
+    badge.classList.add('just-connected');
+    badge.addEventListener('animationend', () => badge.classList.remove('just-connected'), { once: true });
+  }
+  showToast('API key saved for this session — Gemini ready!', 'success');
+  updateConnectionStatus('connected');
 }
 
 function handleClearApiKey() {
@@ -1182,7 +1845,7 @@ async function handleTestConnection() {
   }
 
   const btn = document.getElementById('btn-test-connection');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="30 30"></circle></svg> Testing…'; }
+  setBtnLoading(btn, true);
 
   updateConnectionStatus('testing');
 
@@ -1193,6 +1856,14 @@ async function handleTestConnection() {
       state.geminiConnected = true;
       updateConnectionStatus('connected');
       updateAiStatusBadge();
+      // Flash just-connected radiate animation
+      const badge = document.getElementById('ai-status-badge');
+      if (badge) {
+        badge.classList.remove('just-connected');
+        void badge.offsetWidth;
+        badge.classList.add('just-connected');
+        badge.addEventListener('animationend', () => badge.classList.remove('just-connected'), { once: true });
+      }
       showToast('✓ Gemini Connected!', 'success');
     } else {
       state.geminiConnected = false;
@@ -1205,7 +1876,7 @@ async function handleTestConnection() {
     updateConnectionStatus('failed', 'Connection test failed');
     updateAiStatusBadge();
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = 'Test Connection'; }
+    setBtnLoading(btn, false);
   }
 }
 
@@ -1225,8 +1896,439 @@ function updateConnectionStatus(state_str, message) {
   }
 }
 
+// ─── Auth Handlers (real API calls) ────────────────────────────────────────
+
+async function handleLoginSubmit(e) {
+  e.preventDefault();
+  const emailEl    = document.getElementById('login-email');
+  const passEl     = document.getElementById('login-password');
+  const errorEl    = document.getElementById('login-error');
+  const submitBtn  = document.getElementById('btn-login-submit') || e.target.querySelector('button[type="submit"]');
+
+  const emailVal = emailEl?.value.trim()    || '';
+  const passVal  = passEl?.value            || '';
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  setBtnLoading(submitBtn, true);
+
+  const result = await login({ email: emailVal, password: passVal });
+
+  setBtnLoading(submitBtn, false);
+
+  if (result.ok) {
+    closeModal(document.getElementById('modal-auth'));
+    updateAuthNav();
+    showToast(`Welcome back, ${result.user.fullName || result.user.email}!`, 'success');
+    if (emailEl) emailEl.value = '';
+    if (passEl)  passEl.value  = '';
+  } else {
+    if (errorEl) { errorEl.textContent = result.message; errorEl.style.display = 'block'; }
+    showToast(result.message, 'error');
+  }
+}
+
+async function handleSignupSubmit(e) {
+  e.preventDefault();
+  const nameEl    = document.getElementById('signup-fullname') || document.getElementById('signup-name');
+  const emailEl   = document.getElementById('signup-email');
+  const passEl    = document.getElementById('signup-password');
+  const errorEl   = document.getElementById('signup-error');
+  const submitBtn = document.getElementById('btn-signup-submit') || e.target.querySelector('button[type="submit"]');
+
+  const nameVal  = nameEl?.value.trim()  || '';
+  const emailVal = emailEl?.value.trim() || '';
+  const passVal  = passEl?.value         || '';
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  setBtnLoading(submitBtn, true);
+
+  const result = await signup({ fullName: nameVal, email: emailVal, password: passVal });
+
+  setBtnLoading(submitBtn, false);
+
+  if (result.ok) {
+    closeModal(document.getElementById('modal-auth'));
+    updateAuthNav();
+    showToast(`Account created! Welcome, ${result.user.fullName || result.user.email}! 🎉`, 'success');
+    if (nameEl)  nameEl.value  = '';
+    if (emailEl) emailEl.value = '';
+    if (passEl)  passEl.value  = '';
+  } else {
+    if (errorEl) { errorEl.textContent = result.message; errorEl.style.display = 'block'; }
+    showToast(result.message, 'error');
+  }
+}
+
+async function handleLogout() {
+  await logout();
+  updateAuthNav();
+  showToast('Logged out successfully.', 'info');
+}
+
+async function handleProfileSave(e) {
+  e.preventDefault();
+  const inputEl  = document.getElementById('profile-fullname-input');
+  const errorEl  = document.getElementById('profile-error');
+  const btn      = document.getElementById('btn-save-profile');
+  const val      = inputEl?.value.trim() || '';
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  setBtnLoading(btn, true);
+
+  const res = await updateProfile({ fullName: val });
+  setBtnLoading(btn, false);
+
+  if (res.ok) {
+    updateAuthNav();
+    renderProfileView(res.user);
+    showToast('Profile updated successfully!', 'success');
+  } else {
+    if (errorEl) { errorEl.textContent = res.message; errorEl.style.display = 'block'; }
+    showToast(res.message, 'error');
+  }
+}
+
+async function handleSelectPlan(plan) {
+  const user = getCurrentUser();
+  if (!user) {
+    closeModal(document.getElementById('modal-pricing'));
+    openAuthModal('login');
+    showToast('Please login or sign up to select a subscription plan.', 'info');
+    return;
+  }
+
+  if (user.plan === plan) {
+    showToast(`You are currently on the ${plan.toUpperCase()} plan.`, 'info');
+    return;
+  }
+
+  if (plan === 'free') {
+    const res = await selectUserPlan('free');
+    if (res.ok) {
+      updateAuthNav();
+      updatePricingModalUI();
+      showToast('Switched to Free plan.', 'success');
+    } else {
+      showToast(res.message || 'Failed to switch to Free plan.', 'error');
+    }
+    return;
+  }
+
+  // Open Manual bKash/Nagad Payment Submission Modal for Pro & Business plans
+  openManualPaymentModal(plan);
+}
+
+function openManualPaymentModal(plan) {
+  const planDisplay = document.getElementById('manual-plan-display');
+  const planInput   = document.getElementById('manual-plan-input');
+  const amountInput = document.getElementById('manual-amount-input');
+  const errorEl     = document.getElementById('manual-payment-error');
+
+  const targetPlan = String(plan || 'pro').toLowerCase();
+  const price = targetPlan === 'business' ? 300 : 150;
+
+  if (planDisplay) planDisplay.value = `${targetPlan.toUpperCase()} Plan — ৳${price} BDT`;
+  if (planInput) planInput.value = targetPlan;
+  if (amountInput) amountInput.value = price;
+  if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+
+  closeModal(document.getElementById('modal-pricing'));
+  openModal(document.getElementById('modal-manual-payment'));
+}
+
+async function handleManualPaymentSubmit(e) {
+  e.preventDefault();
+  const plan          = document.getElementById('manual-plan-input')?.value;
+  const paymentMethod = document.getElementById('manual-method-select')?.value;
+  const senderNumber  = document.getElementById('manual-sender-input')?.value;
+  const amount        = document.getElementById('manual-amount-input')?.value;
+  const trxId         = document.getElementById('manual-trx-input')?.value;
+  const btn           = document.getElementById('btn-submit-manual-payment');
+  const errorEl       = document.getElementById('manual-payment-error');
+
+  if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+  setBtnLoading(btn, true);
+
+  const res = await submitManualPayment({ plan, paymentMethod, senderNumber, amount, trxId });
+
+  setBtnLoading(btn, false);
+
+  if (res.ok) {
+    closeModal(document.getElementById('modal-manual-payment'));
+    const form = document.getElementById('manual-payment-form');
+    if (form) form.reset();
+    showToast(res.message || 'Payment submitted successfully! Admin will verify your payment.', 'success');
+  } else {
+    if (errorEl) { errorEl.textContent = res.message; errorEl.style.display = 'block'; }
+    showToast(res.message, 'error');
+  }
+}
+
 // ─── Escape HTML ────────────────────────────────────────────────────────────
 function escHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+// ─── Mode Switcher & Image to Prompt ───────────────────────────────────────
+function switchAppMode(mode) {
+  state.activeAppMode = mode;
+  const metaBtn   = document.getElementById('sidebar-mode-metadata');
+  const promptBtn = document.getElementById('sidebar-mode-img2prompt');
+  const metaPanel   = document.getElementById('workspace-metadata');
+  const promptPanel = document.getElementById('workspace-img2prompt');
+
+  if (mode === 'img2prompt') {
+    metaBtn?.classList.remove('active');
+    promptBtn?.classList.add('active');
+    if (metaPanel) metaPanel.style.display = 'none';
+    if (promptPanel) promptPanel.style.display = 'block';
+  } else {
+    promptBtn?.classList.remove('active');
+    metaBtn?.classList.add('active');
+    if (promptPanel) promptPanel.style.display = 'none';
+    if (metaPanel) metaPanel.style.display = 'block';
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = err => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── Image to Prompt Batch & Clipboard Paste System ──────────────────────
+const img2promptState = {
+  items: []
+};
+
+// Global Clipboard Paste Listener (Ctrl+V for image files)
+window.addEventListener('paste', async (e) => {
+  const items = e.clipboardData?.items;
+  if (!items || !items.length) return;
+
+  const pastedFiles = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.type && item.type.startsWith('image/')) {
+      const fileObj = item.getAsFile();
+      if (fileObj) {
+        const ext = fileObj.type.split('/')[1] || 'png';
+        const file = new File([fileObj], `pasted-image-${Date.now()}-${i + 1}.${ext}`, { type: fileObj.type });
+        pastedFiles.push(file);
+      }
+    }
+  }
+
+  if (pastedFiles.length > 0) {
+    if (state.currentAppMode === 'img2prompt') {
+      showToast(`Pasted ${pastedFiles.length} image(s) from clipboard!`, 'info');
+      handleImageToPromptUploadBatch(pastedFiles);
+    } else {
+      showToast(`Pasted ${pastedFiles.length} image(s) from clipboard into workspace!`, 'info');
+      handleFileInput(pastedFiles);
+    }
+  }
+});
+
+async function handleImageToPromptUploadBatch(files) {
+  if (!files || !files.length) return;
+  const fileArray = Array.from(files).filter(f => f && f.type && f.type.startsWith('image/'));
+  if (!fileArray.length) {
+    showToast('Please select valid image files (JPG, PNG, WEBP, TIFF)', 'warning');
+    return;
+  }
+
+  if (!hasApiKey()) {
+    openModal(document.getElementById('modal-ai-settings'));
+    showToast('Please add your Gemini API key first.', 'warning');
+    return;
+  }
+
+  const newItems = fileArray.map(file => ({
+    id: `img2prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    file,
+    name: file.name,
+    size: file.size,
+    url: URL.createObjectURL(file),
+    status: 'waiting',
+    prompt: null,
+    error: null
+  }));
+
+  img2promptState.items.push(...newItems);
+  renderImg2PromptCards();
+}
+
+async function processImg2PromptQueue() {
+  if (!hasApiKey()) {
+    openModal(document.getElementById('modal-ai-settings'));
+    showToast('Please add your Gemini API key first.', 'warning');
+    return;
+  }
+
+  const itemsToProcess = img2promptState.items.filter(i => i.status === 'waiting');
+  if (!itemsToProcess.length) return;
+
+  for (const item of itemsToProcess) {
+    item.status = 'processing';
+    renderImg2PromptCards();
+
+    try {
+      const base64Image = await fileToBase64(item.file);
+      const mimeType = item.file.type || 'image/jpeg';
+
+      const platformSpec = PLATFORMS.general || {
+        id: 'general', name: 'General',
+        keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
+      };
+
+      const res = await fetch('/api/gemini/generate', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-gemini-api-key': getSessionKey()
+        },
+        body: JSON.stringify({
+          apiKey: getSessionKey(),
+          base64Image,
+          mimeType,
+          filename: item.name,
+          platform: platformSpec,
+          mode: 'img2prompt'
+        })
+      });
+
+      const data = await res.json();
+      if (data.ok && data.data) {
+        const d = data.data;
+        const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
+
+        const promptParts = [];
+        if (d.title) promptParts.push(d.title);
+        if (d.description && d.description !== d.title) promptParts.push(d.description);
+        if (d.category && d.category !== 'General') promptParts.push(`Style: ${d.category}`);
+        if (kwStr) promptParts.push(`Visual details: ${kwStr}`);
+
+        item.prompt = promptParts.join('. ') + '.';
+        item.status = 'ready';
+        item.error = null;
+      } else {
+        item.status = 'failed';
+        item.error = data.message || 'Generation failed';
+      }
+    } catch (err) {
+      item.status = 'failed';
+      item.error = err.message || 'Image to prompt conversion failed';
+    }
+
+    renderImg2PromptCards();
+  }
+}
+
+function renderImg2PromptCards() {
+  const container = document.getElementById('img2prompt-cards-list');
+  const wrapper = document.getElementById('img2prompt-results-wrapper');
+  const titleEl = document.getElementById('img2prompt-results-title');
+
+  if (!container || !wrapper) return;
+
+  if (img2promptState.items.length === 0) {
+    wrapper.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  wrapper.style.display = 'block';
+  if (titleEl) titleEl.textContent = `Generated Prompts (${img2promptState.items.length} ${img2promptState.items.length === 1 ? 'image' : 'images'})`;
+
+  const btnGenerateAll = document.getElementById('btn-generate-all-img2prompt');
+  const hasWaiting = img2promptState.items.some(i => i.status === 'waiting');
+  if (btnGenerateAll) {
+    if (hasWaiting) {
+      btnGenerateAll.style.display = 'inline-block';
+      const waitingCount = img2promptState.items.filter(i => i.status === 'waiting').length;
+      btnGenerateAll.textContent = `✨ Generate Prompts (${waitingCount})`;
+    } else {
+      btnGenerateAll.style.display = 'none';
+    }
+  }
+
+  container.innerHTML = img2promptState.items.map(item => {
+    const isProcessing = item.status === 'processing';
+    const isReady = item.status === 'ready';
+    const isFailed = item.status === 'failed';
+
+    let statusBadgeHtml;
+    if (isProcessing) {
+      statusBadgeHtml = `<span class="status-tag status-processing">Analyzing…</span>`;
+    } else if (isReady) {
+      statusBadgeHtml = `<span class="status-tag status-ready">✓ Ready</span>`;
+    } else if (isFailed) {
+      statusBadgeHtml = `<span class="status-tag status-failed">✕ Failed</span>`;
+    } else {
+      statusBadgeHtml = `<span class="status-tag status-waiting">Waiting</span>`;
+    }
+
+    let promptContentHtml;
+    if (isProcessing) {
+      promptContentHtml = `<span class="img2prompt-analyzing">Analyzing image visual features &amp; engineering detailed AI prompt <span class="loading-dots"><span></span><span></span><span></span></span></span>`;
+    } else if (isFailed) {
+      promptContentHtml = `<span style="color:var(--accent-rose)">Error: ${escHtml(item.error || 'Failed to generate prompt')}</span>`;
+    } else {
+      promptContentHtml = escHtml(item.prompt || 'No prompt generated');
+    }
+
+    return `<div class="img2prompt-card glass-panel" data-id="${item.id}" style="padding:16px;background:rgba(21, 32, 54, 0.88)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <img src="${item.url}" alt="${escHtml(item.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--glass-border)">
+          <div>
+            <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);word-break:break-all">${escHtml(item.name)}</div>
+            <div style="font-size:0.725rem;color:var(--text-muted)">${(item.size / 1048576).toFixed(2)} MB</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${statusBadgeHtml}
+          ${isReady ? `<button class="btn btn-secondary btn-sm btn-copy-single-prompt" data-id="${item.id}">📋 Copy</button>` : ''}
+          <button class="btn btn-icon-only btn-sm btn-remove-prompt" data-id="${item.id}" title="Remove">🗑️</button>
+        </div>
+      </div>
+      <div class="prompt-text-box" style="font-size:0.85rem;line-height:1.6;color:var(--text-secondary);background:var(--bg-main);padding:12px 14px;border-radius:8px;border:1px solid var(--glass-border);user-select:all;white-space:pre-wrap">${promptContentHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+// Drag and Drop listener for Image-to-Prompt drop zone
+setTimeout(() => {
+  const img2dropZone = document.getElementById('img2prompt-drop-zone');
+  if (img2dropZone) {
+    ['dragenter', 'dragover'].forEach(evt => {
+      img2dropZone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); img2dropZone.classList.add('drag-over'); });
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+      img2dropZone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); img2dropZone.classList.remove('drag-over'); });
+    });
+    img2dropZone.addEventListener('drop', (e) => {
+      const files = e.dataTransfer?.files;
+      if (files && files.length) handleImageToPromptUploadBatch(files);
+    });
+    img2dropZone.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-browse-img2prompt')) return;
+      document.getElementById('img2prompt-file-input')?.click();
+    });
+  }
+}, 0);
+
+// ─── Auto Initialization ───────────────────────────────────────────────────
+if (typeof window !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    initApp();
+  }
 }

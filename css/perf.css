@@ -1,0 +1,172 @@
+/* ==========================================================================
+   perf.css — Performance & Smoothness Overrides
+   Loaded after styles.css. Overrides expensive properties with GPU-friendly
+   alternatives. Does NOT change any colours, sizes, or layout.
+   ========================================================================== */
+
+/* ── 1. Promote background mesh to its own compositing layer ───────────────
+   background-attachment:fixed causes a full-page repaint on EVERY scroll
+   frame. Replace with a fixed pseudo-element that is composited separately. */
+body {
+  background-attachment: scroll;        /* remove fixed — kills scroll jank  */
+  background-image: none;               /* move mesh to ::before below        */
+  isolation: isolate;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--bg-gradient-mesh);
+  background-color: var(--bg-main);
+  will-change: transform;               /* own compositor layer               */
+  transform: translateZ(0);
+}
+
+/* ── 2. Replace 'transition: all' with specific properties ─────────────────
+   'transition: all' forces the browser to observe every CSS property.
+   Targeting only the properties we actually animate is dramatically cheaper. */
+.glass-panel,
+.sidebar-section-accordion,
+.platform-card,
+.btn,
+.mode-btn,
+.modal-overlay,
+.grid-card,
+.pricing-card,
+.nav-link-btn,
+.inline-input,
+.inline-select,
+.inline-textarea,
+.keyword-chip-remove,
+.add-tag-input,
+.asset-tab,
+.badge-pill {
+  transition:
+    background-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color     0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow       0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity          0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    transform        0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Modal overlay: only opacity + pointer-events need to change */
+.modal-overlay {
+  transition: opacity 0.2s ease !important;
+}
+
+/* ── 3. Reduce backdrop-filter cost ────────────────────────────────────────
+   Blur 12px on every card = many stacked GPU layers.
+   Reduce to 8px on regular panels; keep 16px only on the header (one layer). */
+.glass-panel {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.app-header {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Modals: keep blur strong since it's a single fullscreen overlay */
+.modal-overlay.active {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Sidebar accordion sections don't need blur at all (already inside glass-panel) */
+.sidebar-section-accordion {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ── 4. will-change on elements that actually move ─────────────────────────
+   Only set will-change during interaction (via :hover) to avoid keeping
+   layers alive permanently. */
+.btn:hover,
+.platform-card:hover,
+.grid-card:hover,
+.mode-btn:hover {
+  will-change: transform;
+}
+
+/* ── 5. contain: layout on heavy list sections ─────────────────────────────
+   Tells the browser that layout changes inside cannot affect outside elements,
+   preventing full-page reflow on every render tick. */
+#table-view-container,
+#grid-view-container,
+.app-sidebar,
+.platforms-section,
+.main-workspace {
+  contain: layout;
+}
+
+/* Toast container: paint isolated so toast animations don't repaint page */
+.toast-container {
+  contain: layout paint;
+}
+
+/* ── 6. GPU-accelerate modal open animation ─────────────────────────────────
+   Use transform instead of opacity alone so the element gets composited. */
+.modal-box {
+  transform: translateY(0) translateZ(0);
+}
+
+/* ── 7. Platform icon boxes: no transform recalc needed when not hovered ── */
+.platform-icon-box {
+  transition: transform 0.15s ease !important;
+  will-change: transform;
+}
+
+/* ── 8. Smooth scrollbar rendering ──────────────────────────────────────────
+   Hint browser to use GPU-accelerated scrolling on overflow containers. */
+.platform-grid-horizontal,
+#table-view-container,
+#grid-view-container,
+.modal-box {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* ── 9. image-rendering: smooth for thumbnails ──────────────────────────── */
+.card-thumb-img,
+img[loading="lazy"] {
+  image-rendering: auto;
+  content-visibility: auto;
+}
+
+/* ── 10. Remove all CSS animations on non-interactive open state of
+   accordion arrows — only animate on user interaction ────────────────────── */
+.sidebar-section-accordion .accordion-arrow {
+  transition: transform 0.2s ease !important;
+  will-change: transform;
+}
+
+/* ── 11. Reduce paint area for status tags (no blur, no shadow) ────────────
+   Status tags re-render frequently; keeping them paint-cheap matters. */
+.status-tag {
+  contain: strict;
+}
+
+/* ── 12. Prevent layout thrashing from textarea auto-resize ─────────────── */
+.inline-textarea,
+.desc-textarea {
+  resize: vertical;
+  overflow: auto;
+}
+
+/* ── 13. Toast animation: use transform (compositor) not margin/top ──────── */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px) translateZ(0); }
+  to   { opacity: 1; transform: translateY(0) translateZ(0); }
+}
+.toast {
+  animation: toastIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* ── 14. Sidebar slider thumb: compositor-layer transform only ───────────── */
+.sidebar-slider:hover::-webkit-slider-thumb {
+  will-change: transform;
+}

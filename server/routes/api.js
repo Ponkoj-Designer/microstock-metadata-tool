@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { testGeminiKey, generateGeminiMetadata } from '../services/geminiService.js';
+import { requireAuth } from '../middleware/auth.js';
+import { testGeminiKey, generateGeminiMetadata, generateGeminiMetadataBinary } from '../services/geminiService.js';
 
 export const apiRouter = Router();
 
@@ -8,27 +9,57 @@ apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '2.0.0' });
 });
 
-// POST /api/gemini/test
-apiRouter.post('/gemini/test', async (req, res) => {
-  const { apiKey } = req.body || {};
+// POST /api/gemini/test — Server-side Gemini API key ping verification (Requires Auth)
+apiRouter.post('/gemini/test', requireAuth, async (req, res) => {
+  const apiKey = req.body?.apiKey || req.headers['x-gemini-api-key'] || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(400).json({ ok: false, message: 'API key is required' });
+    return res.status(400).json({ ok: false, message: 'Gemini API key is required.' });
   }
   const result = await testGeminiKey(apiKey);
-  res.status(result.status || 200).json(result);
+  return res.status(result.status || 200).json(result);
 });
 
-// POST /api/gemini/generate
-apiRouter.post('/gemini/generate', async (req, res) => {
-  const { apiKey, base64Image, mimeType, filename, platform } = req.body || {};
-  if (!apiKey || !base64Image) {
-    return res.status(400).json({ ok: false, message: 'apiKey and base64Image are required' });
+// POST /api/gemini/generate-video — Binary stream endpoint for huge video payloads
+apiRouter.post('/gemini/generate-video', requireAuth, async (req, res) => {
+  const apiKey = req.headers['x-gemini-api-key'] || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+  const mimeType = req.headers['content-type'];
+  const filename = req.headers['x-filename'] || 'video.mp4';
+  const platformStr = req.headers['x-platform'] || '{}';
+  let platform = {};
+  try { platform = JSON.parse(platformStr); } catch(e){}
+
+  if (!apiKey) {
+    return res.status(400).json({ ok: false, message: 'Gemini API key is required.' });
   }
+  if (!Buffer.isBuffer(req.body)) {
+    return res.status(400).json({ ok: false, message: 'Invalid video binary payload.' });
+  }
+
   try {
-    const data = await generateGeminiMetadata({ apiKey, base64Image, mimeType, filename, platform });
-    res.json({ ok: true, data });
+    const data = await generateGeminiMetadataBinary({ apiKey, buffer: req.body, mimeType, filename, platform });
+    return res.json({ ok: true, data });
   } catch (err) {
-    res.status(500).json({ ok: false, message: err.message || 'Gemini generation failed' });
+    return res.status(500).json({ ok: false, message: err.message || 'Gemini video generation failed.' });
+  }
+});
+
+// POST /api/gemini/generate — Server-side Gemini metadata proxy endpoint (Requires Auth)
+apiRouter.post('/gemini/generate', requireAuth, async (req, res) => {
+  const { base64Image, mimeType, filename, platform, mode } = req.body || {};
+  const apiKey = req.body?.apiKey || req.headers['x-gemini-api-key'] || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return res.status(400).json({ ok: false, message: 'Gemini API key is required. Add your key in AI Settings.' });
+  }
+  if (!base64Image) {
+    return res.status(400).json({ ok: false, message: 'Image base64 data payload is required.' });
+  }
+
+  try {
+    const data = await generateGeminiMetadata({ apiKey, base64Image, mimeType, filename, platform, mode });
+    return res.json({ ok: true, data });
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: err.message || 'Gemini generation failed.' });
   }
 });
 

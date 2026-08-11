@@ -32,8 +32,15 @@ app.use(express.static('.'));
 app.use(authMiddleware);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/api/auth',    authRouter);   // signup, login, logout, me
-app.use('/api/user',    userRouter);   // user profile & subscription plan
-app.use('/api/payment', paymentRouter); // pricing plans, payment checkout & confirmation
-app.use('/api/admin',   adminRouter);  // protected admin endpoints (user management, plans, credits)
-app.use('/api',         apiRouter);    // existing API routes (health, gemini, csv)
+const mountApi = (routerApp, prefix) => {
+  routerApp.use(`${prefix}/auth`,    authRouter);   // signup, login, logout, me
+  routerApp.use(`${prefix}/user`,    userRouter);   // user profile & subscription plan
+  routerApp.use(`${prefix}/payment`, paymentRouter); // pricing plans, payment checkout & confirmation
+  routerApp.use(`${prefix}/admin`,   adminRouter);  // protected admin endpoints (user management, plans, credits)
+  routerApp.use(`${prefix}`,         apiRouter);    // existing API routes (health, gemini, csv)
+};
+
+// Mount at all possible Netlify/serverless base paths
+mountApi(app, '/api');
+mountApi(app, '/.netlify/functions/api');
+mountApi(app, ''); // Catch-all for when serverless-http completely strips the base path

@@ -515,7 +515,10 @@
         <h3 class="modal-title">⚙️ Gemini AI Settings (BYOK)</h3>
         <button class="modal-close-btn" id="btn-close-ai-settings">✕</button>
       </div>
-      <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:14px">Bring Your Own Key (BYOK): API key stored in session memory only.</p>
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:14px">
+        <p style="font-size:0.8rem;color:var(--text-secondary);margin:0;max-width:70%;">Bring Your Own Key (BYOK): API key stored in session memory only.</p>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="text-decoration:none;padding:4px 8px;font-size:0.75rem;">Get API Key &rarr;</a>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
         <input type="password" id="gemini-api-key-input" class="inline-input" placeholder="AIzaSy..." style="flex:1;min-width:200px">
         <button class="btn btn-secondary btn-sm" id="btn-toggle-key-visibility">👁️</button>

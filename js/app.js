@@ -74,6 +74,92 @@ export function setBtnLoading(btn, isLoading, loadingHtml = '') {
   }
 }
 
+function ensureAiWorkspaceOverlay() {
+  let overlay = document.getElementById('ai-workspace-overlay');
+  if (overlay) return overlay;
+
+  overlay = document.createElement('div');
+  overlay.id = 'ai-workspace-overlay';
+  overlay.className = 'ai-workspace-overlay';
+  overlay.setAttribute('aria-live', 'polite');
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.innerHTML = `
+    <div class="ai-workspace-stage">
+      <div class="ai-workspace-core" aria-hidden="true">
+        <span class="ai-core-ring ai-core-ring-one"></span>
+        <span class="ai-core-ring ai-core-ring-two"></span>
+        <span class="ai-core-ring ai-core-ring-three"></span>
+        <span class="material-symbols-outlined ai-core-icon">auto_awesome</span>
+      </div>
+      <div class="ai-workspace-copy">
+        <div class="ai-workspace-kicker" id="ai-overlay-kicker">AI is working</div>
+        <h2 id="ai-overlay-title">Generating</h2>
+        <p id="ai-overlay-subtitle">Please wait while the AI analyzes your assets.</p>
+      </div>
+      <div class="ai-workspace-progress">
+        <div class="ai-workspace-progress-top">
+          <span id="ai-overlay-status">Starting...</span>
+          <strong id="ai-overlay-counter">0 / 0</strong>
+        </div>
+        <div class="ai-workspace-progress-track">
+          <div id="ai-overlay-fill" class="ai-workspace-progress-fill"></div>
+        </div>
+      </div>
+      <div class="ai-workspace-steps" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function showAiWorkspaceOverlay({ mode = 'metadata', total = 0 } = {}) {
+  const overlay = ensureAiWorkspaceOverlay();
+  const isPrompt = mode === 'prompt';
+  overlay.classList.toggle('mode-prompt', isPrompt);
+  overlay.classList.toggle('mode-metadata', !isPrompt);
+  overlay.setAttribute('aria-hidden', 'false');
+  overlay.classList.remove('is-leaving');
+  document.body.classList.add('ai-workspace-overlay-open');
+
+  const kicker = document.getElementById('ai-overlay-kicker');
+  const title = document.getElementById('ai-overlay-title');
+  const subtitle = document.getElementById('ai-overlay-subtitle');
+  if (kicker) kicker.textContent = isPrompt ? 'Prompt generator running' : 'Metadata processor running';
+  if (title) title.textContent = isPrompt ? 'Generating AI prompts' : 'Generating metadata';
+  if (subtitle) {
+    subtitle.textContent = isPrompt
+      ? 'Analyzing image details and building a polished prompt.'
+      : 'Analyzing assets, writing titles, descriptions, keywords, and categories.';
+  }
+  updateAiWorkspaceOverlay(0, total, isPrompt ? 'Preparing prompt generation...' : 'Preparing metadata generation...');
+}
+
+function updateAiWorkspaceOverlay(completed, total, statusText = '') {
+  const overlay = document.getElementById('ai-workspace-overlay');
+  if (!overlay || !document.body.classList.contains('ai-workspace-overlay-open')) return;
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const safeCompleted = Math.min(Math.max(0, Number(completed) || 0), safeTotal || Number(completed) || 0);
+  const pct = safeTotal > 0 ? Math.round((safeCompleted / safeTotal) * 100) : 0;
+
+  const status = document.getElementById('ai-overlay-status');
+  const counter = document.getElementById('ai-overlay-counter');
+  const fill = document.getElementById('ai-overlay-fill');
+  if (status) status.textContent = statusText || 'Generating...';
+  if (counter) counter.textContent = safeTotal > 0 ? `${safeCompleted} / ${safeTotal}` : 'Working';
+  if (fill) fill.style.width = `${pct}%`;
+}
+
+function hideAiWorkspaceOverlay() {
+  const overlay = document.getElementById('ai-workspace-overlay');
+  if (!overlay) return;
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.classList.add('is-leaving');
+  document.body.classList.remove('ai-workspace-overlay-open');
+  setTimeout(() => overlay.classList.remove('is-leaving'), 260);
+}
+
 // ─── Init ──────────────────────────────────────────────────────────────────
 export async function initApp() {
   renderPlatforms();
@@ -634,12 +720,26 @@ async function triggerAiGeneration() {
   const genBtn = document.getElementById('btn-generate-ai');
   const stopBtn = document.getElementById('btn-stop-generation');
   const retryBtn = document.getElementById('btn-retry-failed');
+  const mainArea = document.getElementById('main-content-area');
   setBtnLoading(genBtn, true, '<span class="ai-action-spinner" aria-hidden="true"></span><span>Processing Metadata...</span>');
   genBtn?.classList.add('ai-action-running');
+  mainArea?.classList.add('ai-batch-running');
   if (stopBtn) stopBtn.style.display = 'inline-flex';
 
   const progressBar = document.getElementById('progress-bar-container');
-  if (progressBar) progressBar.classList.add('active');
+  if (progressBar) {
+    progressBar.style.display = 'block';
+    progressBar.classList.add('active');
+  }
+  const progressText    = document.getElementById('progress-text');
+  const progressCounter = document.getElementById('progress-stats-counter');
+  const progressPct     = document.getElementById('progress-percent-text');
+  const progressFill    = document.getElementById('progress-fill');
+  if (progressText)    progressText.textContent    = `Preparing ${toProcess.length} asset${toProcess.length === 1 ? '' : 's'}...`;
+  if (progressCounter) progressCounter.textContent = `0 / ${toProcess.length}`;
+  if (progressPct)     progressPct.textContent     = '0%';
+  if (progressFill)    progressFill.style.width    = '0%';
+  showAiWorkspaceOverlay({ mode: 'metadata', total: toProcess.length });
 
   let successCount = 0, failCount = 0;
   const isVideoBatch = state.activeAssetTab === 'videos';
@@ -652,6 +752,7 @@ async function triggerAiGeneration() {
     onItemStart: (item) => {
       const stateItem = state.mediaItems.find(i => i.id === item.id);
       if (stateItem) { stateItem.status = 'processing'; stateItem._error = null; }
+      updateAiWorkspaceOverlay(successCount + failCount, toProcess.length, `Generating metadata for ${item.name}`);
       throttledRender();
     },
 
@@ -712,6 +813,7 @@ async function triggerAiGeneration() {
       if (progressCounter) progressCounter.textContent = `${completed} / ${total} (${remaining} remaining)`;
       if (progressPct)     progressPct.textContent     = `${pct}%`;
       if (progressFill)    progressFill.style.width    = `${pct}%`;
+      updateAiWorkspaceOverlay(completed, total, remaining ? `${remaining} remaining...` : 'Finishing up...');
     }
   });
 
@@ -720,6 +822,8 @@ async function triggerAiGeneration() {
 
   setBtnLoading(genBtn, false);
   genBtn?.classList.remove('ai-action-running');
+  mainArea?.classList.remove('ai-batch-running');
+  hideAiWorkspaceOverlay();
   if (stopBtn) stopBtn.style.display = 'none';
   if (retryBtn && failCount > 0) retryBtn.style.display = 'inline-flex';
 
@@ -727,7 +831,10 @@ async function triggerAiGeneration() {
   showToast(summary, failCount > 0 ? 'warning' : 'success');
 
   setTimeout(() => {
-    if (progressBar) progressBar.classList.remove('active');
+    if (progressBar) {
+      progressBar.classList.remove('active');
+      progressBar.style.display = 'none';
+    }
   }, 2000);
 
   updateUI();
@@ -911,6 +1018,7 @@ const _tableRowCache = new Map();
 
 function buildRowHtml(item, index, p, catOptions) {
   const isSelected = state.selectedItemIds.has(item.id);
+  const isProcessing = item.status === 'processing';
   const meta = item.metadata || { title: '', description: '', keywords: [], category: '' };
   const kwCount = (meta.keywords || []).length;
 
@@ -934,6 +1042,12 @@ function buildRowHtml(item, index, p, catOptions) {
 
   const rowStyle = item.status === 'failed' ? ' style="background:rgba(239,68,68,0.05)"' : '';
   const selectedBgClass = isSelected ? 'bg-[#00dbe9]/10 border-[#00dbe9]/50' : 'border-[#3b494b]/50';
+  const titlePlaceholder = isProcessing ? 'Generating title...' : 'Enter title...';
+  const descPlaceholder = isProcessing ? 'Analyzing visual details...' : 'Enter description...';
+  const kwPlaceholder = isProcessing ? 'Generating keywords...' : '+ Add Keyword';
+  const processingPulse = isProcessing
+    ? '<div class="ai-row-working"><span class="ai-row-orb"></span><span>AI is generating metadata</span></div>'
+    : '';
 
   return `<tr data-row-id="${item.id}" class="border-b hover:bg-[#191c1f]/50 transition-colors ${item.status === 'failed' ? 'bg-error/5' : ''} ${selectedBgClass}">
     <td class="p-3 align-top">
@@ -948,21 +1062,22 @@ function buildRowHtml(item, index, p, catOptions) {
         ${buildAssetBadge(item)}
         <span class="text-[10px] text-on-surface-variant">${(item.size / 1048576).toFixed(1)} MB</span>
       </div>
+      ${processingPulse}
       ${errorHtml}
     </td>
     <td class="p-3 align-top min-w-[200px]">
       <div class="relative">
-        <textarea class="title-input w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all resize-none" data-id="${item.id}" placeholder="Enter title…" rows="2" ${item.status === 'processing' ? 'disabled' : ''}>${escHtml(meta.title)}</textarea>
+        <textarea class="title-input w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all resize-none" data-id="${item.id}" placeholder="${titlePlaceholder}" rows="2" ${isProcessing ? 'disabled' : ''}>${escHtml(meta.title)}</textarea>
         <div class="char-counter text-[9px] absolute bottom-1 right-2 ${titleLenClass}">${titleLen} / ${p.titleMaxLen}</div>
       </div>
     </td>
     <td class="p-3 align-top min-w-[240px]">
-      <textarea class="desc-textarea w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all resize-y min-h-[50px]" data-id="${item.id}" placeholder="Enter description…" ${item.status === 'processing' ? 'disabled' : ''}>${escHtml(meta.description)}</textarea>
+      <textarea class="desc-textarea w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all resize-y min-h-[50px]" data-id="${item.id}" placeholder="${descPlaceholder}" ${isProcessing ? 'disabled' : ''}>${escHtml(meta.description)}</textarea>
     </td>
     <td class="p-3 align-top min-w-[240px]">
       <div class="flex flex-wrap gap-1 mb-1.5 max-h-[70px] overflow-y-auto custom-scrollbar">${kwChips}${kwMore}</div>
       <div class="flex items-center gap-2">
-        <input type="text" class="add-tag-input flex-1 bg-[#191c1f] border border-[#3b494b] rounded-md text-[10px] text-on-surface px-2 py-1 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all" data-id="${item.id}" placeholder="+ Add Keyword">
+        <input type="text" class="add-tag-input flex-1 bg-[#191c1f] border border-[#3b494b] rounded-md text-[10px] text-on-surface px-2 py-1 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all" data-id="${item.id}" placeholder="${kwPlaceholder}" ${isProcessing ? 'disabled' : ''}>
       </div>
       <div class="flex justify-between items-center mt-1 text-[9px]">
         <span class="${kwClass} ${kwClass ? 'text-error font-bold' : 'text-on-surface-variant'}">${kwCount}/${p.keywordMax} kw</span>
@@ -970,7 +1085,7 @@ function buildRowHtml(item, index, p, catOptions) {
       </div>
     </td>
     <td class="p-3 align-top min-w-[120px]">
-      <select class="category-select w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all" data-id="${item.id}" ${item.status === 'processing' ? 'disabled' : ''}>
+      <select class="category-select w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all" data-id="${item.id}" ${isProcessing ? 'disabled' : ''}>
         <option value="">Select…</option>${selectedCat}
       </select>
     </td>
@@ -979,7 +1094,7 @@ function buildRowHtml(item, index, p, catOptions) {
     </td>
     <td class="p-3 align-top">
       <div class="flex gap-1.5 flex-wrap">
-        <button class="regen-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-[#db50ff] hover:border-[#db50ff] flex items-center justify-center transition-all disabled:opacity-50" data-id="${item.id}" title="Regenerate with AI" ${item.status === 'processing' ? 'disabled' : ''}><span class="material-symbols-outlined text-[14px]">autorenew</span></button>
+        <button class="regen-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-[#db50ff] hover:border-[#db50ff] flex items-center justify-center transition-all disabled:opacity-50" data-id="${item.id}" title="Regenerate with AI" ${isProcessing ? 'disabled' : ''}><span class="material-symbols-outlined text-[14px]">autorenew</span></button>
         <button class="view-detail-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-[#00dbe9] hover:border-[#00dbe9] flex items-center justify-center transition-all" data-id="${item.id}" title="View Details"><span class="material-symbols-outlined text-[14px]">visibility</span></button>
         <button class="delete-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-error hover:border-error flex items-center justify-center transition-all hover:bg-error/10" data-id="${item.id}" title="Remove"><span class="material-symbols-outlined text-[14px]">delete</span></button>
       </div>
@@ -1226,6 +1341,7 @@ const _gridCardCache = new Map();
 
 function buildGridCardHtml(item, index) {
   const isSelected = state.selectedItemIds.has(item.id);
+  const isProcessing = item.status === 'processing';
   const meta = item.metadata || {};
   const kwCount = (meta.keywords || []).length;
 
@@ -1239,11 +1355,15 @@ function buildGridCardHtml(item, index) {
   const borderStyle = item.status === 'failed' ? ` style="border-color:rgba(239,68,68,0.5)"` : '';
   const selectedClass = isSelected ? ' selected border-[#00dbe9] shadow-[0_0_15px_rgba(0,219,233,0.3)] bg-[#00dbe9]/10' : ' border-[#3b494b] bg-[#1d2023]';
   const checkboxHtml = `<input type="checkbox" class="absolute top-2 left-2 w-4 h-4 rounded border-[#3b494b] bg-[#191c1f] text-[#00dbe9] focus:ring-[#00dbe9] z-10 pointer-events-none" ${isSelected ? 'checked' : ''}>`;
+  const processingOverlay = isProcessing
+    ? '<div class="ai-card-processing-overlay"><span class="ai-action-spinner" aria-hidden="true"></span><span>Generating</span></div>'
+    : '';
 
   return `<div class="grid-card relative border rounded-xl overflow-hidden flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:border-[#00dbe9] cursor-pointer ${selectedClass}" data-card-id="${item.id}"${borderStyle}>
     ${checkboxHtml}
     <div class="card-thumb-container relative w-full h-[150px] bg-[#111417] overflow-hidden">
       ${thumbHtml}
+      ${processingOverlay}
       <span class="card-number-badge absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-mono backdrop-blur-sm">#${index + 1}</span>
       <div class="card-actions-overlay absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex justify-end p-2">
         <button class="card-remove-btn w-6 h-6 rounded-md bg-error text-white hover:bg-error/80 flex items-center justify-center transition-colors" data-id="${item.id}">×</button>
@@ -2327,11 +2447,14 @@ async function processImg2PromptQueue() {
   const promptBtn = document.getElementById('btn-generate-all-img2prompt');
   setBtnLoading(promptBtn, true, '<span class="ai-action-spinner" aria-hidden="true"></span><span>Generating Prompts...</span>');
   promptBtn?.classList.add('ai-action-running');
+  showAiWorkspaceOverlay({ mode: 'prompt', total: itemsToProcess.length });
   renderImg2PromptCards();
 
   try {
+    let completedPrompts = 0;
     for (const item of itemsToProcess) {
       item.status = 'processing';
+      updateAiWorkspaceOverlay(completedPrompts, itemsToProcess.length, `Generating prompt for ${item.name}`);
       renderImg2PromptCards();
 
       try {
@@ -2383,12 +2506,19 @@ async function processImg2PromptQueue() {
         item.error = err.message || 'Image to prompt conversion failed';
       }
 
+      completedPrompts++;
+      updateAiWorkspaceOverlay(
+        completedPrompts,
+        itemsToProcess.length,
+        completedPrompts === itemsToProcess.length ? 'Finishing up...' : `${itemsToProcess.length - completedPrompts} remaining...`
+      );
       renderImg2PromptCards();
     }
   } finally {
     img2promptState.isProcessing = false;
     setBtnLoading(promptBtn, false);
     promptBtn?.classList.remove('ai-action-running');
+    hideAiWorkspaceOverlay();
     renderImg2PromptCards();
   }
 }
@@ -2412,12 +2542,21 @@ function renderImg2PromptCards() {
   const btnGenerateAll = document.getElementById('btn-generate-all-img2prompt');
   const hasWaiting = img2promptState.items.some(i => i.status === 'waiting');
   if (btnGenerateAll) {
-    if (hasWaiting) {
-      btnGenerateAll.style.display = 'inline-block';
+    if (img2promptState.isProcessing) {
+      btnGenerateAll.style.display = 'inline-flex';
+      btnGenerateAll.innerHTML = '<span class="ai-action-spinner" aria-hidden="true"></span><span>Generating Prompts...</span>';
+      btnGenerateAll.classList.add('ai-action-running');
+      btnGenerateAll.disabled = true;
+    } else if (hasWaiting) {
+      btnGenerateAll.style.display = 'inline-flex';
       const waitingCount = img2promptState.items.filter(i => i.status === 'waiting').length;
-      btnGenerateAll.textContent = `✨ Generate Prompts (${waitingCount})`;
+      btnGenerateAll.innerHTML = `<span class="material-symbols-outlined text-[20px]">bolt</span> Generate Prompts (${waitingCount})`;
+      btnGenerateAll.classList.remove('ai-action-running');
+      btnGenerateAll.disabled = false;
     } else {
       btnGenerateAll.style.display = 'none';
+      btnGenerateAll.classList.remove('ai-action-running');
+      btnGenerateAll.disabled = false;
     }
   }
 
@@ -2446,10 +2585,14 @@ function renderImg2PromptCards() {
       promptContentHtml = escHtml(item.prompt || 'No prompt generated');
     }
 
-    return `<div class="img2prompt-card glass-panel" data-id="${item.id}" style="padding:16px;background:rgba(21, 32, 54, 0.88)">
+    const cardStateClass = isProcessing ? ' is-processing' : (isReady ? ' is-ready' : (isFailed ? ' is-failed' : ''));
+
+    return `<div class="img2prompt-card glass-panel${cardStateClass}" data-id="${item.id}" style="padding:16px;background:rgba(21, 32, 54, 0.88)">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:10px">
-          <img src="${item.url}" alt="${escHtml(item.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--glass-border)">
+          <div class="img2prompt-thumb-wrap">
+            <img src="${item.url}" alt="${escHtml(item.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--glass-border)">
+          </div>
           <div>
             <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);word-break:break-all">${escHtml(item.name)}</div>
             <div style="font-size:0.725rem;color:var(--text-muted)">${(item.size / 1048576).toFixed(2)} MB</div>

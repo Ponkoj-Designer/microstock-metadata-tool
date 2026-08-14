@@ -55,14 +55,22 @@ export function showToast(message, type = 'info') {
 }
 window.showToast = showToast;
 
-export function setBtnLoading(btn, isLoading) {
+export function setBtnLoading(btn, isLoading, loadingHtml = '') {
   if (!btn) return;
   if (isLoading) {
+    if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
+    if (loadingHtml) btn.innerHTML = loadingHtml;
     btn.classList.add('btn-loading');
+    btn.setAttribute('aria-busy', 'true');
     btn.disabled = true;
   } else {
     btn.classList.remove('btn-loading');
+    btn.removeAttribute('aria-busy');
     btn.disabled = false;
+    if (btn.dataset.originalHtml) {
+      btn.innerHTML = btn.dataset.originalHtml;
+      delete btn.dataset.originalHtml;
+    }
   }
 }
 
@@ -626,7 +634,8 @@ async function triggerAiGeneration() {
   const genBtn = document.getElementById('btn-generate-ai');
   const stopBtn = document.getElementById('btn-stop-generation');
   const retryBtn = document.getElementById('btn-retry-failed');
-  setBtnLoading(genBtn, true);
+  setBtnLoading(genBtn, true, '<span class="ai-action-spinner" aria-hidden="true"></span><span>Processing Metadata...</span>');
+  genBtn?.classList.add('ai-action-running');
   if (stopBtn) stopBtn.style.display = 'inline-flex';
 
   const progressBar = document.getElementById('progress-bar-container');
@@ -710,6 +719,7 @@ async function triggerAiGeneration() {
   state.stopBatch = false;
 
   setBtnLoading(genBtn, false);
+  genBtn?.classList.remove('ai-action-running');
   if (stopBtn) stopBtn.style.display = 'none';
   if (retryBtn && failCount > 0) retryBtn.style.display = 'inline-flex';
 
@@ -2239,7 +2249,8 @@ function fileToBase64(file) {
 
 // ─── Image to Prompt Batch & Clipboard Paste System ──────────────────────
 const img2promptState = {
-  items: []
+  items: [],
+  isProcessing: false
 };
 
 // Global Clipboard Paste Listener (Ctrl+V for image files)
@@ -2301,6 +2312,8 @@ async function handleImageToPromptUploadBatch(files) {
 }
 
 async function processImg2PromptQueue() {
+  if (img2promptState.isProcessing) return;
+
   if (!hasApiKey()) {
     openModal(document.getElementById('modal-ai-settings'));
     showToast('Please add your Gemini API key first.', 'warning');
@@ -2310,59 +2323,72 @@ async function processImg2PromptQueue() {
   const itemsToProcess = img2promptState.items.filter(i => i.status === 'waiting');
   if (!itemsToProcess.length) return;
 
-  for (const item of itemsToProcess) {
-    item.status = 'processing';
-    renderImg2PromptCards();
+  img2promptState.isProcessing = true;
+  const promptBtn = document.getElementById('btn-generate-all-img2prompt');
+  setBtnLoading(promptBtn, true, '<span class="ai-action-spinner" aria-hidden="true"></span><span>Generating Prompts...</span>');
+  promptBtn?.classList.add('ai-action-running');
+  renderImg2PromptCards();
 
-    try {
-      const base64Image = await fileToBase64(item.file);
-      const mimeType = item.file.type || 'image/jpeg';
+  try {
+    for (const item of itemsToProcess) {
+      item.status = 'processing';
+      renderImg2PromptCards();
 
-      const platformSpec = PLATFORMS.general || {
-        id: 'general', name: 'General',
-        keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
-      };
+      try {
+        const base64Image = await fileToBase64(item.file);
+        const mimeType = item.file.type || 'image/jpeg';
 
-      const res = await fetch('/api/gemini/generate', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-gemini-api-key': getSessionKey()
-        },
-        body: JSON.stringify({
-          apiKey: getSessionKey(),
-          base64Image,
-          mimeType,
-          filename: item.name,
-          platform: platformSpec,
-          mode: 'img2prompt'
-        })
-      });
+        const platformSpec = PLATFORMS.general || {
+          id: 'general', name: 'General',
+          keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
+        };
 
-      const data = await res.json();
-      if (data.ok && data.data) {
-        const d = data.data;
-        const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
+        const res = await fetch('/api/gemini/generate', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-gemini-api-key': getSessionKey()
+          },
+          body: JSON.stringify({
+            apiKey: getSessionKey(),
+            base64Image,
+            mimeType,
+            filename: item.name,
+            platform: platformSpec,
+            mode: 'img2prompt'
+          })
+        });
 
-        const promptParts = [];
-        if (d.title) promptParts.push(d.title);
-        if (d.description && d.description !== d.title) promptParts.push(d.description);
-        if (d.category && d.category !== 'General') promptParts.push(`Style: ${d.category}`);
-        if (kwStr) promptParts.push(`Visual details: ${kwStr}`);
+        const data = await res.json();
+        if (data.ok && data.data) {
+          const d = data.data;
+          const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
 
-        item.prompt = promptParts.join('. ') + '.';
-        item.status = 'ready';
-        item.error = null;
-      } else {
+          const promptParts = [];
+          if (d.title) promptParts.push(d.title);
+          if (d.description && d.description !== d.title) promptParts.push(d.description);
+          if (d.category && d.category !== 'General') promptParts.push(`Style: ${d.category}`);
+          if (kwStr) promptParts.push(`Visual details: ${kwStr}`);
+
+          item.prompt = promptParts.join('. ') + '.';
+          item.status = 'ready';
+          item.error = null;
+        } else {
+          item.status = 'failed';
+          item.error = data.message || 'Generation failed';
+        }
+      } catch (err) {
         item.status = 'failed';
-        item.error = data.message || 'Generation failed';
+        item.error = err.message || 'Image to prompt conversion failed';
       }
-    } catch (err) {
-      item.status = 'failed';
-      item.error = err.message || 'Image to prompt conversion failed';
-    }
 
+      renderImg2PromptCards();
+    }
+  } finally {
+    img2promptState.isProcessing = false;
+    setBtnLoading(promptBtn, false);
+    promptBtn?.classList.remove('ai-action-running');
     renderImg2PromptCards();
   }
 }

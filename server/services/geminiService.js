@@ -274,7 +274,10 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
       throw new Error('Failed to parse Gemini metadata response JSON.');
     }
 
-    const title = String(parsed.title || '').substring(0, titleLimit).trim();
+    const title = (mode === 'img2prompt'
+      ? String(parsed.title || '')
+      : String(parsed.title || '').substring(0, effectiveTitleLimit)
+    ).trim();
     const description = String(parsed.description || title).trim();
 
     let rawCat = String(parsed.category || '').trim();

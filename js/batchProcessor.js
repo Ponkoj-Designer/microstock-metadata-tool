@@ -61,22 +61,32 @@ export async function runBatchQueue({
           
           const errMsg = err.message || '';
           
-          // Do not retry on explicit missing API keys or Auth errors
-          if (errMsg.toLowerCase().includes('api key') || errMsg.toLowerCase().includes('unauthorized')) {
+          // Do not retry on explicit missing API keys, billing, quota, or Auth errors
+          const lowerMsg = errMsg.toLowerCase();
+          if (
+            lowerMsg.includes('api key') ||
+            lowerMsg.includes('unauthorized') ||
+            lowerMsg.includes('insufficient_quota') ||
+            lowerMsg.includes('quota') ||
+            lowerMsg.includes('billing') ||
+            lowerMsg.includes('exceeded your current') ||
+            lowerMsg.includes('invalid')
+          ) {
              break; 
           }
           
-          // Handle Rate Limits (429) globally
-          if (errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit') || errMsg.includes('429')) {
+          // Handle Rate Limits (429) globally with 10s pause
+          if (lowerMsg.includes('rate limit') || lowerMsg.includes('429') || lowerMsg.includes('too many requests')) {
              if (!globalPausePromise) {
-               console.warn('[BatchProcessor] Rate limit hit. Pausing queue for 30s...');
-               if (window.showToast) window.showToast('Gemini rate limit reached. Pausing queue for 30s...', 'warning');
-               globalPausePromise = new Promise(resolve => setTimeout(resolve, 30000));
+               const activeProvider = (window.getActiveProvider && window.getActiveProvider()) || 'gemini';
+               const providerConfig = (window.AI_PROVIDERS_CONFIG && window.AI_PROVIDERS_CONFIG[activeProvider]) || { name: 'AI' };
+               const providerName = providerConfig.name || 'AI';
+               console.warn(`[BatchProcessor] ${providerName} rate limit hit. Pausing queue for 10s...`);
+               if (window.showToast) window.showToast(`${providerName} rate limit reached. Pausing queue for 10s...`, 'warning');
+               globalPausePromise = new Promise(resolve => setTimeout(resolve, 10000));
                globalPausePromise.then(() => { globalPausePromise = null; });
              }
              await globalPausePromise;
-             attempts--; // Don't burn an attempt on a forced rate limit pause
-             continue;
           }
 
           if (attempts < maxAttempts) {

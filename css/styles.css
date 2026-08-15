@@ -84,15 +84,19 @@
 }
 
 /* Toast Notifications Container */
-.toast-container {
+#toast-container {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   pointer-events: none;
+  max-width: 520px;
+  width: calc(100vw - 32px);
 }
 
 .toast-item {
@@ -100,20 +104,62 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 20px;
-  border-radius: 12px;
-  background: #1d2023;
-  border: 1px solid #3b494b;
-  color: #e1e2e7;
-  font-size: 0.875rem;
-  font-weight: 500;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-  animation: slideInToast 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 12px 22px;
+  border-radius: 9999px;
+  background: rgba(18, 22, 28, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 219, 233, 0.35);
+  color: #f1f5f9;
+  font-size: 0.84rem;
+  font-weight: 600;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 219, 233, 0.15);
+  animation: toastCenterPopup 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes slideInToast {
-  from { opacity: 0; transform: translateX(100%); }
-  to { opacity: 1; transform: translateX(0); }
+.toast-item.toast-success {
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 25px rgba(16, 185, 129, 0.2);
+}
+
+.toast-item.toast-warning {
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 25px rgba(245, 158, 11, 0.2);
+}
+
+.toast-item.toast-error {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 25px rgba(239, 68, 68, 0.2);
+}
+
+.toast-item.toast-info {
+  border-color: rgba(0, 219, 233, 0.5);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 219, 233, 0.2);
+}
+
+.toast-item.toast-leaving {
+  opacity: 0;
+  transform: translateY(-20px) scale(0.92);
+  filter: blur(4px);
+}
+
+@keyframes toastCenterPopup {
+  0% {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.85);
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(4px) scale(1.02);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
 }
 
 /* Modal Overlay System */

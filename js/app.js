@@ -5,7 +5,7 @@
 
 import { PLATFORMS } from './platforms.js';
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, getSessionKey, testConnection, generateMetadataForImage, isGeminiAnalyzable } from './geminiClient.js';
+import { setApiKey, hasApiKey, clearApiKey, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
 import { runBatchQueue } from './batchProcessor.js';
 import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
@@ -26,9 +26,10 @@ const state = {
   geminiConnected: false,
   activeAppMode: 'metadata',
   settingsEnabled: false,
-  // Render throttle
+  // Render throttle & Cancellation
   _renderPending: false,
-  _lastStats: null
+  _lastStats: null,
+  activeBatchAbortController: null
 };
 
 // ─── File type sets ────────────────────────────────────────────────────────
@@ -37,23 +38,36 @@ const VECTOR_EXTS = new Set(['eps','ai','svg','pdf']);
 const VIDEO_EXTS  = new Set(['mp4','mov','avi','webm']);
 const ALL_EXTS    = new Set([...IMAGE_EXTS, ...VECTOR_EXTS, ...VIDEO_EXTS]);
 
-// ─── Toast ─────────────────────────────────────────────────────────────────
+// ─── Toast System ──────────────────────────────────────────────────────────
 export function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
   if (!container) return;
   const toast = document.createElement('div');
   toast.className = `toast-item toast-${type}`;
-  const icons = { success: '✅', error: '⚠️', info: '✨', warning: '🔔' };
-  toast.innerHTML = `<span>${icons[type] || '✨'}</span><span>${escHtml(message)}</span>`;
+  
+  const iconConfig = {
+    success: { icon: 'check_circle', color: 'text-emerald-400' },
+    error:   { icon: 'error',        color: 'text-red-400' },
+    info:    { icon: 'info',         color: 'text-[#00dbe9]' },
+    warning: { icon: 'warning',      color: 'text-amber-400' }
+  };
+  const cfg = iconConfig[type] || iconConfig.info;
+
+  toast.innerHTML = `
+    <span class="material-symbols-outlined ${cfg.color} text-[20px] flex-shrink-0" aria-hidden="true">${cfg.icon}</span>
+    <span class="toast-message text-on-surface text-xs font-semibold leading-snug flex-1">${escHtml(message)}</span>
+    <button type="button" class="toast-close-btn text-on-surface-variant hover:text-white transition-colors ml-2 text-[14px] cursor-pointer" onclick="this.parentElement.remove()" title="Close notification">✕</button>
+  `;
   container.appendChild(toast);
+
   setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(10px)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.parentNode && toast.parentNode.removeChild(toast), 300);
-  }, 3800);
+    toast.classList.add('toast-leaving');
+    setTimeout(() => toast.parentNode && toast.parentNode.removeChild(toast), 320);
+  }, 4200);
 }
 window.showToast = showToast;
+window.getActiveProvider = getActiveProvider;
+window.AI_PROVIDERS_CONFIG = AI_PROVIDERS_CONFIG;
 
 export function setBtnLoading(btn, isLoading, loadingHtml = '') {
   if (!btn) return;
@@ -88,29 +102,31 @@ function ensureAiWorkspaceOverlay() {
       <div class="ai-workspace-core" aria-hidden="true">
         <span class="ai-core-ring ai-core-ring-one"></span>
         <span class="ai-core-ring ai-core-ring-two"></span>
-        <span class="ai-core-ring ai-core-ring-three"></span>
         <span class="material-symbols-outlined ai-core-icon">auto_awesome</span>
       </div>
       <div class="ai-workspace-copy">
-        <div class="ai-workspace-kicker" id="ai-overlay-kicker">AI is working</div>
-        <h2 id="ai-overlay-title">Generating</h2>
-        <p id="ai-overlay-subtitle">Please wait while the AI analyzes your assets.</p>
+        <h2 id="ai-overlay-title">Processing Metadata...</h2>
       </div>
       <div class="ai-workspace-progress">
         <div class="ai-workspace-progress-top">
-          <span id="ai-overlay-status">Starting...</span>
-          <strong id="ai-overlay-counter">0 / 0</strong>
+          <span id="ai-overlay-status">Analyzing assets...</span>
+          <strong id="ai-overlay-counter">0%</strong>
         </div>
         <div class="ai-workspace-progress-track">
           <div id="ai-overlay-fill" class="ai-workspace-progress-fill"></div>
         </div>
       </div>
-      <div class="ai-workspace-steps" aria-hidden="true">
-        <span></span><span></span><span></span><span></span>
-      </div>
+      <button id="btn-overlay-stop" type="button" class="ai-overlay-stop-btn">
+        <span class="material-symbols-outlined text-[16px]">stop_circle</span> Stop Processing
+      </button>
     </div>
   `;
   document.body.appendChild(overlay);
+
+  document.getElementById('btn-overlay-stop')?.addEventListener('click', () => {
+    stopAllGenerations();
+  });
+
   return overlay;
 }
 
@@ -123,17 +139,9 @@ function showAiWorkspaceOverlay({ mode = 'metadata', total = 0 } = {}) {
   overlay.classList.remove('is-leaving');
   document.body.classList.add('ai-workspace-overlay-open');
 
-  const kicker = document.getElementById('ai-overlay-kicker');
   const title = document.getElementById('ai-overlay-title');
-  const subtitle = document.getElementById('ai-overlay-subtitle');
-  if (kicker) kicker.textContent = isPrompt ? 'Prompt generator running' : 'Metadata processor running';
-  if (title) title.textContent = isPrompt ? 'Generating AI prompts' : 'Generating metadata';
-  if (subtitle) {
-    subtitle.textContent = isPrompt
-      ? 'Analyzing image details and building a polished prompt.'
-      : 'Analyzing assets, writing titles, descriptions, keywords, and categories.';
-  }
-  updateAiWorkspaceOverlay(0, total, isPrompt ? 'Preparing prompt generation...' : 'Preparing metadata generation...');
+  if (title) title.textContent = isPrompt ? 'Generating AI Prompts...' : 'Processing Metadata...';
+  updateAiWorkspaceOverlay(0, total, isPrompt ? 'Preparing prompt generation...' : 'Preparing metadata...');
 }
 
 function updateAiWorkspaceOverlay(completed, total, statusText = '') {
@@ -146,8 +154,8 @@ function updateAiWorkspaceOverlay(completed, total, statusText = '') {
   const status = document.getElementById('ai-overlay-status');
   const counter = document.getElementById('ai-overlay-counter');
   const fill = document.getElementById('ai-overlay-fill');
-  if (status) status.textContent = statusText || 'Generating...';
-  if (counter) counter.textContent = safeTotal > 0 ? `${safeCompleted} / ${safeTotal}` : 'Working';
+  if (status) status.textContent = statusText || (safeTotal > 0 ? `Processing ${safeCompleted} of ${safeTotal}` : 'Processing...');
+  if (counter) counter.textContent = `${pct}%`;
   if (fill) fill.style.width = `${pct}%`;
 }
 
@@ -160,10 +168,81 @@ function hideAiWorkspaceOverlay() {
   setTimeout(() => overlay.classList.remove('is-leaving'), 260);
 }
 
+function stopAllGenerations() {
+  state.stopBatch = true;
+  img2promptState.stopBatch = true;
+  state.isGenerating = false;
+  img2promptState.isProcessing = false;
+
+  if (state.activeBatchAbortController) {
+    try { state.activeBatchAbortController.abort(); } catch (_) {}
+    state.activeBatchAbortController = null;
+  }
+
+  const genBtn = document.getElementById('btn-generate-ai');
+  const stopBtn = document.getElementById('btn-stop-generation');
+  const mainArea = document.getElementById('main-content-area');
+  const progressBar = document.getElementById('progress-bar-container');
+
+  if (genBtn) {
+    setBtnLoading(genBtn, false);
+    genBtn.classList.remove('ai-action-running');
+  }
+  if (stopBtn) stopBtn.style.display = 'none';
+  if (mainArea) mainArea.classList.remove('ai-batch-running');
+  if (progressBar) {
+    progressBar.classList.remove('active');
+    progressBar.style.display = 'none';
+  }
+
+  const promptBtn = document.getElementById('btn-generate-all-img2prompt');
+  if (promptBtn) {
+    setBtnLoading(promptBtn, false);
+    promptBtn.classList.remove('ai-action-running');
+  }
+
+  hideAiWorkspaceOverlay();
+
+  state.mediaItems.forEach(i => {
+    if (i.status === 'processing') {
+      i.status = 'waiting';
+      i._error = null;
+    }
+  });
+
+  img2promptState.items.forEach(i => {
+    if (i.status === 'processing') {
+      i.status = 'waiting';
+      i.error = null;
+    }
+  });
+
+  updateUI();
+  renderImg2PromptCards();
+  showToast('Generation stopped', 'info');
+}
+
+// ─── AI Status Badge ────────────────────────────────────────────────────────
+function updateAiStatusBadge() {
+  const badge = document.getElementById('ai-status-badge');
+  if (!badge) return;
+  const provider = getActiveProvider();
+  const providerConfig = AI_PROVIDERS_CONFIG[provider] || AI_PROVIDERS_CONFIG.gemini;
+
+  if (hasApiKey(provider)) {
+    badge.innerHTML = `<span class="ai-dot ai-dot-connected"></span> ${providerConfig.name} ON`;
+    badge.className = 'ai-status-badge connected';
+  } else {
+    badge.innerHTML = `<span class="ai-dot ai-dot-disconnected"></span> ${providerConfig.name} OFF`;
+    badge.className = 'ai-status-badge disconnected';
+  }
+}
+
 // ─── Init ──────────────────────────────────────────────────────────────────
 export async function initApp() {
   renderPlatforms();
   setupEventListeners();
+  initAiSettingsModal();
   updateUI();
   renderTutorialStep();
   updateUploadZoneForTab();
@@ -209,19 +288,6 @@ function selectPlatform(id) {
   updatePlatformSpecsBanner();
   throttledRender();
   showToast(`Platform: ${state.currentPlatform.name}`, 'info');
-}
-
-// ─── AI Status Badge ────────────────────────────────────────────────────────
-function updateAiStatusBadge() {
-  const badge = document.getElementById('ai-status-badge');
-  if (!badge) return;
-  if (state.geminiConnected) {
-    badge.innerHTML = '<span class="ai-dot ai-dot-connected"></span> AI ON';
-    badge.className = 'ai-status-badge connected';
-  } else {
-    badge.innerHTML = '<span class="ai-dot ai-dot-disconnected"></span> AI OFF';
-    badge.className = 'ai-status-badge disconnected';
-  }
 }
 
 // ─── Auth Nav State ─────────────────────────────────────────────────────────
@@ -692,9 +758,15 @@ async function triggerAiGeneration() {
     return;
   }
 
-  if (!hasApiKey()) {
+  const provider = getActiveProvider();
+  const inputEl = document.getElementById('gemini-api-key-input');
+  if (!hasApiKey(provider) && inputEl && inputEl.value.trim()) {
+    setApiKey(inputEl.value.trim(), provider);
+  }
+
+  if (!hasApiKey(provider)) {
     openModal(document.getElementById('modal-ai-settings'));
-    showToast('Please add your Gemini API key first', 'warning');
+    showToast(`Please connect your ${AI_PROVIDERS_CONFIG[provider]?.name || provider} API key first to generate metadata.`, 'warning');
     return;
   }
 
@@ -716,6 +788,8 @@ async function triggerAiGeneration() {
 
   state.isGenerating = true;
   state.stopBatch = false;
+  state.activeBatchAbortController = new AbortController();
+  const batchSignal = state.activeBatchAbortController.signal;
 
   const genBtn = document.getElementById('btn-generate-ai');
   const stopBtn = document.getElementById('btn-stop-generation');
@@ -758,12 +832,19 @@ async function triggerAiGeneration() {
 
     processFn: async (item) => {
       const settings = state.settingsEnabled ? getActiveSettings() : null;
-      return await generateMetadataForImage(item, state.currentPlatform, null, settings, state.activeAppMode);
+      return await generateMetadataForImage(item, state.currentPlatform, null, settings, state.activeAppMode, batchSignal);
     },
 
     onItemDone: async (item, idx, result, err) => {
       const stateItem = state.mediaItems.find(i => i.id === item.id);
       if (!stateItem) return;
+
+      if (state.stopBatch || img2promptState.stopBatch) {
+        stateItem.status = 'waiting';
+        stateItem._error = null;
+        stateItem.metadata = null;
+        return;
+      }
 
       if (err) {
         stateItem.status = 'failed';
@@ -854,9 +935,10 @@ function regenerateSingleItem(id) {
     showToast('Please login or sign up to generate metadata with AI.', 'info');
     return;
   }
-  if (!hasApiKey()) {
+  const provider = getActiveProvider();
+  if (!hasApiKey(provider)) {
     openModal(document.getElementById('modal-ai-settings'));
-    showToast('Add Gemini API key first', 'warning');
+    showToast(`Add ${provider} API key first`, 'warning');
     return;
   }
   const curUser = getCurrentUser();
@@ -1725,15 +1807,17 @@ function setupEventListeners() {
   document.getElementById('nav-btn-signup')?.addEventListener('click',   () => openAuthModal('signup'));
   document.getElementById('btn-user-profile')?.addEventListener('click', () => openAuthModal('profile'));
 
-  // AI Settings button in header/nav (Requires Auth)
-  document.getElementById('nav-btn-ai-settings')?.addEventListener('click', () => {
+  // AI Settings button in header/nav & sidebar (Requires Auth)
+  const openAiSettingsHandler = () => {
     if (!isLoggedIn()) {
       openAuthModal('login');
-      showToast('Please login or sign up to access Gemini API key settings.', 'info');
+      showToast('Please login or sign up to access API settings.', 'info');
       return;
     }
     openModal(modal('modal-ai-settings'));
-  });
+  };
+  document.getElementById('nav-btn-ai-settings')?.addEventListener('click', openAiSettingsHandler);
+  document.getElementById('sidebar-btn-add-api')?.addEventListener('click', openAiSettingsHandler);
 
   // Mobile drawer
   document.getElementById('mobile-nav-tutorial')?.addEventListener('click', () => {
@@ -2017,7 +2101,7 @@ function setupEventListeners() {
 
   // Toolbar
   document.getElementById('btn-generate-ai')?.addEventListener('click',     triggerAiGeneration);
-  document.getElementById('btn-stop-generation')?.addEventListener('click',  () => { state.stopBatch = true; showToast('Stopping after current item…', 'info'); });
+  document.getElementById('btn-stop-generation')?.addEventListener('click',  () => { stopAllGenerations(); });
   document.getElementById('btn-retry-failed')?.addEventListener('click',     retryFailed);
   document.getElementById('btn-clear-all')?.addEventListener('click',        clearAll);
   document.getElementById('btn-select-all')?.addEventListener('click',       selectAll);
@@ -2067,95 +2151,244 @@ function setupEventListeners() {
   });
 }
 
-// ─── Gemini API Key Handlers ───────────────────────────────────────────────
-function handleSaveApiKey() {
-  const input = document.getElementById('gemini-api-key-input');
-  if (!input || !input.value.trim()) { showToast('Please enter a Gemini API key', 'error'); return; }
-  setApiKey(input.value.trim());
-  input.value = ''; // clear from DOM
-  input.type = 'password';
-  state.geminiConnected = true;
-  updateAiStatusBadge();
-  // Flash the badge with the just-connected radiate animation
-  const badge = document.getElementById('ai-status-badge');
-  if (badge) {
-    badge.classList.remove('just-connected');
-    void badge.offsetWidth; // force reflow to restart animation
-    badge.classList.add('just-connected');
-    badge.addEventListener('animationend', () => badge.classList.remove('just-connected'), { once: true });
+// ─── AI Engine & Provider Settings Handlers ──────────────────────────────────
+function initAiSettingsModal() {
+  const providerTabs = document.querySelectorAll('.ai-provider-tab');
+  providerTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const providerId = tab.dataset.provider;
+      selectAiProvider(providerId);
+    });
+  });
+
+  const modelSelect = document.getElementById('ai-model-select');
+  if (modelSelect) {
+    modelSelect.addEventListener('change', (e) => {
+      setProviderModel(e.target.value);
+    });
   }
-  showToast('API key saved for this session — Gemini ready!', 'success');
-  updateConnectionStatus('connected');
+
+  document.getElementById('btn-done-ai-settings')?.addEventListener('click', () => {
+    closeModal(modal('modal-ai-settings'));
+  });
+
+  selectAiProvider('gemini');
 }
 
-function handleClearApiKey() {
-  clearApiKey();
-  const input = document.getElementById('gemini-api-key-input');
-  if (input) { input.value = ''; input.type = 'password'; }
-  state.geminiConnected = false;
+function selectAiProvider(providerId) {
+  setAiProvider(providerId);
+  const config = AI_PROVIDERS_CONFIG[providerId] || AI_PROVIDERS_CONFIG.gemini;
+
+  // Update Top Tabs styling
+  document.querySelectorAll('.ai-provider-tab').forEach(tab => {
+    const isThis = tab.dataset.provider === providerId;
+    if (isThis) {
+      tab.className = 'ai-provider-tab active flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer bg-[#00dbe9] text-background shadow-[0_0_15px_rgba(0,219,233,0.3)]';
+    } else {
+      tab.className = 'ai-provider-tab flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-[#19202c] transition-all cursor-pointer';
+    }
+  });
+
+  // Populate Model Selection Dropdown
+  const modelSelect = document.getElementById('ai-model-select');
+  if (modelSelect) {
+    modelSelect.innerHTML = '';
+    const activeModel = getProviderModel(providerId);
+    (config.models || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      if (m.id === activeModel) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+  }
+
+  // Update Key Label
+  const labelEl = document.getElementById('ai-provider-key-label');
+  if (labelEl) labelEl.textContent = config.label || `${config.name} API Key`;
+
+  // Update Big Get API Key link button
+  const linkEl = document.getElementById('ai-provider-get-key-link');
+  if (linkEl) {
+    linkEl.href = config.getKeyUrl;
+    linkEl.innerHTML = `<span class="material-symbols-outlined text-[16px]">key</span> ${config.getKeyLabel || `Get API Key from ${config.name}`}`;
+  }
+
+  // Update Input & Placeholder
+  const inputEl = document.getElementById('gemini-api-key-input');
+  if (inputEl) {
+    inputEl.placeholder = config.placeholder || 'API Key...';
+    inputEl.value = getSessionKey(providerId) || '';
+  }
+
+  // Render Stored Keys List for right column
+  renderStoredKeys(providerId);
+
+  // Update Status Indicator
+  if (hasApiKey(providerId)) {
+    updateConnectionStatus('connected');
+  } else {
+    updateConnectionStatus('disconnected');
+  }
   updateAiStatusBadge();
-  updateConnectionStatus('disconnected');
-  showToast('API key cleared', 'info');
 }
 
-async function handleTestConnection() {
-  const input = document.getElementById('gemini-api-key-input');
-  const keyToTest = (input && input.value.trim()) ? input.value.trim() : null;
+function renderStoredKeys(providerId = getActiveProvider()) {
+  const container = document.getElementById('stored-keys-container');
+  if (!container) return;
 
-  if (!keyToTest && !hasApiKey()) {
-    showToast('Enter a Gemini API key first', 'error');
+  const key = getSessionKey(providerId);
+
+  if (key) {
+    const redacted = getRedactedKey(key, providerId);
+    container.innerHTML = `
+      <div class="w-full flex items-center justify-between p-3.5 rounded-xl bg-[#161c27] border border-[#262f3d] shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-[#00dbe9]/10 border border-[#00dbe9]/30 flex items-center justify-center text-[#00dbe9]">
+            <span class="material-symbols-outlined text-[18px]">vpn_key</span>
+          </div>
+          <div class="flex flex-col text-left">
+            <span class="text-xs font-bold text-on-surface font-mono">${escHtml(redacted)}</span>
+            <span class="text-[10px] text-emerald-400 font-medium">● Active in session</span>
+          </div>
+        </div>
+        <button type="button" id="btn-remove-stored-key" class="text-on-surface-variant hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer" title="Remove key">
+          <span class="material-symbols-outlined text-[18px]">delete</span>
+        </button>
+      </div>
+    `;
+
+    document.getElementById('btn-remove-stored-key')?.addEventListener('click', handleClearApiKey);
+  } else if (providerId === 'gemini') {
+    container.innerHTML = `
+      <div class="w-full flex items-center justify-between p-3.5 rounded-xl bg-[#161c27] border border-[#00dbe9]/30 shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-[#00dbe9]/10 border border-[#00dbe9]/30 flex items-center justify-center text-[#00dbe9]">
+            <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+          </div>
+          <div class="flex flex-col text-left">
+            <span class="text-xs font-bold text-on-surface">Default Server Key</span>
+            <span class="text-[10px] text-emerald-400 font-medium">● Free tier active</span>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <span class="material-symbols-outlined text-on-surface-variant/40 text-[36px]">key</span>
+      <span class="text-xs text-on-surface-variant/60 font-medium">No keys found</span>
+    `;
+  }
+}
+
+async function handleSaveApiKey() {
+  const provider = getActiveProvider();
+  const config = AI_PROVIDERS_CONFIG[provider] || AI_PROVIDERS_CONFIG.gemini;
+  const input = document.getElementById('gemini-api-key-input');
+  const btn = document.getElementById('btn-save-api-key');
+  
+  const key = input ? input.value.trim() : '';
+  if (!key) {
+    showToast(`Please enter a valid ${config.name} API key`, 'warning');
     return;
   }
 
-  const btn = document.getElementById('btn-test-connection');
   setBtnLoading(btn, true);
-
   updateConnectionStatus('testing');
 
   try {
-    const result = await testConnection(keyToTest);
-    if (result.ok) {
-      if (keyToTest) { setApiKey(keyToTest); if (input) { input.value=''; input.type='password'; } }
+    // Strictly verify key against official API server before saving
+    const res = await testConnection(key, provider);
+
+    if (res.ok) {
+      setApiKey(key, provider);
+      input.type = 'password';
       state.geminiConnected = true;
+      updateAiStatusBadge();
+      renderStoredKeys(provider);
       updateConnectionStatus('connected');
-      updateAiStatusBadge();
-      // Flash just-connected radiate animation
-      const badge = document.getElementById('ai-status-badge');
-      if (badge) {
-        badge.classList.remove('just-connected');
-        void badge.offsetWidth;
-        badge.classList.add('just-connected');
-        badge.addEventListener('animationend', () => badge.classList.remove('just-connected'), { once: true });
-      }
-      showToast('✓ Gemini Connected!', 'success');
+      showToast(`✓ Connected to ${config.name} API!`, 'success');
     } else {
+      // Rejects fake/invalid keys and displays exact error
+      clearApiKey(provider);
       state.geminiConnected = false;
-      updateConnectionStatus('failed', result.message);
       updateAiStatusBadge();
-      showToast(result.message, 'error');
+      renderStoredKeys(provider);
+      updateConnectionStatus('failed', res.message);
+      showToast(`✕ Invalid API Key: ${res.message}`, 'error');
     }
   } catch (err) {
-    state.geminiConnected = false;
-    updateConnectionStatus('failed', 'Connection test failed');
-    updateAiStatusBadge();
+    updateConnectionStatus('failed', err.message);
+    showToast(`✕ ${config.name} API Key verification failed.`, 'error');
+  } finally {
+    setBtnLoading(btn, false);
+  }
+}
+
+function handleClearApiKey() {
+  const provider = getActiveProvider();
+  const config = AI_PROVIDERS_CONFIG[provider] || AI_PROVIDERS_CONFIG.gemini;
+  clearApiKey(provider);
+
+  const input = document.getElementById('gemini-api-key-input');
+  if (input) { input.value = ''; input.type = 'password'; }
+
+  state.geminiConnected = false;
+  updateAiStatusBadge();
+  renderStoredKeys(provider);
+  updateConnectionStatus('disconnected');
+  showToast(`${config.name} API key cleared`, 'info');
+}
+
+async function handleTestConnection() {
+  const provider = getActiveProvider();
+  const config = AI_PROVIDERS_CONFIG[provider] || AI_PROVIDERS_CONFIG.gemini;
+  const input = document.getElementById('gemini-api-key-input');
+  const btn = document.getElementById('btn-test-connection');
+  
+  const key = input ? input.value.trim() : getSessionKey(provider);
+  if (!key) {
+    showToast(`Please enter a ${config.name} API key to test`, 'warning');
+    return;
+  }
+
+  setBtnLoading(btn, true);
+  updateConnectionStatus('testing');
+
+  try {
+    const res = await testConnection(key, provider);
+    if (res.ok) {
+      if (key) setApiKey(key, provider);
+      state.geminiConnected = true;
+      updateAiStatusBadge();
+      renderStoredKeys(provider);
+      updateConnectionStatus('connected');
+      showToast(`✓ ${res.message || `Connected to ${config.name} API!`}`, 'success');
+    } else {
+      updateConnectionStatus('failed', res.message);
+      showToast(`✕ Test Failed: ${res.message}`, 'error');
+    }
+  } catch (err) {
+    updateConnectionStatus('failed', err.message);
+    showToast(`✕ Connection Error: ${err.message}`, 'error');
   } finally {
     setBtnLoading(btn, false);
   }
 }
 
 function updateConnectionStatus(state_str, message) {
+  const provider = getActiveProvider();
+  const config = AI_PROVIDERS_CONFIG[provider] || AI_PROVIDERS_CONFIG.gemini;
   const el = document.getElementById('connection-status-text');
   if (!el) return;
   if (state_str === 'connected') {
-    el.innerHTML = '<span style="color:#10B981">✓ Gemini Connected</span>';
+    el.innerHTML = `<span style="color:#10B981">✓ ${escHtml(config.name)} Connected</span>`;
   } else if (state_str === 'failed') {
     el.innerHTML = `<span style="color:#EF4444">✕ ${escHtml(message || 'Not Connected')}</span>`;
   } else if (state_str === 'testing') {
-    el.innerHTML = '<span style="color:#F59E0B">○ Testing connection…</span>';
-  } else if (state_str === 'saved') {
-    el.innerHTML = '<span style="color:#F59E0B">○ Key saved — click Test Connection to verify</span>';
+    el.innerHTML = `<span style="color:#00dbe9">Testing ${escHtml(config.name)} connection…</span>`;
   } else {
-    el.innerHTML = '<span style="color:var(--text-muted)">● Not Connected</span>';
+    el.innerHTML = '<span style="color:#9CA3AF">● Not Connected</span>';
   }
 }
 
@@ -2349,12 +2582,12 @@ function switchAppMode(mode) {
     if (metaBtn) metaBtn.className = `${baseClasses} ${inactiveClasses}`;
     if (promptBtn) promptBtn.className = `${baseClasses} ${activeClasses}`;
     if (metaPanel) metaPanel.style.display = 'none';
-    if (promptPanel) promptPanel.style.display = 'block';
+    if (promptPanel) promptPanel.style.display = 'flex';
   } else {
     if (promptBtn) promptBtn.className = `${baseClasses} ${inactiveClasses}`;
     if (metaBtn) metaBtn.className = `${baseClasses} ${activeClasses}`;
     if (promptPanel) promptPanel.style.display = 'none';
-    if (metaPanel) metaPanel.style.display = 'block';
+    if (metaPanel) metaPanel.style.display = 'flex';
   }
 }
 
@@ -2370,7 +2603,8 @@ function fileToBase64(file) {
 // ─── Image to Prompt Batch & Clipboard Paste System ──────────────────────
 const img2promptState = {
   items: [],
-  isProcessing: false
+  isProcessing: false,
+  stopBatch: false
 };
 
 // Global Clipboard Paste Listener (Ctrl+V for image files)
@@ -2434,9 +2668,16 @@ async function handleImageToPromptUploadBatch(files) {
 async function processImg2PromptQueue() {
   if (img2promptState.isProcessing) return;
 
-  if (!hasApiKey()) {
+  const provider = getActiveProvider();
+  const inputEl = document.getElementById('gemini-api-key-input');
+  if (!hasApiKey(provider) && inputEl && inputEl.value.trim()) {
+    setApiKey(inputEl.value.trim(), provider);
+  }
+
+  const config = AI_PROVIDERS_CONFIG[provider] || AI_PROVIDERS_CONFIG.gemini;
+  if (!hasApiKey(provider)) {
     openModal(document.getElementById('modal-ai-settings'));
-    showToast('Please add your Gemini API key first.', 'warning');
+    showToast(`Please connect your ${config.name} API key first to generate prompts.`, 'warning');
     return;
   }
 
@@ -2444,6 +2685,10 @@ async function processImg2PromptQueue() {
   if (!itemsToProcess.length) return;
 
   img2promptState.isProcessing = true;
+  img2promptState.stopBatch = false;
+  state.stopBatch = false;
+  state.activeBatchAbortController = new AbortController();
+  const promptSignal = state.activeBatchAbortController.signal;
   const promptBtn = document.getElementById('btn-generate-all-img2prompt');
   setBtnLoading(promptBtn, true, '<span class="ai-action-spinner" aria-hidden="true"></span><span>Generating Prompts...</span>');
   promptBtn?.classList.add('ai-action-running');
@@ -2453,6 +2698,10 @@ async function processImg2PromptQueue() {
   try {
     let completedPrompts = 0;
     for (const item of itemsToProcess) {
+      if (img2promptState.stopBatch || state.stopBatch) {
+        showToast('Prompt generation stopped.', 'warning');
+        break;
+      }
       item.status = 'processing';
       updateAiWorkspaceOverlay(completedPrompts, itemsToProcess.length, `Generating prompt for ${item.name}`);
       renderImg2PromptCards();
@@ -2466,15 +2715,20 @@ async function processImg2PromptQueue() {
           keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
         };
 
-        const res = await fetch('/api/gemini/generate', {
+        const key = getSessionKey(provider);
+        const res = await fetch('/api/ai/generate', {
           method: 'POST',
+          signal: promptSignal,
           credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json',
-            'x-gemini-api-key': getSessionKey()
+            'x-ai-provider': provider,
+            'x-ai-api-key': key,
+            'x-gemini-api-key': key
           },
           body: JSON.stringify({
-            apiKey: getSessionKey(),
+            provider,
+            apiKey: key,
             base64Image,
             mimeType,
             filename: item.name,
@@ -2484,6 +2738,13 @@ async function processImg2PromptQueue() {
         });
 
         const data = await res.json();
+        if (img2promptState.stopBatch || state.stopBatch) {
+          item.status = 'waiting';
+          item.error = null;
+          item.prompt = null;
+          break;
+        }
+
         if (data.ok && data.data) {
           const d = data.data;
           const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
@@ -2502,6 +2763,12 @@ async function processImg2PromptQueue() {
           item.error = data.message || 'Generation failed';
         }
       } catch (err) {
+        if (img2promptState.stopBatch || state.stopBatch) {
+          item.status = 'waiting';
+          item.error = null;
+          item.prompt = null;
+          break;
+        }
         item.status = 'failed';
         item.error = err.message || 'Image to prompt conversion failed';
       }
@@ -2515,6 +2782,13 @@ async function processImg2PromptQueue() {
       renderImg2PromptCards();
     }
   } finally {
+    img2promptState.items.forEach(i => {
+      if (i.status === 'processing' && (img2promptState.stopBatch || state.stopBatch)) {
+        i.status = 'waiting';
+        i.error = null;
+        i.prompt = null;
+      }
+    });
     img2promptState.isProcessing = false;
     setBtnLoading(promptBtn, false);
     promptBtn?.classList.remove('ai-action-running');

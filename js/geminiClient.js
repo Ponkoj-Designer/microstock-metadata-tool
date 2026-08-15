@@ -1,46 +1,121 @@
 /**
- * Gemini BYOK Client — Bring Your Own API Key
- * The customer's API key is held in memory only for this session.
- * It is NEVER stored in localStorage, cookies, or logs.
- * All calls go directly to the Gemini REST API using the customer's key.
+ * Multi-Provider AI Client — Supports Google Gemini, OpenRouter, and OpenAI
+ * Customer API keys are held strictly in memory for this session only.
  */
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODEL = 'gemini-3.6-flash';
 const REQUEST_TIMEOUT_MS = 45000;
 const VIDEO_TIMEOUT_MS = 240000;
 
-// ── In-memory key store (cleared on page refresh) ──────────────────────────
-let _sessionKey = null;
+export const AI_PROVIDERS_CONFIG = {
+  gemini: {
+    id: 'gemini',
+    name: 'Google Gemini',
+    getKeyUrl: 'https://aistudio.google.com/app/apikey',
+    getKeyLabel: 'Get API Key from Google',
+    placeholder: 'AIza...',
+    label: 'Add New API Key',
+    models: [
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recommended)' },
+      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
+      { id: 'gemini-1.5-pro',   name: 'Gemini 1.5 Pro' }
+    ]
+  },
+  openrouter: {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    getKeyUrl: 'https://openrouter.ai/keys',
+    getKeyLabel: 'Get API Key from OpenRouter',
+    placeholder: 'sk-or-v1-...',
+    label: 'Add New API Key',
+    models: [
+      { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (via OpenRouter)' },
+      { id: 'openai/gpt-4o-mini',       name: 'GPT-4o Mini (via OpenRouter)' },
+      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' }
+    ]
+  },
+  openai: {
+    id: 'openai',
+    name: 'OpenAI',
+    getKeyUrl: 'https://platform.openai.com/api-keys',
+    getKeyLabel: 'Get API Key from OpenAI',
+    placeholder: 'sk-proj-...',
+    label: 'Add New API Key',
+    models: [
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Fast & Efficient)' },
+      { id: 'gpt-4o',      name: 'GPT-4o (High Precision Vision)' }
+    ]
+  }
+};
 
-export function setApiKey(key) {
-  _sessionKey = key ? key.trim() : null;
+// ── In-memory key & provider store (cleared on page refresh) ─────────────
+let _activeProvider = 'gemini';
+let _providerKeys = {
+  gemini: null,
+  openrouter: null,
+  openai: null
+};
+let _selectedModels = {
+  gemini: 'gemini-2.5-flash',
+  openrouter: 'google/gemini-2.5-flash',
+  openai: 'gpt-4o-mini'
+};
+
+export function setAiProvider(provider) {
+  if (AI_PROVIDERS_CONFIG[provider]) {
+    _activeProvider = provider;
+  }
 }
 
-export function hasApiKey() {
-  return !!_sessionKey && _sessionKey.trim().length > 0;
+export function getActiveProvider() {
+  return _activeProvider;
 }
 
-export function clearApiKey() {
-  _sessionKey = null;
+export function setProviderModel(modelId, provider = _activeProvider) {
+  _selectedModels[provider] = modelId;
 }
 
-/** Returns the raw session key (needed to forward it in direct fetch calls). */
-export function getSessionKey() {
-  return _sessionKey;
+export function getProviderModel(provider = _activeProvider) {
+  return _selectedModels[provider] || AI_PROVIDERS_CONFIG[provider]?.models[0]?.id;
 }
 
-/** Returns a redacted version safe for display / logging */
-export function getRedactedKey(key) {
-  const target = key || _sessionKey;
+export function setApiKey(key, provider = _activeProvider) {
+  _providerKeys[provider] = key ? key.trim() : null;
+}
+
+export function hasApiKey(provider = _activeProvider) {
+  const key = _providerKeys[provider];
+  if (!!key && key.trim().length > 0) return true;
+  // Gemini always has server environment fallback key
+  if (provider === 'gemini') return true;
+  return false;
+}
+
+export function clearApiKey(provider = _activeProvider) {
+  _providerKeys[provider] = null;
+}
+
+export function getSessionKey(provider = _activeProvider) {
+  return _providerKeys[provider];
+}
+
+export function getRedactedKey(key, provider = _activeProvider) {
+  const target = key || _providerKeys[provider];
   if (!target || target.length < 6) return '***';
   return target.substring(0, 4) + '…' + target.substring(target.length - 4);
 }
 
-// ── Fetch with timeout ──────────────────────────────────────────────────────
+// ── Fetch with timeout & signal support ─────────────────────────────────────
 async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  if (options && options.signal) {
+    if (options.signal.aborted) {
+      clearTimeout(timer);
+      controller.abort();
+    } else {
+      options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
     return res;
@@ -49,88 +124,32 @@ async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT_MS) {
   }
 }
 
-// ── Error classifier ────────────────────────────────────────────────────────
-function classifyGeminiError(status, body) {
-  const errStatus = body?.error?.status || '';
-  const apiMsg = body?.error?.message || '';
-  const apiMsgLower = apiMsg.toLowerCase();
-
-  // 1. HTTP 429 / RESOURCE_EXHAUSTED / Quota Exceeded Detection
-  if (
-    status === 429 ||
-    errStatus === 'RESOURCE_EXHAUSTED' ||
-    apiMsgLower.includes('quota') ||
-    apiMsgLower.includes('resource_exhausted') ||
-    apiMsgLower.includes('rate limit') ||
-    apiMsgLower.includes('free_tier')
-  ) {
-    let delayInfo = '';
-    if (Array.isArray(body?.error?.details)) {
-      const retryDetail = body.error.details.find(d =>
-        (d['@type'] && d['@type'].includes('RetryInfo')) || d.retryDelay
-      );
-      if (retryDetail && retryDetail.retryDelay) {
-        delayInfo = ` (Retry after: ${retryDetail.retryDelay})`;
-      }
-    }
-    return `Gemini API quota exceeded. Please wait for the quota to reset or use a Gemini API project with available quota.${delayInfo}`;
-  }
-
-  // 2. Authentication / Invalid Key Detection
-  if (
-    (status === 400 && (apiMsgLower.includes('key') || apiMsgLower.includes('invalid') || apiMsgLower.includes('api_key'))) ||
-    status === 401
-  ) {
-    return 'Invalid Gemini API key. Please check your API key in Google AI Studio.';
-  }
-
-  // 3. Permission / Project Restrictions
-  if (status === 403) {
-    return `Gemini API Key Unauthorized (${status}). Check API key permissions or billing setup in Google AI Studio.`;
-  }
-
-  // 4. Return exact API error message if provided
-  if (apiMsg) {
-    return `Gemini API Error (${status}): ${apiMsg}`;
-  }
-
-  // 5. Server & Network Fallbacks
-  if (status === 500 || status === 503) {
-    return 'Gemini service is temporarily unavailable. Please try again.';
-  }
-
-  if (status === 0 || !status) {
-    return 'Network error connecting to Gemini API. Check your internet connection.';
-  }
-
-  return `Gemini API request failed (${status}).`;
-}
-
-// ── Test connection (minimal token usage via server proxy) ──────────────────
-export async function testConnection(apiKey) {
-  const keyToTest = apiKey ? apiKey.trim() : _sessionKey;
-  if (!keyToTest || keyToTest.length === 0) {
-    return { ok: false, message: 'Please enter your Gemini API key in the input box.' };
+// ── Connection Test ─────────────────────────────────────────────────────────
+export async function testConnection(key, provider = _activeProvider) {
+  const targetKey = key || _providerKeys[provider];
+  if (!targetKey && provider !== 'gemini') {
+    return { ok: false, message: `${AI_PROVIDERS_CONFIG[provider]?.name || provider} API key is missing.` };
   }
 
   try {
-    const res = await fetchWithTimeout('/api/gemini/test', {
+    const res = await fetchWithTimeout('/api/ai/test', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-gemini-api-key': keyToTest
+        'x-ai-provider': provider,
+        'x-ai-api-key': targetKey || '',
+        'x-gemini-api-key': targetKey || ''
       },
-      body: JSON.stringify({ apiKey: keyToTest })
+      body: JSON.stringify({ provider, apiKey: targetKey || '' })
     }, 15000);
 
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) {
-      return { ok: false, message: data.message || 'Gemini API key verification failed.' };
+    if (res.ok && data.ok) {
+      return { ok: true, message: data.message || `Connected to ${AI_PROVIDERS_CONFIG[provider]?.name}!` };
     }
-    return { ok: true, message: 'Gemini Connected' };
+    return { ok: false, message: data.message || `${AI_PROVIDERS_CONFIG[provider]?.name} connection test failed.` };
   } catch (err) {
-    if (err.name === 'AbortError') return { ok: false, message: 'Connection timed out connecting to Gemini API proxy (15s).' };
-    return { ok: false, message: `Network error: ${err.message || 'Unable to reach backend AI server.'}` };
+    return { ok: false, message: `Network error reaching ${AI_PROVIDERS_CONFIG[provider]?.name} servers.` };
   }
 }
 
@@ -148,210 +167,113 @@ function blobToBase64(blob) {
   });
 }
 
-/**
- * Temporary PNG preview extractor & canvas renderer for EPS/AI/PDF vector files.
- * Extracts embedded JPEG/PNG bytes from EPS binary or renders a canvas PNG preview.
- */
-async function rasterizeVectorToPng(item) {
-  if (item.file) {
-    try {
-      const buffer = await item.file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
+const SUPPORTED_EXTS = new Set([
+  'jpg','jpeg','png','webp','tiff','tif','gif',
+  'eps','ai','svg','pdf',
+  'mp4','mov','avi','webm'
+]);
 
-      // 1. Scan for embedded JPEG (\xFF \xD8 \xFF) in EPS binary
-      for (let i = 0; i < bytes.length - 3; i++) {
-        if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8 && bytes[i + 2] === 0xFF) {
-          for (let j = i + 3; j < bytes.length - 1; j++) {
-            if (bytes[j] === 0xFF && bytes[j + 1] === 0xD9) {
-              const jpegSlice = bytes.subarray(i, j + 2);
-              const blob = new Blob([jpegSlice], { type: 'image/jpeg' });
-              return { base64: await blobToBase64(blob), mimeType: 'image/jpeg' };
-            }
-          }
-        }
-      }
-
-      // 2. Scan for embedded PNG (\x89 PNG) in EPS binary
-      for (let i = 0; i < bytes.length - 4; i++) {
-        if (bytes[i] === 0x89 && bytes[i + 1] === 0x50 && bytes[i + 2] === 0x4E && bytes[i + 3] === 0x47) {
-          for (let j = i + 4; j < bytes.length - 8; j++) {
-            if (bytes[j] === 0x49 && bytes[j + 1] === 0x45 && bytes[j + 2] === 0x4E && bytes[j + 3] === 0x44) {
-              const pngSlice = bytes.subarray(i, j + 8);
-              const blob = new Blob([pngSlice], { type: 'image/png' });
-              return { base64: await blobToBase64(blob), mimeType: 'image/png' };
-            }
-          }
-        }
-      }
-    } catch (e) {
-      // fallback to canvas rasterizer below
-    }
-  }
-
-  // 3. Render temporary canvas PNG preview representing the EPS vector
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = 800;
-    canvas.height = 600;
-    const ctx = canvas.getContext('2d');
-
-    const grad = ctx.createLinearGradient(0, 0, 800, 600);
-    grad.addColorStop(0, '#0F172A');
-    grad.addColorStop(1, '#1E1B4B');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 800, 600);
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < 800; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 600); ctx.stroke(); }
-    for (let y = 0; y < 600; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(800, y); ctx.stroke(); }
-
-    ctx.fillStyle = '#8B5CF6';
-    ctx.font = '800 28px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('VECTOR ASSET (EPS)', 400, 260);
-
-    ctx.fillStyle = '#94A3B8';
-    ctx.font = '600 20px Inter, sans-serif';
-    ctx.fillText(item.name, 400, 310);
-
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.4)';
-    ctx.fillRect(250, 340, 300, 2);
-
-    const dataUrl = canvas.toDataURL('image/png');
-    return { base64: dataUrl.split(',')[1], mimeType: 'image/png' };
-  } catch (err) {
-    throw new Error(`EPS conversion failed: ${err.message}`);
-  }
-}
-
-async function getImageBase64(item, ext) {
-  const isVector = ['eps', 'ai', 'pdf', 'svg'].includes(ext);
-  if (isVector) {
-    return await rasterizeVectorToPng(item);
-  }
-
-  if (item.file) {
-    return { base64: await blobToBase64(item.file), mimeType: getGeminiMimeType(item, ext) };
-  }
-  if (item.url && item.url.startsWith('http')) {
-    const res = await fetch(item.url);
-    if (!res.ok) throw new Error(`Failed to fetch image preview from ${item.url}`);
-    const blob = await res.blob();
-    return { base64: await blobToBase64(blob), mimeType: 'image/jpeg' };
-  }
-  throw new Error('Image file data unavailable for AI analysis.');
+export function isGeminiAnalyzable(ext) {
+  if (!ext) return false;
+  return SUPPORTED_EXTS.has(ext.toLowerCase().replace('.', ''));
 }
 
 function getGeminiMimeType(item, ext) {
-  const mimeMap = {
-    jpg: 'image/jpeg', jpeg: 'image/jpeg',
-    png: 'image/png', webp: 'image/webp',
-    tiff: 'image/tiff', tif: 'image/tiff',
-    gif: 'image/gif', svg: 'image/png'
-  };
-  if (item.file && item.file.type) return item.file.type;
-  return mimeMap[ext] || item.type || 'image/jpeg';
+  if (item.type && item.type.includes('/')) return item.type;
+  switch (ext) {
+    case 'jpg': case 'jpeg': return 'image/jpeg';
+    case 'png':  return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'gif':  return 'image/gif';
+    case 'tiff': case 'tif': return 'image/tiff';
+    case 'mp4':  return 'video/mp4';
+    case 'mov':  return 'video/quicktime';
+    case 'avi':  return 'video/x-msvideo';
+    case 'webm': return 'video/webm';
+    default:    return 'image/jpeg';
+  }
 }
 
-const GEMINI_SUPPORTED_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'eps', 'ai', 'svg', 'pdf', 'mp4', 'mov', 'avi', 'webm']);
-
-export function isGeminiAnalyzable(ext) {
-  return GEMINI_SUPPORTED_EXTS.has(ext.toLowerCase());
+async function rasterizeSvgToJpegBase64(svgFile) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const svgText = e.target.result;
+      const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 1200;
+        let scale = Math.min(1, MAX_DIM / (img.width || 1000), MAX_DIM / (img.height || 1000));
+        canvas.width = Math.max(100, Math.round((img.width || 800) * scale));
+        canvas.height = Math.max(100, Math.round((img.height || 800) * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Failed to render SVG vector onto canvas for AI vision parsing.'));
+      };
+      img.src = url;
+    };
+    reader.onerror = reject;
+    reader.readAsText(svgFile);
+  });
 }
 
-// ── Robust Response Parser & Validator ─────────────────────────────────────
-function parseMetadataResponse(rawText, filename, platform) {
-  if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
-    throw new Error('Gemini API returned an empty text payload.');
-  }
+async function extractPdfFirstPageJpegBase64(pdfFile) {
+  const blobB64 = await blobToBase64(pdfFile);
+  return { base64: blobB64, mimeType: 'application/pdf' };
+}
 
-  // 1. Strip markdown code block fences (```json ... ``` or ``` ...)
-  let text = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-
-  // 2. Locate the outermost JSON object bounds { ... }
-  const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    text = text.substring(firstBrace, lastBrace + 1).trim();
-  }
-
-  let parsed = null;
-
-  // Attempt 1: Direct JSON parse
-  try {
-    parsed = JSON.parse(text);
-  } catch (e1) {
-    // Attempt 2: Strip trailing commas inside arrays or objects
+async function getImageBase64(item, ext) {
+  if (ext === 'svg' && item.file) {
     try {
-      const sanitized = text.replace(/,\s*([}\]])/g, '$1');
-      parsed = JSON.parse(sanitized);
-    } catch (e2) {
-      // Attempt 3: Replace unescaped newlines/tabs inside string values
-      try {
-        const noNewlines = text.replace(/[\r\n]+/g, ' ');
-        parsed = JSON.parse(noNewlines);
-      } catch (e3) {
-        throw new Error('Could not parse metadata JSON from Gemini API response.');
-      }
-    }
+      return await rasterizeSvgToJpegBase64(item.file);
+    } catch (_) {}
   }
 
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Gemini response is not a valid JSON object.');
+  if (ext === 'pdf' && item.file) {
+    try {
+      return await extractPdfFirstPageJpegBase64(item.file);
+    } catch (_) {}
   }
 
-  // Extract & validate fields
-  const title = String(parsed.title || parsed.name || '').substring(0, platform.titleMaxLen).trim();
-  const description = String(parsed.description || title || '').trim();
-
-  let rawCat = String(parsed.category || '').trim();
-  const catList = Array.isArray(platform.categories) && platform.categories.length > 0
-    ? platform.categories
-    : ['General', 'Abstract', 'Animals', 'Architecture', 'Business', 'Food', 'Landscapes', 'Nature', 'People', 'Technology', 'Graphic Resources'];
-
-  let category = catList.find(c => c.toLowerCase() === rawCat.toLowerCase())
-    || catList.find(c => c.toLowerCase().includes(rawCat.toLowerCase()) || rawCat.toLowerCase().includes(c.toLowerCase()))
-    || rawCat
-    || catList[0];
-
-  // Keywords cleanup & normalization
-  let keywords = [];
-  if (Array.isArray(parsed.keywords)) {
-    keywords = parsed.keywords;
-  } else if (typeof parsed.keywords === 'string') {
-    keywords = parsed.keywords.split(',');
+  if (item.file) {
+    const base64 = await blobToBase64(item.file);
+    const mimeType = getGeminiMimeType(item, ext);
+    return { base64, mimeType };
   }
 
-  keywords = keywords
-    .map(k => String(k).toLowerCase().trim())
-    .filter(k => k.length > 0);
-
-  // Deduplicate preserving relevance order
-  const seen = new Set();
-  keywords = keywords.filter(k => { if (seen.has(k)) return false; seen.add(k); return true; });
-
-  // Enforce platform keyword cap
-  keywords = keywords.slice(0, platform.keywordMax);
-
-  // Strict field validation
-  if (!title) {
-    throw new Error('Generated metadata is missing a valid title.');
+  if (item.url && item.url.startsWith('data:')) {
+    const parts = item.url.split(',');
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    return { base64: parts[1], mimeType };
   }
 
-  return {
-    filename: parsed.filename || filename,
-    title,
-    description: description || title,
-    keywords,
-    category
-  };
+  if (item.url) {
+    const res = await fetch(item.url);
+    const blob = await res.blob();
+    const base64 = await blobToBase64(blob);
+    const mimeType = getGeminiMimeType(item, ext);
+    return { base64, mimeType };
+  }
+
+  throw new Error(`Unable to extract base64 image data for ${item.name || 'asset'}`);
 }
 
 // ── Main Metadata Generation (Secure Server Proxy) ─────────────────────────
-export async function generateMetadataForImage(item, platform, apiKey, settings, mode) {
-  const key = apiKey || _sessionKey;
-  if (!key) throw new Error('No Gemini API key provided. Please enter your API key in AI Settings.');
+export async function generateMetadataForImage(item, platform, apiKey, settings, mode, signal) {
+  const provider = _activeProvider || 'gemini';
+  const key = apiKey || _providerKeys[provider] || getSessionKey(provider) || '';
+  const selectedModel = getProviderModel(provider);
 
   const ext = (item.ext || item.name.split('.').pop()).toLowerCase();
 
@@ -362,58 +284,61 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
     };
   }
 
-  // Route based on asset type
   if (item.assetType === 'video') {
-    // Binary stream for videos to prevent UI freezing
     const mimeType = getGeminiMimeType(item, ext);
-    
-    // We expect item.file to exist, but fallback if not
     if (!item.file) throw new Error('Video file object is missing.');
 
     const res = await fetchWithTimeout('/api/gemini/generate-video', {
       method: 'POST',
+      signal,
       headers: {
         'Content-Type': mimeType,
+        'x-ai-provider': provider,
+        'x-ai-api-key': key,
         'x-gemini-api-key': key,
         'x-filename': encodeURIComponent(item.name),
         'x-platform': encodeURIComponent(JSON.stringify(platform)),
         'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
         'x-mode': mode || 'metadata'
       },
-      body: item.file // raw binary Blob
+      body: item.file
     }, VIDEO_TIMEOUT_MS);
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
-      throw new Error(data.message || 'Gemini video metadata generation failed.');
+      throw new Error(data.message || 'Video metadata generation failed.');
     }
     return data.data;
   }
 
-  // Legacy Base64 flow for images and vectors
   const { base64, mimeType } = await getImageBase64(item, ext);
 
-  const res = await fetchWithTimeout('/api/gemini/generate', {
+  const res = await fetchWithTimeout('/api/ai/generate', {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
+      'x-ai-provider': provider,
+      'x-ai-api-key': key,
       'x-gemini-api-key': key
     },
     body: JSON.stringify({
+      provider,
       apiKey: key,
       base64Image: base64,
       mimeType,
       filename: item.name,
       platform,
       settings,
-      mode
+      mode,
+      model: selectedModel
     })
   }, REQUEST_TIMEOUT_MS);
 
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok || !data.ok) {
-    const errMsg = data.message || 'Gemini metadata generation failed.';
+    const errMsg = data.message || `${AI_PROVIDERS_CONFIG[provider]?.name || provider} metadata generation failed.`;
     throw new Error(errMsg);
   }
 

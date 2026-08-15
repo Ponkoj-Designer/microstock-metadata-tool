@@ -188,11 +188,6 @@
       <div id="ai-status-badge" class="ai-status-badge disconnected hidden sm:inline-flex">
         <span class="ai-dot ai-dot-disconnected"></span> AI OFF
       </div>
-      
-      <!-- AI Settings Button (from existing app) -->
-      <button class="px-3 py-1.5 rounded bg-surface-container-highest border border-outline text-on-surface-variant text-xs font-bold hover:bg-[#191c1f] hover:text-[#00dbe9] hover:border-[#00dbe9] transition-all" id="nav-btn-ai-settings" title="API Settings">
-        API
-      </button>
 
       <!-- Logged-out state -->
       <div id="auth-logged-out" class="hidden md:flex items-center gap-2">
@@ -258,7 +253,7 @@
     <aside class="fixed left-0 top-[68px] w-[280px] md:w-[375px] h-[calc(100vh-68px)] bg-[#191c1f] border-r border-[#3b494b] overflow-y-auto flex flex-col z-40 transition-transform duration-300 transform -translate-x-full md:translate-x-0" id="sidebar">
       
       <!-- Project Workspace Avatar Header -->
-      <div class="px-6 mb-6 flex items-center gap-4">
+      <div class="px-6 mb-4 flex items-center gap-4">
         <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#00dbe9] to-[#db50ff] p-[1px] glow-cyan">
           <div class="w-full h-full bg-[#1d2023] rounded-[15px] flex items-center justify-center text-primary-fixed-dim font-bold text-lg">
             <span class="material-symbols-outlined text-[24px]">photo_library</span>
@@ -268,6 +263,14 @@
           <h2 class="text-base font-semibold text-on-surface leading-tight">Microstock Tool</h2>
           <p class="text-[10px] text-on-surface-variant uppercase tracking-wider mt-1">Develop By PONKOJ DAS</p>
         </div>
+      </div>
+
+      <!-- Prominent Add API Keys Button -->
+      <div class="px-4 mb-4">
+        <button type="button" id="sidebar-btn-add-api" class="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl bg-gradient-to-r from-[#00dbe9] via-[#0284c7] to-[#2563eb] text-white font-bold text-sm shadow-[0_4px_18px_rgba(0,219,233,0.35)] hover:shadow-[0_6px_25px_rgba(0,219,233,0.55)] hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer border border-[#00dbe9]/30">
+          <span class="material-symbols-outlined text-[18px]">key</span>
+          <span>Add API Keys</span>
+        </button>
       </div>
 
       <!-- Sidebar Modes & Options -->
@@ -559,7 +562,7 @@
 
       <!-- Workspace: Image to Prompt (Hidden by default) -->
       <div id="workspace-img2prompt" class="w-full flex flex-col items-center" style="display:none">
-        <div class="w-full max-w-2xl border-gradient rounded-[24px] p-[1px] glow-cyan">
+        <div class="w-full max-w-2xl mx-auto border-gradient rounded-[24px] p-[1px] glow-cyan">
           <div class="bg-[#1d2023] rounded-[23px] px-8 pt-8 pb-10 flex flex-col items-center text-center relative backdrop-blur-sm">
             <div class="hero-dashed-border w-full min-h-[220px] flex flex-col items-center justify-center gap-3 mb-8 group cursor-pointer relative transition-all hover:bg-white/5" id="img2prompt-drop-zone">
               <span class="material-symbols-outlined text-[40px] text-primary-fixed-dim">image_search</span>
@@ -587,7 +590,7 @@
           </div>
         </div>
         
-        <div id="img2prompt-results-wrapper" class="w-full max-w-3xl mt-6 hidden">
+        <div id="img2prompt-results-wrapper" class="w-full max-w-3xl mx-auto mt-6 hidden">
           <h3 id="img2prompt-results-title" class="text-on-surface font-bold text-lg mb-4">Results</h3>
           <div id="img2prompt-cards-list" class="grid grid-cols-1 gap-4"></div>
         </div>
@@ -603,43 +606,86 @@
 
   <!-- 1. AI BYOK Settings Modal -->
   <div class="modal-overlay" id="modal-ai-settings">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3 class="modal-title">
-          <span class="material-symbols-outlined text-primary-fixed-dim">settings_suggest</span>
-          AI Engine Settings (Gemini BYOK)
+    <div class="modal-box !max-w-[760px] !p-0 overflow-hidden bg-[#11151c] border border-[#262f3d]">
+      
+      <!-- Modal Header -->
+      <div class="modal-header px-6 py-4 border-b border-[#262f3d]">
+        <h3 class="modal-title text-base font-bold text-on-surface flex items-center gap-2">
+          <span class="material-symbols-outlined text-[#00dbe9] text-[20px]">key</span>
+          API Secrets Management
         </h3>
         <button class="modal-close-btn" id="btn-close-ai-settings">✕</button>
       </div>
-      <div class="modal-body">
-        <div class="p-3 rounded-xl bg-primary-fixed-dim/10 border border-primary-fixed-dim/30 text-xs text-on-surface-variant leading-relaxed">
-          🔒 Enter your own Gemini API key. Your key is stored in browser session memory only — never sent to external servers.
-        </div>
 
-        <div class="flex flex-col gap-1.5">
-          <div class="flex justify-between items-center">
-            <label class="text-xs font-bold text-on-surface">Gemini API Key</label>
-            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-[#00dbe9] hover:text-[#00f0ff] hover:underline flex items-center gap-1 transition-colors">
-              Get API Key <span class="material-symbols-outlined text-[12px]">open_in_new</span>
-            </a>
-          </div>
-          <div class="relative flex gap-2">
-            <input type="password" id="gemini-api-key-input" class="cyber-input font-mono text-xs" placeholder="AIzaSy...">
-            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-3 rounded-lg text-xs hover:border-primary-fixed-dim" id="btn-toggle-key-visibility" type="button">👁</button>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 flex-wrap">
-          <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold hover:bg-[#00f0ff] transition-all glow-cyan" id="btn-save-api-key">Save Key</button>
-          <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg text-xs font-semibold hover:border-primary-fixed-dim transition-all" id="btn-test-connection">Test Connection</button>
-          <button class="text-xs text-error hover:text-error/80 px-3 py-2" id="btn-clear-api-key">Clear Key</button>
-        </div>
-
-        <div class="p-3 rounded-xl bg-[#191c1f] border border-[#3b494b] text-xs flex items-center justify-between">
-          <span class="text-on-surface-variant">Connection Status:</span>
-          <span id="connection-status-text" class="font-semibold text-on-surface">● Not Connected</span>
+      <!-- Top Provider Tabs Bar (Gemini, OpenRouter, OpenAI) -->
+      <div class="px-6 pt-4 pb-2 bg-[#151a23] border-b border-[#262f3d]">
+        <div class="flex items-center gap-1.5 p-1 bg-[#0b0e13] rounded-xl border border-[#262f3d]" id="ai-provider-tabs">
+          <button type="button" data-provider="gemini" class="ai-provider-tab active flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer bg-[#00dbe9] text-background shadow-[0_0_15px_rgba(0,219,233,0.3)]">
+            <span class="font-black text-sm">G</span> Gemini
+          </button>
+          <button type="button" data-provider="openrouter" class="ai-provider-tab flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-[#19202c] transition-all cursor-pointer">
+            <span class="material-symbols-outlined text-[16px]">hub</span> OpenRouter
+          </button>
+          <button type="button" data-provider="openai" class="ai-provider-tab flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-[#19202c] transition-all cursor-pointer">
+            <span class="material-symbols-outlined text-[16px]">psychology</span> OpenAI
+          </button>
         </div>
       </div>
+
+      <!-- 2-Column Main Content Body -->
+      <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#262f3d]">
+        
+        <!-- Left Column: CONFIGURATION -->
+        <div class="p-6 flex flex-col gap-4 bg-[#11151c]">
+          <h4 class="text-xs font-bold text-[#00dbe9] uppercase tracking-wider">CONFIGURATION</h4>
+          
+          <!-- Model Selection -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-medium text-on-surface-variant">Model Selection</label>
+            <select id="ai-model-select" class="cyber-input bg-[#161c27] border-[#262f3d] rounded-lg px-3 py-2.5 text-xs text-on-surface focus:border-[#00dbe9] cursor-pointer">
+              <!-- Dynamically populated per provider -->
+            </select>
+          </div>
+
+          <!-- Add New API Key (Input + Save) -->
+          <div class="flex flex-col gap-1.5">
+            <label id="ai-provider-key-label" class="text-xs font-medium text-on-surface-variant">Add New API Key</label>
+            <div class="flex gap-2">
+              <input type="password" id="gemini-api-key-input" class="cyber-input bg-[#161c27] border-[#262f3d] rounded-lg px-3 py-2.5 font-mono text-xs text-on-surface flex-1 focus:border-[#00dbe9]" placeholder="AIza...">
+              <button type="button" id="btn-save-api-key" class="bg-[#00dbe9] text-background px-4 py-2.5 rounded-lg text-xs font-bold hover:bg-[#00f0ff] transition-all glow-cyan cursor-pointer whitespace-nowrap">Save</button>
+            </div>
+          </div>
+
+          <!-- Big Get API Key Button -->
+          <a id="ai-provider-get-key-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="mt-2 flex items-center justify-center gap-2 border border-[#00dbe9] bg-[#00dbe9]/10 text-[#00dbe9] hover:bg-[#00dbe9]/20 font-bold text-xs py-3 rounded-lg transition-all cursor-pointer shadow-[0_0_15px_rgba(0,219,233,0.1)]">
+            <span class="material-symbols-outlined text-[16px]">key</span> Get API Key from Google
+          </a>
+        </div>
+
+        <!-- Right Column: STORED KEYS -->
+        <div class="p-6 flex flex-col gap-4 bg-[#0d1017]">
+          <h4 class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">STORED KEYS</h4>
+
+          <div id="stored-keys-container" class="flex-1 flex flex-col justify-center items-center gap-2 min-h-[160px] text-center p-4 rounded-xl border border-dashed border-[#262f3d] bg-[#11151c]/50">
+            <span class="material-symbols-outlined text-on-surface-variant/40 text-[36px]">key</span>
+            <span class="text-xs text-on-surface-variant/60 font-medium">No keys found</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3.5 bg-[#0b0e13] border-t border-[#262f3d] flex items-center justify-between">
+        <div class="text-xs flex items-center gap-2">
+          <span class="text-on-surface-variant font-medium">Status:</span>
+          <span id="connection-status-text" class="font-semibold text-on-surface">● Not Connected</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btn-test-connection" class="bg-[#161c27] border border-[#262f3d] text-on-surface hover:border-[#00dbe9] hover:text-white px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer">Test Connection</button>
+          <button type="button" id="btn-done-ai-settings" class="bg-[#00dbe9] text-background hover:bg-[#00f0ff] px-5 py-2 rounded-lg text-xs font-bold transition-all glow-cyan cursor-pointer">Done</button>
+        </div>
+      </div>
+
     </div>
   </div>
 

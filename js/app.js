@@ -233,7 +233,7 @@ function updateAiStatusBadge() {
     badge.innerHTML = `<span class="ai-dot ai-dot-connected"></span> ${providerConfig.name} ON`;
     badge.className = 'ai-status-badge connected';
   } else {
-    badge.innerHTML = `<span class="ai-dot ai-dot-disconnected"></span> ${providerConfig.name} OFF`;
+    badge.innerHTML = `<span class="ai-dot ai-dot-disconnected"></span> AI OFF`;
     badge.className = 'ai-status-badge disconnected';
   }
 }
@@ -1803,9 +1803,27 @@ function setupEventListeners() {
     window.open('https://wa.me/8801741783521', '_blank', 'noopener,noreferrer');
   });
   document.getElementById('nav-btn-pricing')?.addEventListener('click',  () => { openModal(modal('modal-pricing')); updatePricingModalUI(); });
+  document.getElementById('btn-close-pricing')?.addEventListener('click',() => closeModal(modal('modal-pricing')));
   document.getElementById('nav-btn-login')?.addEventListener('click',    () => openAuthModal('login'));
   document.getElementById('nav-btn-signup')?.addEventListener('click',   () => openAuthModal('signup'));
   document.getElementById('btn-user-profile')?.addEventListener('click', () => openAuthModal('profile'));
+
+  // Pricing plan buttons
+  document.getElementById('btn-plan-free')?.addEventListener('click', () => {
+    const user = getCurrentUser();
+    const currentPlan = user ? (user.plan || 'free').toLowerCase() : 'free';
+    if (currentPlan === 'free') {
+      showToast('You are currently on the Free Plan', 'info');
+    } else {
+      showToast('Free plan active.', 'info');
+    }
+  });
+  document.getElementById('btn-plan-pro')?.addEventListener('click', () => {
+    openManualPaymentModal('pro');
+  });
+  document.getElementById('btn-plan-business')?.addEventListener('click', () => {
+    openManualPaymentModal('business');
+  });
 
   // AI Settings button in header/nav & sidebar (Requires Auth)
   const openAiSettingsHandler = () => {

@@ -912,55 +912,62 @@
   <div class="modal-overlay" id="modal-pricing">
     <div class="modal-box !max-w-[780px]">
       <div class="modal-header">
-        <h3 class="modal-title text-secondary-container">
-          <span class="material-symbols-outlined">workspace_premium</span> Plans
+        <h3 class="modal-title text-[#00dbe9] flex items-center gap-2">
+          <span class="material-symbols-outlined text-[20px]">workspace_premium</span> Choose Subscription Plan
         </h3>
         <button class="modal-close-btn" id="btn-close-pricing">✕</button>
       </div>
       <div class="modal-body">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          
+          <!-- Free Plan -->
           <div class="bg-[#191c1f] border border-[#3b494b] rounded-xl p-5 flex flex-col justify-between gap-4">
             <div>
-              <h4 class="text-sm font-bold text-on-surface">FREE</h4>
+              <h4 class="text-sm font-bold text-on-surface">FREE PLAN</h4>
               <p class="text-xs text-on-surface-variant mt-1">For casual contributors</p>
               <div class="text-2xl font-bold text-on-surface mt-3">৳0 <span class="text-xs font-normal text-on-surface-variant">/ month</span></div>
             </div>
             <ul class="text-xs text-on-surface-variant space-y-2">
-              <li>✓ BYOK Gemini AI</li>
-              <li>✓ 10 images per batch</li>
-              <li>✓ Basic CSV export</li>
+              <li>✓ BYOK Gemini / OpenAI</li>
+              <li>✓ Unlimited batch processing</li>
+              <li>✓ Basic &amp; Advanced CSV export</li>
             </ul>
-            <button class="bg-surface-container-high border border-outline-variant text-on-surface py-2 rounded-lg text-xs font-semibold" onclick="document.getElementById('modal-pricing').classList.remove('active')">Current Plan</button>
+            <button id="btn-plan-free" type="button" class="w-full bg-[#15171a] border border-[#3b494b] text-on-surface-variant py-2.5 rounded-lg text-xs font-semibold cursor-pointer hover:border-[#00dbe9]">Active Free Plan</button>
           </div>
           
-          <div class="bg-[#1d2023] border-2 border-primary-fixed-dim rounded-xl p-5 flex flex-col justify-between gap-4 relative glow-cyan">
-            <div class="absolute -top-3 right-4 bg-primary-fixed-dim text-background text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">POPULAR</div>
+          <!-- Pro Plan -->
+          <div class="bg-[#1d2023] border-2 border-[#00dbe9] rounded-xl p-5 flex flex-col justify-between gap-4 relative glow-cyan">
+            <div class="absolute -top-3 right-4 bg-[#00dbe9] text-background text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">POPULAR</div>
             <div>
-              <h4 class="text-sm font-bold text-primary-fixed-dim">PRO</h4>
+              <h4 class="text-sm font-bold text-[#00dbe9]">PRO PLAN</h4>
               <p class="text-xs text-on-surface-variant mt-1">For active stock uploaders</p>
               <div class="text-2xl font-bold text-on-surface mt-3">৳150 <span class="text-xs font-normal text-on-surface-variant">/ month</span></div>
             </div>
             <ul class="text-xs text-on-surface-variant space-y-2">
-              <li>✓ 6,000 credits / month</li>
-              <li>✓ All 8 platforms</li>
-              <li>✓ Advanced keyword ordering</li>
+              <li>✓ 6,000 Credits / month</li>
+              <li>✓ All 8 stock platforms</li>
+              <li>✓ Advanced commercial keyword ordering</li>
+              <li>✓ Priority AI Vision Processing</li>
             </ul>
-            <button class="bg-[#00dbe9] text-background py-2 rounded-lg text-xs font-bold glow-cyan" onclick="showToast('Pro Plan selected','info')">Upgrade to Pro</button>
+            <button id="btn-plan-pro" type="button" class="w-full bg-[#00dbe9] text-background py-2.5 rounded-lg text-xs font-bold glow-cyan cursor-pointer hover:bg-[#00f0ff] transition-all">Upgrade to Pro (৳150)</button>
           </div>
 
-          <div class="bg-[#191c1f] border border-[#3b494b] rounded-xl p-5 flex flex-col justify-between gap-4">
+          <!-- Business Plan -->
+          <div class="bg-[#191c1f] border border-[#3b494b] rounded-xl p-5 flex flex-col justify-between gap-4 hover:border-[#00dbe9]/50 transition-all">
             <div>
-              <h4 class="text-sm font-bold text-on-surface">BUSINESS</h4>
+              <h4 class="text-sm font-bold text-on-surface">BUSINESS PLAN</h4>
               <p class="text-xs text-on-surface-variant mt-1">For stock studios &amp; agencies</p>
-              <div class="text-2xl font-bold text-on-surface mt-3">৳500 <span class="text-xs font-normal text-on-surface-variant">/ year</span></div>
+              <div class="text-2xl font-bold text-on-surface mt-3">৳300 <span class="text-xs font-normal text-on-surface-variant">/ month</span></div>
             </div>
             <ul class="text-xs text-on-surface-variant space-y-2">
-              <li>✓ 18,000 credits / year</li>
-              <li>✓ Custom CSV schema</li>
-              <li>✓ Priority AI processing</li>
+              <li>✓ 18,000 Credits / month</li>
+              <li>✓ Custom CSV schema generator</li>
+              <li>✓ Priority 24/7 AI server node</li>
+              <li>✓ VIP Studio Support</li>
             </ul>
-            <button class="bg-surface-container-high border border-outline-variant text-on-surface py-2 rounded-lg text-xs font-semibold" onclick="showToast('Business Plan selected','info')">Contact Sales</button>
+            <button id="btn-plan-business" type="button" class="w-full bg-gradient-to-r from-[#00dbe9] to-[#db50ff] text-white py-2.5 rounded-lg text-xs font-bold cursor-pointer hover:opacity-90 transition-all">Upgrade to Business (৳300)</button>
           </div>
+
         </div>
       </div>
     </div>

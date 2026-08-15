@@ -84,10 +84,7 @@ export function setApiKey(key, provider = _activeProvider) {
 
 export function hasApiKey(provider = _activeProvider) {
   const key = _providerKeys[provider];
-  if (!!key && key.trim().length > 0) return true;
-  // Gemini always has server environment fallback key
-  if (provider === 'gemini') return true;
-  return false;
+  return !!key && key.trim().length > 0;
 }
 
 export function clearApiKey(provider = _activeProvider) {

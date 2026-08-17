@@ -6,17 +6,8 @@ export const PLATFORMS = {
   general: {
     id: 'general',
     name: 'General',
-    logoSvg: `<svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="8" fill="url(#grad-gen)"/>
-      <text x="16" y="21.5" font-family="'Inter', sans-serif" font-weight="900" font-size="18" text-anchor="middle" fill="#FFFFFF">G</text>
-      <defs>
-        <linearGradient id="grad-gen" x1="0" y1="0" x2="32" y2="32">
-          <stop stop-color="#6366F1"/>
-          <stop offset="1" stop-color="#06B6D4"/>
-        </linearGradient>
-      </defs>
-    </svg>`,
-    color: '#6366F1',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5"><circle cx="12" cy="12" r="8.5"/></svg>`,
+    color: '#818cf8',
     colorBg: 'rgba(99, 102, 241, 0.16)',
     colorBorder: 'rgba(99, 102, 241, 0.35)',
     titleMaxLen: 200,
@@ -32,13 +23,10 @@ export const PLATFORMS = {
   adobe: {
     id: 'adobe',
     name: 'AdobeStock',
-    logoSvg: `<svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="8" fill="#FF2A2A"/>
-      <text x="16" y="21" font-family="'Inter', sans-serif" font-weight="900" font-size="14" text-anchor="middle" fill="#FFFFFF" letter-spacing="-0.03em">AS</text>
-    </svg>`,
-    color: '#FF2A2A',
-    colorBg: 'rgba(255, 42, 42, 0.16)',
-    colorBorder: 'rgba(255, 42, 42, 0.35)',
+    logoSvg: `<span style="color:#e056fd;font-weight:900;font-size:13px;letter-spacing:-0.05em;line-height:1">St</span>`,
+    color: '#e056fd',
+    colorBg: 'rgba(224, 86, 253, 0.16)',
+    colorBorder: 'rgba(224, 86, 253, 0.35)',
     titleMaxLen: 200,
     titleMinLen: 5,
     keywordMin: 5,
@@ -57,19 +45,10 @@ export const PLATFORMS = {
   magnific: {
     id: 'magnific',
     name: 'Magnific',
-    logoSvg: `<svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="8" fill="url(#grad-mag)"/>
-      <text x="16" y="21.5" font-family="'Inter', sans-serif" font-weight="900" font-size="18" text-anchor="middle" fill="#FFFFFF">M</text>
-      <defs>
-        <linearGradient id="grad-mag" x1="0" y1="0" x2="32" y2="32">
-          <stop stop-color="#EC4899"/>
-          <stop offset="1" stop-color="#8B5CF6"/>
-        </linearGradient>
-      </defs>
-    </svg>`,
-    color: '#EC4899',
-    colorBg: 'rgba(236, 72, 153, 0.16)',
-    colorBorder: 'rgba(236, 72, 153, 0.35)',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 18l1.5-10 4.5 4.5L12 6l3 6.5 4.5-4.5L21 18H3z"/></svg>`,
+    color: '#facc15',
+    colorBg: 'rgba(250, 204, 21, 0.16)',
+    colorBorder: 'rgba(250, 204, 21, 0.35)',
     titleMaxLen: 250,
     titleMinLen: 5,
     keywordMin: 5,
@@ -83,13 +62,10 @@ export const PLATFORMS = {
   shutterstock: {
     id: 'shutterstock',
     name: 'Shutterstock',
-    logoSvg: `<svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="8" fill="#FF3333"/>
-      <text x="16" y="21" font-family="'Inter', sans-serif" font-weight="900" font-size="14" text-anchor="middle" fill="#FFFFFF" letter-spacing="-0.03em">ST</text>
-    </svg>`,
-    color: '#FF3333',
-    colorBg: 'rgba(255, 51, 51, 0.16)',
-    colorBorder: 'rgba(255, 51, 51, 0.35)',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="2.5"/></svg>`,
+    color: '#38bdf8',
+    colorBg: 'rgba(56, 189, 248, 0.16)',
+    colorBorder: 'rgba(56, 189, 248, 0.35)',
     titleMaxLen: 150,
     titleMinLen: 5,
     keywordMin: 7,
@@ -109,17 +85,8 @@ export const PLATFORMS = {
   vecteezy: {
     id: 'vecteezy',
     name: 'Vecteezy',
-    logoSvg: `<svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="8" fill="url(#grad-vec)"/>
-      <text x="16" y="21.5" font-family="'Inter', sans-serif" font-weight="900" font-size="18" text-anchor="middle" fill="#FFFFFF">V</text>
-      <defs>
-        <linearGradient id="grad-vec" x1="0" y1="0" x2="32" y2="32">
-          <stop stop-color="#FF6B00"/>
-          <stop offset="1" stop-color="#FF9900"/>
-        </linearGradient>
-      </defs>
-    </svg>`,
-    color: '#FF6B00',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.5"><rect x="12" y="2" width="13" height="13" rx="1.5" transform="rotate(45 12 2)"/></svg>`,
+    color: '#f97316',
     colorBg: 'rgba(255, 107, 0, 0.16)',
     colorBorder: 'rgba(255, 107, 0, 0.35)',
     titleMaxLen: 100,
@@ -135,13 +102,10 @@ export const PLATFORMS = {
   depositphotos: {
     id: 'depositphotos',
     name: 'Depositphotos',
-    logoSvg: `<svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="8" fill="#FF9900"/>
-      <text x="16" y="21.5" font-family="'Inter', sans-serif" font-weight="900" font-size="18" text-anchor="middle" fill="#0F172A">D</text>
-    </svg>`,
-    color: '#FF9900',
-    colorBg: 'rgba(255, 153, 0, 0.16)',
-    colorBorder: 'rgba(255, 153, 0, 0.35)',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5"><rect x="12" y="2" width="13" height="13" rx="1.5" transform="rotate(45 12 2)"/></svg>`,
+    color: '#3b82f6',
+    colorBg: 'rgba(59, 130, 246, 0.16)',
+    colorBorder: 'rgba(59, 130, 246, 0.35)',
     titleMaxLen: 150,
     titleMinLen: 5,
     keywordMin: 5,
@@ -159,13 +123,10 @@ export const PLATFORMS = {
   rf123: {
     id: 'rf123',
     name: '123RF',
-    logoSvg: `<svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="8" fill="#E6007E"/>
-      <text x="16" y="20.5" font-family="'Inter', sans-serif" font-weight="900" font-size="12" text-anchor="middle" fill="#FFFFFF" letter-spacing="-0.04em">123</text>
-    </svg>`,
-    color: '#E6007E',
-    colorBg: 'rgba(230, 0, 126, 0.16)',
-    colorBorder: 'rgba(230, 0, 126, 0.35)',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>`,
+    color: '#c084fc',
+    colorBg: 'rgba(192, 132, 252, 0.16)',
+    colorBorder: 'rgba(192, 132, 252, 0.35)',
     titleMaxLen: 150,
     titleMinLen: 5,
     keywordMin: 5,
@@ -179,13 +140,10 @@ export const PLATFORMS = {
   dreamstime: {
     id: 'dreamstime',
     name: 'Dreamstime',
-    logoSvg: `<svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="8" fill="#00A3E0"/>
-      <text x="16" y="21.5" font-family="'Inter', sans-serif" font-weight="900" font-size="18" text-anchor="middle" fill="#FFFFFF">D</text>
-    </svg>`,
-    color: '#00A3E0',
-    colorBg: 'rgba(0, 163, 224, 0.16)',
-    colorBorder: 'rgba(0, 163, 224, 0.35)',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><circle cx="12" cy="12" r="8.5"/></svg>`,
+    color: '#22c55e',
+    colorBg: 'rgba(34, 197, 94, 0.16)',
+    colorBorder: 'rgba(34, 197, 94, 0.35)',
     titleMaxLen: 200,
     titleMinLen: 5,
     keywordMin: 5,

@@ -268,15 +268,14 @@ function renderPlatforms() {
     const isSelected = platform.id === state.currentPlatform.id;
     const tab = document.createElement('button');
     tab.className = isSelected 
-      ? 'px-4 py-1.5 rounded-full border-gradient text-white text-xs font-semibold glow-cyan relative overflow-hidden flex items-center gap-1.5 cursor-pointer'
-      : 'px-4 py-1.5 rounded-full bg-[#191c1f] border border-[#3b494b] text-on-surface-variant text-xs hover:border-[#00dbe9] hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer';
+      ? 'bg-[#222442] border-2 border-[#6366f1] text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-[0_0_15px_rgba(99,102,241,0.4)] flex items-center gap-2 cursor-pointer transition-all hover:brightness-110'
+      : 'bg-[#0f172a]/95 hover:bg-[#1e293b] border border-[#1e293b] hover:border-[#334155] text-[#cbd5e1] hover:text-white px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 cursor-pointer';
     tab.dataset.id = platform.id;
     tab.type = 'button';
     tab.title = `${platform.name} — ${platform.description}`;
     tab.innerHTML = `
-      <span class="w-3 h-3 flex items-center justify-center">${platform.logoSvg}</span>
-      <span class="relative z-10 font-medium">${platform.name}</span>
-      ${isSelected ? '<div class="absolute inset-0 bg-[#00dbe9] opacity-20 pointer-events-none"></div>' : ''}
+      <span class="flex items-center justify-center">${platform.logoSvg}</span>
+      <span class="font-medium tracking-tight">${platform.name}</span>
     `;
     tab.addEventListener('click', e => { e.preventDefault(); selectPlatform(platform.id); });
     grid.appendChild(tab);

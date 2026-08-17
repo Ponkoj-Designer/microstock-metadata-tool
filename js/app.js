@@ -2627,29 +2627,49 @@ const img2promptState = {
 
 // Global Clipboard Paste Listener (Ctrl+V for image files)
 window.addEventListener('paste', async (e) => {
-  const items = e.clipboardData?.items;
-  if (!items || !items.length) return;
+  // If focus is inside a text input / textarea and there's text in clipboard, don't intercept unless an image file is present
+  const targetTag = e.target?.tagName?.toLowerCase();
+  const isTextInput = targetTag === 'input' || targetTag === 'textarea' || e.target?.isContentEditable;
 
+  const items = e.clipboardData?.items;
+  const files = e.clipboardData?.files;
   const pastedFiles = [];
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item.type && item.type.startsWith('image/')) {
-      const fileObj = item.getAsFile();
-      if (fileObj) {
-        const ext = fileObj.type.split('/')[1] || 'png';
-        const file = new File([fileObj], `pasted-image-${Date.now()}-${i + 1}.${ext}`, { type: fileObj.type });
-        pastedFiles.push(file);
+
+  if (items && items.length) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type && item.type.startsWith('image/')) {
+        const fileObj = item.getAsFile();
+        if (fileObj) {
+          const ext = fileObj.type.split('/')[1] || 'png';
+          const file = new File([fileObj], `pasted-image-${Date.now()}-${i + 1}.${ext}`, { type: fileObj.type });
+          pastedFiles.push(file);
+        }
+      }
+    }
+  }
+
+  // Fallback to e.clipboardData.files if items did not yield files
+  if (pastedFiles.length === 0 && files && files.length) {
+    for (let i = 0; i < files.length; i++) {
+      const fileObj = files[i];
+      if (fileObj.type && fileObj.type.startsWith('image/')) {
+        pastedFiles.push(fileObj);
       }
     }
   }
 
   if (pastedFiles.length > 0) {
-    if (state.currentAppMode === 'img2prompt') {
+    // If text input is focused, prevent pasting raw data/unwanted text
+    e.preventDefault();
+
+    const isImg2Prompt = state.activeAppMode === 'img2prompt' || (document.getElementById('workspace-img2prompt')?.style.display !== 'none');
+    if (isImg2Prompt) {
       showToast(`Pasted ${pastedFiles.length} image(s) from clipboard!`, 'info');
       handleImageToPromptUploadBatch(pastedFiles);
     } else {
       showToast(`Pasted ${pastedFiles.length} image(s) from clipboard into workspace!`, 'info');
-      handleFileInput(pastedFiles);
+      processFiles(pastedFiles);
     }
   }
 });
@@ -2659,12 +2679,6 @@ async function handleImageToPromptUploadBatch(files) {
   const fileArray = Array.from(files).filter(f => f && f.type && f.type.startsWith('image/'));
   if (!fileArray.length) {
     showToast('Please select valid image files (JPG, PNG, WEBP, TIFF)', 'warning');
-    return;
-  }
-
-  if (!hasApiKey()) {
-    openModal(document.getElementById('modal-ai-settings'));
-    showToast('Please add your Gemini API key first.', 'warning');
     return;
   }
 

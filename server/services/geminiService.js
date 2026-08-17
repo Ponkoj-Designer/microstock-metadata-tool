@@ -120,28 +120,49 @@ function buildGenerationPrompt({ platformObj, kwTarget, titleLimit, categoryOpti
   let prompt = '';
 
   if (mode === 'img2prompt') {
-    prompt = `You are an expert AI art prompt engineer for text-to-image AI generators like Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
-Analyze this visual asset accurately and generate a hyper-detailed, highly descriptive AI image prompt.
+    prompt = `You are a world-class AI art prompt engineer and visual taxonomist.
+Analyze this visual asset accurately and generate a hyper-detailed, high-converting master AI prompt for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
 STRICT INSTRUCTIONS:
-- Title: A vivid, comprehensive master prompt describing the core subject, environment, lighting, composition, mood, and art style.
+- Title: A vivid, comprehensive master prompt describing the primary subject, environment, lighting, composition, mood, and exact art style.
 - Description: A detailed breakdown of visual elements, color palette, lighting atmosphere, and texture details.
-- Keywords: 20-30 visual modifier keywords, art style tags, lighting terms, and composition terms.
-- Category: The artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art, Concept Art, Portraiture).`;
+- Keywords: 25-35 high-value visual modifier keywords, art style tags, lighting terms, and composition tags.
+- Category: The artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art, Concept Art).`;
   } else {
-    prompt = `You are an expert commercial microstock metadata cataloger for ${platformObj.name}.
-Analyze this visual asset accurately and generate commercial metadata.
-STRICT INSTRUCTIONS:
-- Describe ONLY what is ACTUALLY visible in the asset.
-- Do NOT invent non-existent objects, people, or brands.
-- KEYWORD REQUIREMENT: Generate exactly ${kwTarget} unique, highly relevant keywords.
-- Order keywords by relevance: the FIRST 10 keywords MUST be the most essential visual concepts.
-- Title: Clear, descriptive, natural language title (maximum ${titleLimit} characters).
-- Description: Natural, informative 1-2 sentence visual summary.
-- Category: Select the single best matching category from this list: [${categoryOptions}].`;
+    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert for top stock agencies (${platformObj.name}, Adobe Stock, Shutterstock, Freepik, Vecteezy, Getty/iStock, 123RF).
+Your mission is to generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** designed to rank on Page 1 / top search results for high-intent stock buyers.
+
+=== MICROSTOCK SEO RANKING ALGORITHM RULES ===
+
+1. TOP-RANKING COMMERCIAL TITLE (Strict limit: ${titleLimit} characters):
+   - FRONT-LOAD the most powerful, highest search-volume commercial search terms in the FIRST 3 TO 5 WORDS.
+   - Formula: [Core Subject / Focus] + [Format/Style: Vector / Illustration / Photo / 3D] + [Action / Theme / Mood] + [Composition / Background].
+   - Focus on what real commercial buyers search for (e.g. "Cyberpunk Neon City Skyline Vector Background with Glowing Cyan Lights" instead of vague "City at night").
+   - NEVER start with filler words like "A photo of", "An image of", "Illustration of", or artistic metaphors.
+   - Keep within ${titleLimit} characters while maximizing keyword density.
+
+2. TOP 5-10 KEYWORDS (CRITICAL ALGORITHM WEIGHT - 80% SEARCH RANKING):
+   - Algorithms on Adobe Stock, Shutterstock, and Freepik weigh the FIRST 5-10 KEYWORDS most heavily.
+   - Keywords 1-5 MUST be the absolute primary subject, core theme, and asset format (e.g. "vector", "background", "technology", "abstract", "banner").
+   - Keywords 6-10 MUST be primary visual traits, primary colors, and main contextual environment.
+
+3. REMAINING KEYWORDS (Generate exactly ${kwTarget} unique, high-traffic keywords):
+   - Include high search-volume buyer intent queries:
+     * Specific objects, shapes, textures, materials, and concepts visible.
+     * Commercial usage & industry terms: "banner", "template", "wallpaper", "graphic design", "marketing", "web design", "presentation", "ui design".
+     * If vector/illustration/SVG/EPS: Include essential vector search terms ("illustration", "vector", "scalable", "eps", "svg", "isolated", "clipart", "graphic element", "editable").
+     * Relevant synonyms, mood, emotions, and seasonal/trend terms.
+   - ALL keywords must be lowercase, separated, relevant, and 100% deduplicated.
+   - No spamming or irrelevant keywords that cause stock reviewer rejections.
+
+4. COMMERCIAL DESCRIPTION:
+   - 1-2 natural, informative sentences with rich secondary search phrases for Google Image SEO indexing.
+
+5. PLATFORM CATEGORY:
+   - Choose the single best matching high-traffic category from: [${categoryOptions}].`;
   }
 
   if (settings?.customPrompt) {
-    prompt += `\n- USER CUSTOM OVERRIDE INSTRUCTIONS: ${settings.customPrompt}`;
+    prompt += `\n\n- USER CUSTOM OVERRIDE INSTRUCTIONS: ${settings.customPrompt}`;
   }
 
   prompt += `\n\nFILENAME: ${filename}\nPLATFORM: ${platformObj.name}`;

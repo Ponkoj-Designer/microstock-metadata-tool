@@ -438,3 +438,27 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* Custom Scrollbar for Metadata Keyword Badges */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #00dbe9;
+}
+
+/* Detail Card Editable Fields */
+.editable-title:focus,
+.editable-desc:focus {
+  border-color: #00dbe9 !important;
+  box-shadow: 0 0 10px rgba(0, 219, 233, 0.2);
+}

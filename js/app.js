@@ -5,7 +5,7 @@
 
 import { PLATFORMS } from './platforms.js';
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
+import { setApiKey, hasApiKey, clearApiKey, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
 import { runBatchQueue } from './batchProcessor.js';
 import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
@@ -16,7 +16,8 @@ const state = {
   selectedItemIds: new Set(),
   searchQuery: '',
   statusFilter: 'all',
-  viewMode: 'table',
+  formatFilter: 'all',
+  viewMode: 'detail',
   isGenerating: false,
   stopBatch: false,
   detailItemId: null,
@@ -631,9 +632,9 @@ function updateUploadZoneForTab() {
   const tab = state.activeAssetTab;
   if (tab === 'images') {
     if (titleEl)   titleEl.textContent = 'Drop your images here or browse files';
-    if (subEl)     subEl.textContent   = 'JPG, PNG, WEBP, TIFF supported — batch 100+ files';
-    if (tagsEl)    tagsEl.innerHTML    = ['JPG','JPEG','PNG','WEBP','TIFF'].map(f=>`<span class="format-tag">${f}</span>`).join('');
-    if (fileInput) fileInput.accept    = '.jpg,.jpeg,.png,.webp,.tiff,.tif';
+    if (subEl)     subEl.textContent   = 'JPG, PNG, WEBP, TIFF, SVG supported — batch 100+ files';
+    if (tagsEl)    tagsEl.innerHTML    = ['JPG','JPEG','PNG','WEBP','TIFF','SVG'].map(f=>`<span class="format-tag">${f}</span>`).join('');
+    if (fileInput) fileInput.accept    = '.jpg,.jpeg,.png,.webp,.tiff,.tif,.svg';
   } else if (tab === 'vectors') {
     if (titleEl)   titleEl.textContent = 'Drop your vector files here or browse files';
     if (subEl)     subEl.textContent   = 'EPS, AI, SVG, PDF — batch upload supported';
@@ -697,8 +698,8 @@ async function processFiles(files) {
   for (const file of files) {
     const cls = classifyFile(file);
     if (!cls) { skippedBad.push(file.name); continue; }
-    if (state.activeAssetTab === 'images'  && cls.assetType !== 'image')  { skippedBad.push(file.name); continue; }
-    if (state.activeAssetTab === 'vectors' && cls.assetType === 'image')  { skippedBad.push(file.name); continue; }
+    if (state.activeAssetTab === 'images'  && cls.assetType !== 'image' && cls.ext !== 'svg')  { skippedBad.push(file.name); continue; }
+    if (state.activeAssetTab === 'vectors' && cls.assetType === 'image' && cls.ext !== 'svg')  { skippedBad.push(file.name); continue; }
     if (state.activeAssetTab === 'videos'  && cls.assetType !== 'video')  { skippedBad.push(file.name); continue; }
 
     if (cls.assetType === 'video' && file.size > 100 * 1024 * 1024) {
@@ -1000,27 +1001,30 @@ function throttledRender() {
 }
 
 function getFilteredItems() {
+  const formatFilter = state.formatFilter || 'all';
   return state.mediaItems.filter(item => {
     const matchStatus = state.statusFilter === 'all' || item.status === state.statusFilter;
+    const matchFormat = formatFilter === 'all' || (item.format && item.format.toUpperCase() === formatFilter.toUpperCase());
     const meta = item.metadata || {};
     const q    = state.searchQuery;
     const matchSearch = !q
       || item.name.toLowerCase().includes(q)
       || (meta.title    && meta.title.toLowerCase().includes(q))
       || (meta.keywords && meta.keywords.some(k => k.toLowerCase().includes(q)));
-    return matchStatus && matchSearch;
+    return matchStatus && matchFormat && matchSearch;
   });
 }
 
 function updateStatsBar() {
   const items   = state.mediaItems;
-  const counts  = { total: items.length, images: 0, vectors: 0, ready: 0, failed: 0, waiting: 0 };
+  const counts  = { total: items.length, images: 0, vectors: 0, ready: 0, processing: 0, failed: 0, waiting: 0 };
   items.forEach(i => {
-    if (i.assetType === 'image')                 counts.images++;
+    if (i.assetType === 'image')                           counts.images++;
     if (i.assetType === 'vector' || i.assetType === 'pdf') counts.vectors++;
-    if (i.status === 'ready')                    counts.ready++;
-    if (i.status === 'failed')                   counts.failed++;
-    if (i.status === 'waiting')                  counts.waiting++;
+    if (i.status === 'ready')                              counts.ready++;
+    if (i.status === 'processing')                         counts.processing++;
+    if (i.status === 'failed')                             counts.failed++;
+    if (i.status === 'waiting')                            counts.waiting++;
   });
   counts.selected = state.selectedItemIds.size;
 
@@ -1030,12 +1034,13 @@ function updateStatsBar() {
     const el = document.getElementById(id);
     if (el) el.textContent = v;
   };
-  setText('stat-total',    counts.total);
-  setText('stat-images',   counts.images);
-  setText('stat-vectors',  counts.vectors);
-  setText('stat-ready',    counts.ready);
-  setText('stat-selected', counts.selected);
-  setText('stat-failed',   counts.failed);
+  setText('stat-total',      counts.total);
+  setText('stat-images',     counts.images);
+  setText('stat-vectors',    counts.vectors);
+  setText('stat-ready',      String(counts.ready).padStart(2, '0'));
+  setText('stat-processing', String(counts.processing).padStart(2, '0'));
+  setText('stat-failed',     String(counts.failed).padStart(2, '0'));
+  setText('stat-selected',   counts.selected);
 
   if (!prev || (prev.failed > 0) !== (counts.failed > 0)) {
     const retryBtn = document.getElementById('btn-retry-failed');
@@ -1057,8 +1062,182 @@ function updateUI() {
 // ─── Render Metadata ───────────────────────────────────────────────────────
 function renderMetadata() {
   const items = getFilteredItems();
-  if (state.viewMode === 'table') renderTableView(items);
-  else                             renderGridView(items);
+  if (state.viewMode === 'detail')     renderDetailView(items);
+  else if (state.viewMode === 'table') renderTableView(items);
+  else if (state.viewMode === 'grid')  renderGridView(items);
+}
+
+// ─── Detailed Cards View (Matches UI Reference Screenshot) ─────────────────
+const _detailCardCache = new Map();
+
+function buildDetailCardHtml(item, index, p) {
+  const isProcessing = item.status === 'processing';
+  const meta = item.metadata || { title: '', description: '', keywords: [], category: '' };
+  const kwCount = (meta.keywords || []).length;
+
+  let previewMediaHtml;
+  if (item.url) {
+    if (item.assetType === 'video') {
+      previewMediaHtml = `<video src="${item.url}" controls class="max-h-[360px] max-w-full object-contain rounded-lg shadow-lg"></video>`;
+    } else {
+      previewMediaHtml = `<img src="${item.url}" class="max-h-[360px] max-w-full object-contain rounded-lg shadow-lg" alt="${escHtml(item.name)}" loading="lazy" decoding="async">`;
+    }
+  } else {
+    previewMediaHtml = `
+      <div class="flex flex-col items-center justify-center gap-3 text-secondary py-12">
+        <svg width="64" height="64" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+        </svg>
+        <span class="text-sm font-bold text-on-surface-variant">${item.format} Vector File</span>
+      </div>`;
+  }
+
+  const statusBadgeColor = item.status === 'ready'
+    ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
+    : (item.status === 'processing'
+      ? 'bg-cyan-950/60 border-cyan-500/40 text-[#00dbe9] animate-pulse'
+      : (item.status === 'failed' ? 'bg-rose-950/60 border-rose-500/40 text-rose-400' : 'bg-slate-800 border-slate-700 text-slate-300'));
+
+  const keywordPillsHtml = (meta.keywords || []).map((kw, ki) => `
+    <span class="bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs px-3.5 py-1 rounded-full font-medium transition-all shadow-sm flex items-center gap-1.5 cursor-pointer group" data-single-kw="${escHtml(kw)}" title="Click to copy '${escHtml(kw)}'">
+      ${escHtml(kw)}
+      <button type="button" class="remove-kw-btn text-white/50 hover:text-white ml-0.5 text-xs font-bold leading-none" data-item-id="${item.id}" data-kw-idx="${ki}" title="Remove keyword">×</button>
+    </span>
+  `).join('');
+
+  return `
+    <div class="bg-[#0b132b]/90 border border-[#1e293b] rounded-2xl p-6 shadow-2xl backdrop-blur-md transition-all hover:border-[#334155]" data-detail-card-id="${item.id}">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Left: Image Preview -->
+        <div class="lg:col-span-5 flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-amber-400 font-bold text-sm tracking-wide uppercase flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px]">image</span> Image Preview
+            </h3>
+            <span class="border ${statusBadgeColor} px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
+              ${item.status}
+            </span>
+          </div>
+
+          <div class="w-full min-h-[300px] max-h-[440px] bg-[#050811] border border-[#1e293b] rounded-xl flex items-center justify-center p-4 relative overflow-hidden group">
+            ${previewMediaHtml}
+            ${isProcessing ? '<div class="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-[#00dbe9] font-bold text-xs"><span class="ai-action-spinner"></span> Analyzing visual metadata...</div>' : ''}
+            <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-black/60 backdrop-blur-sm p-1 rounded-lg">
+              <button class="text-xs bg-error hover:bg-error/80 text-white px-2 py-1 rounded transition-colors card-remove-btn cursor-pointer" data-id="${item.id}" title="Remove asset">✕</button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-on-surface-variant mt-2 px-1">
+            <span>Format: <strong class="text-white">${item.format}</strong></span>
+            <span>Size: <strong class="text-white">${(item.size / 1048576).toFixed(2)} MB</strong></span>
+          </div>
+        </div>
+
+        <!-- Right: Generated Metadata -->
+        <div class="lg:col-span-7 flex flex-col gap-3">
+          <div class="flex items-center justify-between pb-2 border-b border-[#1e293b]">
+            <h3 class="text-amber-400 font-bold text-base tracking-wide flex items-center gap-2">
+              <span class="material-symbols-outlined text-[20px]">dataset</span> Generated Metadata
+            </h3>
+            <button class="btn-download-single-csv bg-[#00dbe9] hover:bg-[#00c4d4] text-[#002022] font-bold text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-[0_0_12px_rgba(0,219,233,0.3)] transition-all cursor-pointer" data-id="${item.id}">
+              <span class="material-symbols-outlined text-[16px]">download</span> Download CSV
+            </button>
+          </div>
+
+          <!-- Filename -->
+          <div>
+            <div class="flex items-center justify-between text-amber-400 font-semibold text-xs mb-1">
+              <span>Filename:</span>
+              <button class="btn-copy-field text-on-surface-variant hover:text-amber-400 transition-colors p-1 cursor-pointer" data-copy-text="${escHtml(item.name)}" title="Copy Filename">
+                <span class="material-symbols-outlined text-[16px]">content_copy</span>
+              </button>
+            </div>
+            <div class="text-white text-sm font-medium bg-[#050811]/80 border border-[#1e293b] rounded-lg p-2.5 break-all font-mono select-all">
+              ${escHtml(item.name)}
+            </div>
+          </div>
+
+          <!-- Title -->
+          <div>
+            <div class="flex items-center justify-between text-amber-400 font-semibold text-xs mb-1">
+              <span>Title:</span>
+              <button class="btn-copy-field text-on-surface-variant hover:text-amber-400 transition-colors p-1 cursor-pointer" data-copy-text="${escHtml(meta.title)}" title="Copy Title">
+                <span class="material-symbols-outlined text-[16px]">content_copy</span>
+              </button>
+            </div>
+            <div class="text-white text-sm font-medium leading-relaxed bg-[#050811]/80 border border-[#1e293b] rounded-lg p-2.5 outline-none focus:border-[#00dbe9] editable-title" data-item-id="${item.id}" contenteditable="true" spellcheck="false">
+              ${escHtml(meta.title || (isProcessing ? 'Generating high SEO title...' : 'Enter or generate title...'))}
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div>
+            <div class="flex items-center justify-between text-amber-400 font-semibold text-xs mb-1">
+              <span>Description:</span>
+              <button class="btn-copy-field text-on-surface-variant hover:text-amber-400 transition-colors p-1 cursor-pointer" data-copy-text="${escHtml(meta.description)}" title="Copy Description">
+                <span class="material-symbols-outlined text-[16px]">content_copy</span>
+              </button>
+            </div>
+            <div class="text-slate-200 text-xs leading-relaxed bg-[#050811]/80 border border-[#1e293b] rounded-lg p-2.5 outline-none focus:border-[#00dbe9] editable-desc" data-item-id="${item.id}" contenteditable="true" spellcheck="false">
+              ${escHtml(meta.description || (isProcessing ? 'Analyzing visual details & SEO summary...' : 'Enter or generate description...'))}
+            </div>
+          </div>
+
+          <!-- Keywords -->
+          <div>
+            <div class="flex items-center justify-between text-amber-400 font-semibold text-xs mb-1.5">
+              <span>Keywords: <strong class="text-white font-mono ml-1">(${kwCount})</strong></span>
+              <button class="btn-copy-field text-on-surface-variant hover:text-amber-400 transition-colors p-1 cursor-pointer" data-copy-text="${escHtml((meta.keywords || []).join(', '))}" title="Copy All Keywords">
+                <span class="material-symbols-outlined text-[16px]">content_copy</span>
+              </button>
+            </div>
+            <div class="flex flex-wrap gap-2 max-h-[170px] overflow-y-auto p-3 bg-[#050811]/80 border border-[#1e293b] rounded-lg custom-scrollbar">
+              ${keywordPillsHtml.length ? keywordPillsHtml : `<span class="text-xs text-on-surface-variant italic">${isProcessing ? 'Extracting keywords...' : 'No keywords generated yet.'}</span>`}
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  `;
+}
+
+function renderDetailView(items) {
+  const container = document.getElementById('detail-view-container');
+  if (!container) return;
+
+  const p = state.currentPlatform;
+  const currentIds = new Set(items.map(i => i.id));
+
+  // Remove deleted items from cache & DOM
+  for (const [id, el] of _detailCardCache.entries()) {
+    if (!currentIds.has(id)) {
+      el.remove();
+      _detailCardCache.delete(id);
+    }
+  }
+
+  items.forEach((item, index) => {
+    const meta = item.metadata || {};
+    const fp = `${item.id}::${item.status}::${item.name}::${item.size}::${meta.title || ''}::${meta.description || ''}::${(meta.keywords || []).join(',')}::${p.id}`;
+
+    let cached = _detailCardCache.get(item.id);
+    if (!cached || cached._fp !== fp) {
+      const cardHtml = buildDetailCardHtml(item, index, p);
+      const temp = document.createElement('div');
+      temp.innerHTML = cardHtml.trim();
+      const newEl = temp.firstElementChild;
+      newEl._fp = fp;
+
+      if (cached && cached.parentNode === container) {
+        container.replaceChild(newEl, cached);
+      } else {
+        container.appendChild(newEl);
+      }
+      _detailCardCache.set(item.id, newEl);
+    }
+  });
 }
 
 // ─── Thumbnail helper ───────────────────────────────────────────────────────
@@ -1568,18 +1747,120 @@ function clearAll() {
   updateUI(); showToast('Cleared all assets', 'info');
 }
 
-// ─── View Toggle ───────────────────────────────────────────────────────────
-function toggleViewMode() {
-  state.viewMode = state.viewMode === 'table' ? 'grid' : 'table';
-  const btn = document.getElementById('btn-toggle-view');
-  const tableEl = document.getElementById('table-view-container');
-  const gridEl  = document.getElementById('grid-view-container');
-  if (btn) btn.innerHTML = state.viewMode === 'table'
-    ? `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg> Grid View`
-    : `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg> Table View`;
-  if (tableEl) tableEl.style.display = state.viewMode === 'table' ? 'block' : 'none';
-  if (gridEl)  gridEl.style.display  = state.viewMode === 'grid'  ? 'grid'  : 'none';
+// ─── View Modes (Detail, Table, Grid) ──────────────────────────────────────
+function setViewMode(mode) {
+  state.viewMode = mode;
+  const modes = ['detail', 'table', 'grid'];
+  modes.forEach(m => {
+    const btn = document.getElementById(`btn-view-${m}`);
+    const el  = document.getElementById(`${m}-view-container`);
+    if (btn) {
+      if (m === mode) {
+        btn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 bg-[#00dbe9] text-[#002022] shadow-[0_0_10px_rgba(0,219,233,0.3)]';
+      } else {
+        btn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 text-on-surface-variant hover:text-white';
+      }
+    }
+    if (el) {
+      el.style.display = m === mode ? (m === 'grid' ? 'grid' : (m === 'detail' ? 'flex' : 'block')) : 'none';
+    }
+  });
   renderMetadata();
+}
+
+function setupDetailViewEventDelegation() {
+  const container = document.getElementById('detail-view-container');
+  if (!container) return;
+
+  // Single item copy field buttons & click handlers
+  container.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.btn-copy-field');
+    if (copyBtn) {
+      const text = copyBtn.dataset.copyText || '';
+      if (text) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('Copied to clipboard!', 'success');
+        }).catch(() => {
+          showToast('Failed to copy to clipboard', 'error');
+        });
+      }
+      return;
+    }
+
+    // Single item keyword click to copy
+    const singleKw = e.target.closest('[data-single-kw]');
+    if (singleKw && !e.target.closest('.remove-kw-btn')) {
+      const kw = singleKw.dataset.singleKw;
+      if (kw) {
+        navigator.clipboard.writeText(kw).then(() => {
+          showToast(`Copied keyword: "${kw}"`, 'success');
+        });
+      }
+      return;
+    }
+
+    // Remove single keyword from item
+    const remKwBtn = e.target.closest('.remove-kw-btn');
+    if (remKwBtn) {
+      const itemId = remKwBtn.dataset.itemId;
+      const kwIdx  = parseInt(remKwBtn.dataset.kwIdx, 10);
+      const item = state.mediaItems.find(i => i.id === itemId);
+      if (item && item.metadata && Array.isArray(item.metadata.keywords)) {
+        item.metadata.keywords.splice(kwIdx, 1);
+        _detailCardCache.delete(itemId);
+        _tableRowCache.delete(itemId);
+        _gridCardCache.delete(itemId);
+        throttledRender();
+      }
+      return;
+    }
+
+    // Single item CSV download
+    const dlSingleBtn = e.target.closest('.btn-download-single-csv');
+    if (dlSingleBtn) {
+      const itemId = dlSingleBtn.dataset.id;
+      const item = state.mediaItems.find(i => i.id === itemId);
+      if (item) {
+        const cleanName = item.name.replace(/\.[^/.]+$/, '');
+        const platformId = state.currentPlatform?.id || 'metadata';
+        downloadCsvFile([item], state.currentPlatform, `${cleanName}_${platformId}.csv`);
+        showToast(`Downloaded CSV for ${item.name}`, 'success');
+      }
+      return;
+    }
+
+    // Single item remove button
+    const remCardBtn = e.target.closest('.card-remove-btn');
+    if (remCardBtn) {
+      const itemId = remCardBtn.dataset.id;
+      removeItem(itemId);
+      return;
+    }
+  });
+
+  // Inline editing for Title and Description
+  container.addEventListener('blur', (e) => {
+    const target = e.target;
+    if (target.classList.contains('editable-title')) {
+      const itemId = target.dataset.itemId;
+      const item = state.mediaItems.find(i => i.id === itemId);
+      if (item) {
+        if (!item.metadata) item.metadata = {};
+        item.metadata.title = target.textContent.trim();
+        _tableRowCache.delete(itemId);
+        _gridCardCache.delete(itemId);
+      }
+    } else if (target.classList.contains('editable-desc')) {
+      const itemId = target.dataset.itemId;
+      const item = state.mediaItems.find(i => i.id === itemId);
+      if (item) {
+        if (!item.metadata) item.metadata = {};
+        item.metadata.description = target.textContent.trim();
+        _tableRowCache.delete(itemId);
+        _gridCardCache.delete(itemId);
+      }
+    }
+  }, true);
 }
 
 // ─── CSV Export ─────────────────────────────────────────────────────────────
@@ -2125,8 +2406,19 @@ function setupEventListeners() {
   document.getElementById('btn-select-all')?.addEventListener('click',       selectAll);
   document.getElementById('btn-deselect-all')?.addEventListener('click',     deselectAll);
   document.getElementById('btn-remove-selected')?.addEventListener('click',  removeSelected);
-  document.getElementById('btn-toggle-view')?.addEventListener('click',      toggleViewMode);
   document.getElementById('btn-batch-edit')?.addEventListener('click',       () => openModal(modal('modal-batch-edit')));
+
+  // View Mode Switchers
+  document.getElementById('btn-view-detail')?.addEventListener('click', () => setViewMode('detail'));
+  document.getElementById('btn-view-table')?.addEventListener('click',  () => setViewMode('table'));
+  document.getElementById('btn-view-grid')?.addEventListener('click',   () => setViewMode('grid'));
+
+  // Header Export & Format filter
+  document.getElementById('btn-export-csv-header')?.addEventListener('click', exportCsv);
+  document.getElementById('export-format-filter')?.addEventListener('change', (e) => {
+    state.formatFilter = e.target.value;
+    throttledRender();
+  });
 
   let searchDebounce;
   document.getElementById('search-input')?.addEventListener('input', e => {
@@ -2144,6 +2436,7 @@ function setupEventListeners() {
   document.getElementById('btn-logout')?.addEventListener('click', handleLogout);
 
   // Delegated event listeners
+  setupDetailViewEventDelegation();
   setupTableEventDelegation();
   setupGridEventDelegation();
 
@@ -2676,9 +2969,12 @@ window.addEventListener('paste', async (e) => {
 
 async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
   if (!files || !files.length) return;
-  const fileArray = Array.from(files).filter(f => f && f.type && f.type.startsWith('image/'));
+  const fileArray = Array.from(files).filter(f => f && (
+    (f.type && f.type.startsWith('image/')) ||
+    (f.name && /\.(jpe?g|png|webp|tiff?|svg)$/i.test(f.name))
+  ));
   if (!fileArray.length) {
-    showToast('Please select valid image files (JPG, PNG, WEBP, TIFF)', 'warning');
+    showToast('Please select valid image or vector files (JPG, PNG, WEBP, TIFF, SVG)', 'warning');
     return;
   }
 
@@ -2747,8 +3043,17 @@ async function processImg2PromptQueue() {
       renderImg2PromptCards();
 
       try {
-        const base64Image = await fileToBase64(item.file);
-        const mimeType = item.file.type || 'image/jpeg';
+        let base64Image;
+        let mimeType = 'image/jpeg';
+        const fileExt = (item.file.name.split('.').pop() || '').toLowerCase();
+        if (fileExt === 'svg' || item.file.type === 'image/svg+xml') {
+          const rasterized = await rasterizeSvgToJpegBase64(item.file);
+          base64Image = rasterized.base64;
+          mimeType = rasterized.mimeType || 'image/jpeg';
+        } else {
+          base64Image = await fileToBase64(item.file);
+          mimeType = item.file.type || 'image/jpeg';
+        }
 
         const platformSpec = PLATFORMS.general || {
           id: 'general', name: 'General',

@@ -109,29 +109,30 @@ export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Im
 
   let prompt = '';
   if (mode === 'img2prompt') {
-    prompt = `You are an expert AI art prompt engineer for text-to-image AI generators like Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
-Analyze this visual asset accurately and generate a hyper-detailed, highly descriptive AI image prompt.
+    prompt = `You are a world-class AI art prompt engineer and visual taxonomist.
+Analyze this visual asset accurately and generate a hyper-detailed, high-converting master AI prompt for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
 Respond STRICTLY with a valid JSON object matching this schema:
 {
   "title": "A vivid, comprehensive master prompt describing subject, environment, lighting, composition, mood, art style",
   "description": "Detailed breakdown of visual elements, color palette, atmosphere, texture",
-  "keywords": ["20-30 visual modifier keywords", "art style tags", "lighting terms"],
+  "keywords": ["25-35 visual modifier keywords", "art style tags", "lighting terms"],
   "category": "Artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art)"
 }`;
   } else {
-    prompt = `You are an expert commercial microstock metadata cataloger for ${platformObj.name}.
-Analyze this visual asset accurately and generate commercial metadata.
-STRICT INSTRUCTIONS:
-- Describe ONLY what is ACTUALLY visible in the image.
-- KEYWORD REQUIREMENT: Generate exactly ${kwTarget} unique, highly relevant keywords.
-- Order keywords by relevance: the FIRST 10 keywords MUST be the most essential visual concepts.
-- Title: Clear, descriptive title (maximum ${effectiveTitleLimit} characters).
-- Description: Natural 1-2 sentence visual summary.
-- Category: Select single best matching category from: [${categoryOptions}].
+    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert for ${platformObj.name}, Adobe Stock, Shutterstock, Freepik, and Vecteezy.
+Generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** engineered to rank on Page 1 for high-volume buyer searches.
+
+STRICT MICROSTOCK SEO RULES:
+1. TITLE: Front-load the highest search volume commercial keywords in the FIRST 3-5 WORDS. Format: [Subject] + [Medium/Vector/Photo] + [Action/Theme] + [Composition]. Max ${effectiveTitleLimit} chars. Never use generic filler words.
+2. FIRST 5-10 KEYWORDS: Crucial algorithm ranking weight. Keywords 1-5 MUST be primary subject, core theme & format ("vector", "background", "technology", etc). Keywords 6-10 must be main visual attributes and colors.
+3. REMAINING KEYWORDS: Exactly ${kwTarget} unique high-traffic buyer queries including objects, commercial uses ("banner", "template", "graphic design"), vector terms ("illustration", "svg", "eps", "scalable", "isolated") if vector, and synonyms. All lowercase, strictly unique.
+4. DESCRIPTION: 1-2 informative commercial sentences for Google Image SEO.
+5. CATEGORY: Select single best matching category from: [${categoryOptions}].
+
 Respond STRICTLY with a valid JSON object matching this schema:
 {
-  "title": "Descriptive commercial title",
-  "description": "Visual summary",
+  "title": "High-Converting Front-Loaded Commercial Title",
+  "description": "Natural commercial visual summary",
   "keywords": ["keyword1", "keyword2", ...],
   "category": "Selected Category Name"
 }`;

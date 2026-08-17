@@ -101,12 +101,12 @@ export function generateCsvContent(mediaItems, platform) {
 }
 
 // ── Download CSV ────────────────────────────────────────────────────────────
-export function downloadCsvFile(mediaItems, platform) {
+export function downloadCsvFile(mediaItems, platform, customFilename = null) {
   const csvContent = generateCsvContent(mediaItems, platform);
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const timestamp = new Date().toISOString().slice(0, 10);
   const platformSlug = platform.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, '');
-  const filename = `microstock-metadata-${platformSlug}-${timestamp}.csv`;
+  const filename = customFilename || `microstock-metadata-${platformSlug}-${timestamp}.csv`;
 
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);

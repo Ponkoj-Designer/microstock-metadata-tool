@@ -191,36 +191,147 @@ function getGeminiMimeType(item, ext) {
   }
 }
 
-async function rasterizeSvgToJpegBase64(svgFile) {
+export async function rasterizeSvgToJpegBase64(svgInput) {
+  let svgText = '';
+  if (typeof svgInput === 'string') {
+    if (svgInput.startsWith('data:image/svg+xml')) {
+      const parts = svgInput.split(',');
+      svgText = parts[1] ? (parts[0].includes('base64') ? atob(parts[1]) : decodeURIComponent(parts[1])) : svgInput;
+    } else if (svgInput.startsWith('http') || svgInput.startsWith('blob:')) {
+      const res = await fetch(svgInput);
+      svgText = await res.text();
+    } else {
+      svgText = svgInput;
+    }
+  } else if (svgInput instanceof Blob || svgInput instanceof File) {
+    svgText = await svgInput.text();
+  }
+
+  if (!svgText || typeof svgText !== 'string') {
+    throw new Error('Invalid SVG content.');
+  }
+
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const svgText = e.target.result;
-      const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+    try {
+      // Parse SVG to ensure valid namespaces and dimensions
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgText, 'image/svg+xml');
+      const svgEl = doc.querySelector('svg');
+
+      if (!svgEl) {
+        return reject(new Error('Invalid SVG: root <svg> element missing.'));
+      }
+
+      if (!svgEl.getAttribute('xmlns')) {
+        svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      }
+
+      // Check viewBox and dimensions
+      let viewBox = svgEl.getAttribute('viewBox');
+      let widthAttr = svgEl.getAttribute('width');
+      let heightAttr = svgEl.getAttribute('height');
+
+      let vbW = 0, vbH = 0;
+      if (viewBox) {
+        const parts = viewBox.trim().split(/[\s,]+/).map(Number);
+        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+          vbW = parts[2];
+          vbH = parts[3];
+        }
+      }
+
+      let w = parseFloat(widthAttr) || vbW || 1000;
+      let h = parseFloat(heightAttr) || vbH || 1000;
+
+      if (!viewBox) {
+        svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      }
+      svgEl.setAttribute('width', `${w}`);
+      svgEl.setAttribute('height', `${h}`);
+
+      const serializer = new XMLSerializer();
+      const cleanSvg = serializer.serializeToString(doc);
+
+      const blob = new Blob([cleanSvg], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const img = new Image();
+
+      let isDone = false;
+      const timeoutId = setTimeout(() => {
+        if (!isDone) {
+          isDone = true;
+          URL.revokeObjectURL(url);
+          reject(new Error('SVG rasterization timed out.'));
+        }
+      }, 12000);
+
       img.onload = () => {
+        if (isDone) return;
+        isDone = true;
+        clearTimeout(timeoutId);
+
+        const naturalW = img.naturalWidth || img.width || w || 1000;
+        const naturalH = img.naturalHeight || img.height || h || 1000;
+        const MAX_DIM = 1400;
+        const scale = Math.min(1, MAX_DIM / naturalW, MAX_DIM / naturalH);
+        const cw = Math.max(100, Math.round(naturalW * scale));
+        const ch = Math.max(100, Math.round(naturalH * scale));
+
         const canvas = document.createElement('canvas');
-        const MAX_DIM = 1200;
-        let scale = Math.min(1, MAX_DIM / (img.width || 1000), MAX_DIM / (img.height || 1000));
-        canvas.width = Math.max(100, Math.round((img.width || 800) * scale));
-        canvas.height = Math.max(100, Math.round((img.height || 800) * scale));
+        canvas.width = cw;
+        canvas.height = ch;
         const ctx = canvas.getContext('2d');
+
+        // Clean white background for stock vector AI parsing
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.drawImage(img, 0, 0, cw, ch);
+
         URL.revokeObjectURL(url);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+        resolve({
+          base64: dataUrl.split(',')[1],
+          mimeType: 'image/jpeg'
+        });
       };
+
       img.onerror = () => {
+        if (isDone) return;
+        isDone = true;
+        clearTimeout(timeoutId);
         URL.revokeObjectURL(url);
-        reject(new Error('Failed to render SVG vector onto canvas for AI vision parsing.'));
+
+        // Fallback with direct data URI
+        try {
+          const encoded = encodeURIComponent(cleanSvg).replace(/'/g, '%27').replace(/"/g, '%22');
+          const fallbackImg = new Image();
+          fallbackImg.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(100, Math.min(1200, w));
+            canvas.height = Math.max(100, Math.min(1200, h));
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(fallbackImg, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+            resolve({
+              base64: dataUrl.split(',')[1],
+              mimeType: 'image/jpeg'
+            });
+          };
+          fallbackImg.onerror = () => {
+            reject(new Error('Failed to rasterize SVG for AI vision.'));
+          };
+          fallbackImg.src = `data:image/svg+xml;charset=utf-8,${encoded}`;
+        } catch (err) {
+          reject(new Error('Failed to rasterize SVG for AI vision.'));
+        }
       };
+
       img.src = url;
-    };
-    reader.onerror = reject;
-    reader.readAsText(svgFile);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -230,10 +341,21 @@ async function extractPdfFirstPageJpegBase64(pdfFile) {
 }
 
 async function getImageBase64(item, ext) {
-  if (ext === 'svg' && item.file) {
-    try {
-      return await rasterizeSvgToJpegBase64(item.file);
-    } catch (_) {}
+  if (ext === 'svg') {
+    if (item.file) {
+      try {
+        return await rasterizeSvgToJpegBase64(item.file);
+      } catch (err) {
+        console.warn('SVG file rasterization warning:', err);
+      }
+    }
+    if (item.url) {
+      try {
+        return await rasterizeSvgToJpegBase64(item.url);
+      } catch (err) {
+        console.warn('SVG url rasterization warning:', err);
+      }
+    }
   }
 
   if (ext === 'pdf' && item.file) {

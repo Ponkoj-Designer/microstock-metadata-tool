@@ -456,32 +456,69 @@
       <!-- Main Work Area (Visible when files loaded) -->
       <div class="w-full max-w-5xl" id="main-content-area" style="display:none">
         
-        <!-- Queue Stats Bar -->
-        <div class="bg-[#1d2023] border border-[#3b494b] rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-3 text-xs" id="stats-bar">
-          <div class="flex items-center gap-4 flex-wrap">
-            <div>Total: <strong id="stat-total" class="text-on-surface">0</strong></div>
-            <div>Images: <strong id="stat-images" class="text-primary-fixed-dim">0</strong></div>
-            <div>Vectors: <strong id="stat-vectors" class="text-secondary-container">0</strong></div>
-            <div>Ready: <strong id="stat-ready" class="text-emerald-400">0</strong></div>
-            <div>Failed: <strong id="stat-failed" class="text-error">0</strong></div>
-            <div>Selected: <strong id="stat-selected" class="text-on-surface">0</strong></div>
+        <!-- Top Generated Data & Actions Status Bar (Matches UI Reference) -->
+        <div class="bg-[#0b132b]/90 border border-[#1e293b] rounded-2xl p-4 mb-5 flex items-center justify-between flex-wrap gap-4 shadow-xl backdrop-blur-md" id="stats-bar">
+          <!-- Left: Title & Status Badges -->
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="bg-[#1e293b]/80 border border-[#334155] text-white text-xs font-bold px-3.5 py-2 rounded-xl uppercase tracking-wide">Generated Data</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></span> SUCCESS: <strong id="stat-ready" class="text-white">00</strong>
+              </span>
+              <span class="bg-cyan-950/40 border border-cyan-500/30 text-[#00dbe9] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs">
+                <span class="w-2 h-2 rounded-full bg-[#00dbe9] shadow-[0_0_8px_#00dbe9]"></span> PROCESSING: <strong id="stat-processing" class="text-white">00</strong>
+              </span>
+              <span class="bg-rose-950/40 border border-rose-500/30 text-rose-400 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs">
+                <span class="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]"></span> FAILED: <strong id="stat-failed" class="text-white">00</strong>
+              </span>
+            </div>
+          </div>
+
+          <!-- Right: Format Selector, Download CSV, Clear All & View Toggles -->
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <div class="relative">
+              <select id="export-format-filter" class="bg-[#161f30] border border-[#334155] text-on-surface text-xs font-semibold px-3 py-2 rounded-xl focus:border-[#00dbe9] focus:outline-none cursor-pointer">
+                <option value="all">📁 All Formats</option>
+                <option value="EPS">📄 EPS</option>
+                <option value="SVG">🎨 SVG</option>
+                <option value="JPG">🖼️ JPG</option>
+                <option value="PNG">🖼️ PNG</option>
+                <option value="PDF">📑 PDF</option>
+              </select>
+            </div>
+            <button class="bg-[#00dbe9] hover:bg-[#00c4d4] text-[#002022] font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,219,233,0.3)] transition-all cursor-pointer" id="btn-export-csv-header">
+              <span class="material-symbols-outlined text-[16px]">download</span> Download All CSV
+            </button>
+            <button class="bg-[#161f30] hover:bg-[#1e293b] border border-[#334155] text-on-surface hover:text-error text-xs font-semibold px-3.5 py-2 rounded-xl transition-all cursor-pointer" id="btn-clear-all" title="Clear all loaded assets">
+              ✕ Clear All
+            </button>
+            <!-- View Mode Switcher -->
+            <div class="flex items-center bg-[#161f30] border border-[#334155] rounded-xl p-0.5 ml-1">
+              <button class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 bg-[#00dbe9] text-[#002022]" id="btn-view-detail" title="Detail View (Full Metadata)">
+                <span class="material-symbols-outlined text-[16px]">splitscreen</span> Detail
+              </button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 text-on-surface-variant hover:text-white" id="btn-view-table" title="Table View">
+                <span class="material-symbols-outlined text-[16px]">table_rows</span> Table
+              </button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 text-on-surface-variant hover:text-white" id="btn-view-grid" title="Grid View">
+                <span class="material-symbols-outlined text-[16px]">grid_view</span> Grid
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Action Toolbar -->
-        <div class="bg-[#1d2023] border border-[#3b494b] rounded-xl p-4 mb-4 flex items-center justify-between flex-wrap gap-4" id="toolbar-section">
-          
+        <!-- Action Toolbar / Secondary Controls -->
+        <div class="bg-[#1d2023]/60 border border-[#3b494b]/60 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-3" id="toolbar-section">
           <div class="flex items-center gap-2 flex-wrap">
-            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-3 py-2 rounded-lg text-xs font-medium hover:border-primary-fixed-dim transition-all" id="btn-upload-more">
+            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-3 py-1.5 rounded-lg text-xs font-medium hover:border-[#00dbe9] transition-all cursor-pointer" id="btn-upload-more">
               + Upload More
             </button>
-            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-3 py-2 rounded-lg text-xs font-medium hover:border-primary-fixed-dim transition-all" id="btn-batch-edit">
+            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-3 py-1.5 rounded-lg text-xs font-medium hover:border-[#00dbe9] transition-all cursor-pointer" id="btn-batch-edit">
               Batch Edit
             </button>
-            <button class="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1" id="btn-select-all">Select All</button>
-            <button class="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1" id="btn-deselect-all">Deselect</button>
-            <button class="text-xs text-error hover:text-error/80 px-2 py-1" id="btn-remove-selected">Remove Selected</button>
-            <button class="text-xs text-error hover:text-error/80 px-2 py-1" id="btn-clear-all">Clear All</button>
+            <button class="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1 cursor-pointer" id="btn-select-all">Select All</button>
+            <button class="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1 cursor-pointer" id="btn-deselect-all">Deselect</button>
+            <button class="text-xs text-error hover:text-error/80 px-2 py-1 cursor-pointer" id="btn-remove-selected">Remove Selected</button>
           </div>
 
           <div class="flex items-center gap-2 flex-wrap">
@@ -496,11 +533,7 @@
               <option value="processing">Processing</option>
               <option value="failed">Failed</option>
             </select>
-            <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface p-1.5 rounded-lg hover:border-primary-fixed-dim transition-all" id="btn-toggle-view" title="Toggle Grid/Table View">
-              <span class="material-symbols-outlined text-[18px]">grid_view</span>
-            </button>
           </div>
-
         </div>
 
         <!-- Progress Bar Container -->
@@ -515,8 +548,13 @@
           </div>
         </div>
 
-        <!-- Table View -->
-        <div class="w-full overflow-x-auto rounded-xl border border-[#3b494b] bg-[#1d2023] mb-6" id="table-view-container">
+        <!-- 1. Detailed Cards View (Matches Screenshot Reference) -->
+        <div id="detail-view-container" class="flex flex-col gap-6 mb-6">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- 2. Table View -->
+        <div class="w-full overflow-x-auto rounded-xl border border-[#3b494b] bg-[#1d2023] mb-6" id="table-view-container" style="display:none">
           <table class="meta-table">
             <thead>
               <tr>
@@ -536,7 +574,7 @@
           </table>
         </div>
 
-        <!-- Grid View -->
+        <!-- 3. Grid View -->
         <div class="image-grid mb-6" id="grid-view-container" style="display:none">
           <!-- Rendered via JS -->
         </div>
@@ -567,9 +605,9 @@
             <div class="hero-dashed-border w-full min-h-[220px] flex flex-col items-center justify-center gap-3 mb-8 group cursor-pointer relative transition-all hover:bg-white/5" id="img2prompt-drop-zone">
               <span class="material-symbols-outlined text-[40px] text-primary-fixed-dim">image_search</span>
               <h2 class="text-title-lg font-bold text-on-surface">Image to Prompt</h2>
-              <p class="text-xs text-on-surface-variant max-w-[80%] mx-auto">Drop images here, paste (Ctrl+V), or click to browse. Supported: JPG, PNG, WEBP.</p>
-              <button id="btn-browse-img2prompt" class="bg-primary-fixed-dim text-background px-5 py-2 rounded-lg text-sm font-semibold mt-2 transition-colors pointer-events-none group-hover:bg-primary-container">Browse Images</button>
-              <input type="file" id="img2prompt-file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp">
+              <p class="text-xs text-on-surface-variant max-w-[80%] mx-auto">Drop images or vectors here, paste (Ctrl+V), or click to browse. Supported: JPG, PNG, WEBP, SVG.</p>
+              <button id="btn-browse-img2prompt" class="bg-primary-fixed-dim text-background px-5 py-2 rounded-lg text-sm font-semibold mt-2 transition-colors pointer-events-none group-hover:bg-primary-container">Browse Files</button>
+              <input type="file" id="img2prompt-file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.svg">
             </div>
             
             <div class="w-full flex flex-col items-center gap-5">

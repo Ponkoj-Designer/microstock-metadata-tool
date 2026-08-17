@@ -2666,7 +2666,7 @@ window.addEventListener('paste', async (e) => {
     const isImg2Prompt = state.activeAppMode === 'img2prompt' || (document.getElementById('workspace-img2prompt')?.style.display !== 'none');
     if (isImg2Prompt) {
       showToast(`Pasted ${pastedFiles.length} image(s) from clipboard!`, 'info');
-      handleImageToPromptUploadBatch(pastedFiles);
+      handleImageToPromptUploadBatch(pastedFiles, true);
     } else {
       showToast(`Pasted ${pastedFiles.length} image(s) from clipboard into workspace!`, 'info');
       processFiles(pastedFiles);
@@ -2674,12 +2674,20 @@ window.addEventListener('paste', async (e) => {
   }
 });
 
-async function handleImageToPromptUploadBatch(files) {
+async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
   if (!files || !files.length) return;
   const fileArray = Array.from(files).filter(f => f && f.type && f.type.startsWith('image/'));
   if (!fileArray.length) {
     showToast('Please select valid image files (JPG, PNG, WEBP, TIFF)', 'warning');
     return;
+  }
+
+  // Clear previous items and generated prompts if requested (e.g. on new paste)
+  if (clearPrevious && img2promptState.items.length > 0) {
+    img2promptState.items.forEach(i => {
+      if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url);
+    });
+    img2promptState.items = [];
   }
 
   const newItems = fileArray.map(file => ({

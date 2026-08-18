@@ -5,7 +5,7 @@ export const config = {
 
   // Gemini AI
   geminiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-  geminiModel:   'gemini-3.6-flash',
+  geminiModel:   'gemini-2.5-flash',
 
   // Supabase — set via environment variables, NEVER hardcode keys here
   supabaseUrl:  process.env.SUPABASE_URL                || '',

@@ -1,11 +1,9 @@
 /**
  * Controlled Async Batch Processor
- * Runs up to MAX_CONCURRENT requests at a time.
+ * Runs up to concurrencyLimit requests at a time with smart backoff and rate-limit recovery.
  * Individual failures do NOT stop the batch.
  * Provides per-item status and progress callbacks.
  */
-
-const MAX_CONCURRENT = 3;
 
 /**
  * Process items with a controlled concurrency queue and automatic retries.
@@ -25,73 +23,85 @@ export async function runBatchQueue({
   onItemDone,
   onProgress,
   shouldStop,
-  concurrencyLimit = 3
+  concurrencyLimit = 2
 }) {
   const total = items.length;
+  if (total === 0) return;
+
   let completed = 0;
   let index = 0;
-
   let globalPausePromise = null;
 
-  async function worker() {
+  async function worker(workerId) {
+    // Stagger worker start to avoid synchronized request bursts
+    if (workerId > 0) {
+      await new Promise(r => setTimeout(r, workerId * 350));
+    }
+
     while (index < total) {
       if (shouldStop && shouldStop()) break;
       if (globalPausePromise) await globalPausePromise;
-      
+
       const i = index++;
+      if (i >= total) break;
+
       const item = items[i];
       onItemStart && onItemStart(item, i);
-      
+
       let attempts = 0;
-      const maxAttempts = 3;
+      const maxAttempts = 4;
       let lastErr = null;
       let result = null;
 
       while (attempts < maxAttempts) {
         if (shouldStop && shouldStop()) break;
         if (globalPausePromise) await globalPausePromise;
-        
+
         try {
           result = await processFn(item, i);
           lastErr = null;
-          break; // Success! Break retry loop
+          break; // Success!
         } catch (err) {
           lastErr = err;
           attempts++;
-          
-          const errMsg = err.message || '';
-          
-          // Do not retry on explicit missing API keys, billing, quota, or Auth errors
+
+          const errMsg = String(err?.message || '');
           const lowerMsg = errMsg.toLowerCase();
-          if (
-            lowerMsg.includes('api key') ||
-            lowerMsg.includes('unauthorized') ||
-            lowerMsg.includes('insufficient_quota') ||
-            lowerMsg.includes('quota') ||
-            lowerMsg.includes('billing') ||
-            lowerMsg.includes('exceeded your current') ||
-            lowerMsg.includes('invalid')
-          ) {
-             break; 
+
+          // Fatal errors: Stop retrying this specific item
+          const isFatal = (
+            lowerMsg.includes('invalid gemini api key') ||
+            lowerMsg.includes('invalid api key') ||
+            lowerMsg.includes('api key is required') ||
+            lowerMsg.includes('unauthorized (403)') ||
+            lowerMsg.includes('not supported for ai analysis')
+          );
+
+          if (isFatal) {
+            break;
           }
-          
-          // Handle Rate Limits (429) globally with 10s pause
-          if (lowerMsg.includes('rate limit') || lowerMsg.includes('429') || lowerMsg.includes('too many requests')) {
-             if (!globalPausePromise) {
-               const activeProvider = (window.getActiveProvider && window.getActiveProvider()) || 'gemini';
-               const providerConfig = (window.AI_PROVIDERS_CONFIG && window.AI_PROVIDERS_CONFIG[activeProvider]) || { name: 'AI' };
-               const providerName = providerConfig.name || 'AI';
-               console.warn(`[BatchProcessor] ${providerName} rate limit hit. Pausing queue for 10s...`);
-               if (window.showToast) window.showToast(`${providerName} rate limit reached. Pausing queue for 10s...`, 'warning');
-               globalPausePromise = new Promise(resolve => setTimeout(resolve, 10000));
-               globalPausePromise.then(() => { globalPausePromise = null; });
-             }
-             await globalPausePromise;
+
+          // Rate limit & temporary quota recovery
+          const isRateLimit = (
+            lowerMsg.includes('rate limit') ||
+            lowerMsg.includes('quota') ||
+            lowerMsg.includes('429') ||
+            lowerMsg.includes('resource_exhausted') ||
+            lowerMsg.includes('too many requests')
+          );
+
+          if (isRateLimit) {
+            if (!globalPausePromise) {
+              console.warn('[BatchProcessor] Rate limit / quota limit encountered. Backing off for 4s...');
+              globalPausePromise = new Promise(resolve => setTimeout(resolve, 4000));
+              globalPausePromise.then(() => { globalPausePromise = null; });
+            }
+            await globalPausePromise;
           }
 
           if (attempts < maxAttempts) {
-            // Exponential backoff: 2s, 4s...
-            const delayMs = Math.pow(2, attempts) * 1000;
+            // Exponential backoff: 2s, 4s, 7s...
+            const delayMs = Math.min(10000, Math.pow(2, attempts) * 1000 + Math.floor(Math.random() * 500));
             await new Promise(r => setTimeout(r, delayMs));
           }
         }
@@ -105,13 +115,16 @@ export async function runBatchQueue({
 
       completed++;
       onProgress && onProgress(completed, total);
+
+      // Brief gentle delay between items to avoid hammering the AI endpoints
+      await new Promise(r => setTimeout(r, 200));
     }
   }
 
+  const activeConcurrency = Math.max(1, Math.min(concurrencyLimit || 2, total));
   const workers = [];
-  const activeConcurrency = Math.min(concurrencyLimit, total);
   for (let w = 0; w < activeConcurrency; w++) {
-    workers.push(worker());
+    workers.push(worker(w));
   }
   await Promise.all(workers);
 }

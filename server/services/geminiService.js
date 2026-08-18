@@ -76,29 +76,35 @@ export async function testGeminiKey(providedKey) {
     return { ok: false, status: 400, message: 'Please enter a valid Gemini API key.' };
   }
 
-  const url = `${config.geminiBaseUrl}/${config.geminiModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastErr = null;
 
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: 'Ping' }] }],
-        generationConfig: { maxOutputTokens: 1, temperature: 0 }
-      })
-    });
+  for (const model of testModels) {
+    const url = `${config.geminiBaseUrl}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Ping' }] }],
+          generationConfig: { maxOutputTokens: 1, temperature: 0 }
+        })
+      });
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        return { ok: true, status: 200, message: `Connected to Gemini API (${model})!` };
+      }
       const errMsg = classifyGeminiError(res.status, data);
-      return { ok: false, status: res.status, message: sanitizeErrorMessage(errMsg, apiKey) };
+      lastErr = sanitizeErrorMessage(errMsg, apiKey);
+      if (res.status === 404) continue;
+      return { ok: false, status: res.status, message: lastErr };
+    } catch (err) {
+      lastErr = err.message;
     }
-
-    return { ok: true, status: 200, message: 'Gemini Connected' };
-  } catch (err) {
-    console.error('[GeminiService testKey Error]', sanitizeErrorMessage(err.message, apiKey));
-    return { ok: false, status: 500, message: 'Network error reaching Gemini API servers.' };
   }
+
+  return { ok: false, status: 500, message: lastErr || 'Network error reaching Gemini API servers.' };
 }
 
 // ── Shared prompt-building helpers (used by both image and video endpoints) ──
@@ -176,10 +182,11 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
   const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) throw new Error('Gemini API key is required. Please provide an API key.');
 
-  // Payload validations
-  if (!base64Image || typeof base64Image !== 'string' || base64Image.length < 50) {
-    throw new Error('Invalid or missing base64 image data payload.');
-  }
+  try {
+    // Payload validations
+    if (!base64Image || typeof base64Image !== 'string' || base64Image.length < 50) {
+      throw new Error('Invalid or missing base64 image data payload.');
+    }
 
   const normalizedMime = (mimeType || 'image/jpeg').toLowerCase();
   const effectiveMime  = ALLOWED_MIME_TYPES.has(normalizedMime) ? normalizedMime : 'image/jpeg';
@@ -243,47 +250,66 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
     mediaPart = { file_data: { mime_type: effectiveMime, file_uri: fileUri } };
   }
 
-  const selectedModel = model || config.geminiModel || 'gemini-2.5-flash';
-  const url = `${config.geminiBaseUrl}/${selectedModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const primaryModel = model || config.geminiModel || 'gemini-2.5-flash';
+  const candidateModels = [
+    primaryModel,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro'
+  ].filter((m, idx, arr) => m && arr.indexOf(m) === idx);
 
-  const requestBody = {
-    contents: [{
-      parts: [
-        { text: prompt },
-        mediaPart
-      ]
-    }],
-    generationConfig: {
-      temperature: 0.35,
-      maxOutputTokens: 2048,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          filename:    { type: 'STRING' },
-          title:       { type: 'STRING' },
-          description: { type: 'STRING' },
-          keywords:    { type: 'ARRAY', items: { type: 'STRING' } },
-          category:    { type: 'STRING' }
-        },
-        required: ['title', 'description', 'keywords', 'category']
+  let data = null;
+  let lastError = null;
+
+  for (let idx = 0; idx < candidateModels.length; idx++) {
+    const curModel = candidateModels[idx];
+    const url = `${config.geminiBaseUrl}/${curModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      const resJson = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const classified = classifyGeminiError(res.status, resJson);
+        const safeErrorMsg = sanitizeErrorMessage(classified, apiKey);
+        lastError = new Error(safeErrorMsg);
+
+        // If 404 (model not found) or model error, try next candidate model
+        if (res.status === 404 || (res.status === 400 && JSON.stringify(resJson).toLowerCase().includes('model'))) {
+          console.warn(`[GeminiService] Model '${curModel}' not available (${res.status}), trying fallback...`);
+          continue;
+        }
+
+        // If rate limit (429), retry or try next model
+        if (res.status === 429 && idx < candidateModels.length - 1) {
+          console.warn(`[GeminiService] Model '${curModel}' rate limited (429), trying fallback model...`);
+          await new Promise(r => setTimeout(r, 1500));
+          continue;
+        }
+
+        throw lastError;
       }
+
+      data = resJson;
+      break; // Success!
+    } catch (err) {
+      lastError = err;
+      if (idx < candidateModels.length - 1 && (err.message.includes('404') || err.message.includes('not found'))) {
+        continue;
+      }
+      throw err;
     }
-  };
+  }
 
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      const classified = classifyGeminiError(res.status, data);
-      throw new Error(sanitizeErrorMessage(classified, apiKey));
-    }
+  if (!data) {
+    throw lastError || new Error('Gemini API request failed across all candidate models.');
+  }
 
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!rawText) throw new Error('Gemini API returned an empty content candidate.');

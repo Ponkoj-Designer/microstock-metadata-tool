@@ -15,9 +15,10 @@ export const AI_PROVIDERS_CONFIG = {
     placeholder: 'AIza...',
     label: 'Add New API Key',
     models: [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recommended)' },
-      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
-      { id: 'gemini-1.5-pro',   name: 'Gemini 1.5 Pro' }
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recommended - Fastest & High Quality)' },
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro',   name: 'Gemini 1.5 Pro (Deep Reasoning)' }
     ]
   },
   openrouter: {

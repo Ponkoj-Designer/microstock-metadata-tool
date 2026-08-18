@@ -820,7 +820,7 @@ async function triggerAiGeneration() {
 
   await runBatchQueue({
     items: toProcess,
-    concurrencyLimit: isVideoBatch ? 2 : 3,
+    concurrencyLimit: isVideoBatch ? 1 : 2,
     shouldStop: () => state.stopBatch,
 
     onItemStart: (item) => {

@@ -108,9 +108,10 @@ body::before {
 }
 
 /* ── 6. GPU-accelerate modal open animation ─────────────────────────────────
-   Use transform instead of opacity alone so the element gets composited. */
+   Use translateZ(0) to promote to its own compositor layer WITHOUT overriding
+   the scale(0.95) → scale(1) open transition defined in styles.css. */
 .modal-box {
-  transform: translateY(0) translateZ(0);
+  transform: translateZ(0);
 }
 
 /* ── 7. Platform icon boxes: no transform recalc needed when not hovered ── */
@@ -144,9 +145,9 @@ img[loading="lazy"] {
 }
 
 /* ── 11. Reduce paint area for status tags (no blur, no shadow) ────────────
-   Status tags re-render frequently; keeping them paint-cheap matters. */
+   contain: paint scopes repaints without collapsing element size like strict. */
 .status-tag {
-  contain: strict;
+  contain: paint;
 }
 
 /* ── 12. Prevent layout thrashing from textarea auto-resize ─────────────── */

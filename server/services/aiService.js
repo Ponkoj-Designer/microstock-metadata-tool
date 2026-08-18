@@ -98,8 +98,8 @@ export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Im
   }
 
   const isVideo = (mimeType || '').toLowerCase().startsWith('video/');
-  const isShutterstock = (platformObj.id === 'shutterstock' || (platformObj.name && platformObj.name.toLowerCase().includes('shutterstock')));
   const platformObj_effective = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
+  const isShutterstock = (platformObj_effective.id === 'shutterstock' || (platformObj_effective.name && platformObj_effective.name.toLowerCase().includes('shutterstock')));
   const platformKwMax = parseInt(platformObj_effective.keywordMax, 10) || 49;
   const effectiveKwMax = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
   const effectiveTitleLimit = isShutterstock ? 200 : (settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj_effective.titleMaxLen, 10) || 70));

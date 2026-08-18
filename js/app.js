@@ -285,7 +285,6 @@ function renderPlatforms() {
 function selectPlatform(id) {
   state.currentPlatform = PLATFORMS[id] || PLATFORMS.adobe;
   renderPlatforms();
-  updatePlatformSpecsBanner();
   throttledRender();
   showToast(`Platform: ${state.currentPlatform.name}`, 'info');
 }
@@ -443,7 +442,7 @@ async function renderAdminDashboard(search = '') {
       if (r.ok) {
         showToast(r.message || `User plan updated to ${newPlan.toUpperCase()}`, 'success');
         if (userId === getCurrentUser()?.id) updateAuthNav();
-        const currentSearch = document.getElementById('admin-search')?.value || '';
+        const currentSearch = document.getElementById('admin-user-search')?.value || '';
         renderAdminDashboard(currentSearch);
       } else {
         showToast(r.message, 'error');
@@ -1859,8 +1858,12 @@ function renderGridView(items) {
 function deleteItem(id) {
   const item = state.mediaItems.find(i => i.id === id);
   if (item && item.url && item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
-  state.mediaItems    = state.mediaItems.filter(i => i.id !== id);
+  state.mediaItems = state.mediaItems.filter(i => i.id !== id);
   state.selectedItemIds.delete(id);
+  // Evict from all 3 view caches to prevent stale DOM
+  _tableRowCache.delete(id);
+  _gridCardCache.delete(id);
+  _detailCardCache.delete(id);
   updateUI();
   showToast(`Removed: ${item ? item.name : 'asset'}`, 'info');
 }
@@ -1875,6 +1878,7 @@ function removeSelected() {
     if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url);
     _tableRowCache.delete(i.id);
     _gridCardCache.delete(i.id);
+    _detailCardCache.delete(i.id);
   });
   state.mediaItems = state.mediaItems.filter(i => !state.selectedItemIds.has(i.id));
   state.selectedItemIds.clear();
@@ -1886,7 +1890,7 @@ function clearAll() {
   if (state.mediaItems.length >= 5 && !confirm(`Clear all ${state.mediaItems.length} assets?`)) return;
   state.mediaItems.forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
   state.mediaItems = []; state.selectedItemIds.clear();
-  _tableRowCache.clear(); _gridCardCache.clear();
+  _tableRowCache.clear(); _gridCardCache.clear(); _detailCardCache.clear();
   updateUI(); showToast('Cleared all assets', 'info');
 }
 
@@ -1976,7 +1980,7 @@ function setupDetailViewEventDelegation() {
     const remCardBtn = e.target.closest('.card-remove-btn');
     if (remCardBtn) {
       const itemId = remCardBtn.dataset.id;
-      removeItem(itemId);
+      deleteItem(itemId);
       return;
     }
   });
@@ -2100,9 +2104,22 @@ function openDetailModal(id) {
   const ti = document.getElementById('detail-title-input');
   const di = document.getElementById('detail-desc-input');
   const ki = document.getElementById('detail-kw-input');
-  ti.addEventListener('input', () => { if (!item.metadata) item.metadata={}; item.metadata.title = ti.value; });
-  di.addEventListener('input', () => { if (item.metadata) item.metadata.description = di.value; });
-  ki.addEventListener('input', () => { if (item.metadata) item.metadata.keywords = ki.value.split(',').map(k=>k.trim()).filter(k=>k); });
+  ti.addEventListener('input', () => {
+    if (!item.metadata) item.metadata = {};
+    item.metadata.title = ti.value;
+    _tableRowCache.delete(item.id); _gridCardCache.delete(item.id); _detailCardCache.delete(item.id);
+    throttledRender();
+  });
+  di.addEventListener('input', () => {
+    if (item.metadata) item.metadata.description = di.value;
+    _tableRowCache.delete(item.id); _gridCardCache.delete(item.id); _detailCardCache.delete(item.id);
+    throttledRender();
+  });
+  ki.addEventListener('input', () => {
+    if (item.metadata) item.metadata.keywords = ki.value.split(',').map(k => k.trim()).filter(k => k);
+    _tableRowCache.delete(item.id); _gridCardCache.delete(item.id); _detailCardCache.delete(item.id);
+    throttledRender();
+  });
 
   openModal(document.getElementById('modal-detail'));
 }
@@ -2623,7 +2640,7 @@ function initAiSettingsModal() {
   }
 
   document.getElementById('btn-done-ai-settings')?.addEventListener('click', () => {
-    closeModal(modal('modal-ai-settings'));
+    closeModal(document.getElementById('modal-ai-settings'));
   });
 
   selectAiProvider('gemini');

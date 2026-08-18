@@ -75,16 +75,8 @@
   70%       { transform: translateY(-2px) scale(1.03); }
 }
 
-/* Analyzing dots bounce */
-@keyframes dotsBounce1 {
-  0%, 60%, 100% { transform: translateY(0);    opacity: 0.35; }
-  30%            { transform: translateY(-5px); opacity: 1; }
-}
-@keyframes dotsBounce2 {
-  0%, 60%, 100% { transform: translateY(0);    opacity: 0.35; }
-  30%            { transform: translateY(-5px); opacity: 1; }
-}
-@keyframes dotsBounce3 {
+/* Analyzing dots bounce — single keyframe shared by all 3 dots via animation-delay */
+@keyframes dotsBounce {
   0%, 60%, 100% { transform: translateY(0);    opacity: 0.35; }
   30%            { transform: translateY(-5px); opacity: 1; }
 }
@@ -364,7 +356,7 @@ tr.row-processing td:first-child::after {
    ══════════════════════════════════════════════════════════════════════════ */
 .upload-container-box.drag-over {
   animation: borderDance 0.9s ease-in-out infinite;
-  transform: scale(1.012);
+  /* No transform scale — avoids layout stutter on overflow:hidden parents */
 }
 
 /* Upload icon bounce while dragging */
@@ -393,7 +385,7 @@ tr.row-processing td:first-child::after {
    TOAST NOTIFICATIONS — premium enter
    ══════════════════════════════════════════════════════════════════════════ */
 .toast-item {
-  animation: toastSlideUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  animation: toastSlideUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -422,18 +414,12 @@ tr.row-processing td:first-child::after {
   height: 5px;
   border-radius: 50%;
   background: var(--accent-primary);
-  animation: dotsBounce1 1.1s ease-in-out infinite;
+  will-change: transform, opacity;
+  animation: dotsBounce 1.1s ease-in-out infinite;
 }
 
-.loading-dots span:nth-child(2) {
-  animation-name: dotsBounce2;
-  animation-delay: 0.16s;
-}
-
-.loading-dots span:nth-child(3) {
-  animation-name: dotsBounce3;
-  animation-delay: 0.32s;
-}
+.loading-dots span:nth-child(2) { animation-delay: 0.16s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.32s; }
 
 .img2prompt-card {
   position: relative;
@@ -660,6 +646,7 @@ tr.row-processing select {
   border-radius: 50%;
   background: radial-gradient(circle, rgba(0, 219, 233, 0.2), rgba(219, 80, 255, 0.1) 60%, transparent 70%);
   animation: aiCoreFloat 2.4s ease-in-out infinite;
+  will-change: transform;
   z-index: 1;
 }
 
@@ -679,6 +666,7 @@ tr.row-processing select {
   border-radius: 50%;
   border: 1px solid rgba(0, 219, 233, 0.45);
   animation: aiCoreRing 1.8s ease-out infinite;
+  will-change: transform, opacity;
 }
 
 .ai-core-ring-two {

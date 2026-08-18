@@ -172,7 +172,7 @@ Your mission is to generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** d
 /**
  * Server-side metadata generation proxy for image / vector assets.
  */
-export async function generateGeminiMetadata({ apiKey: providedKey, base64Image, mimeType = 'image/jpeg', filename = 'asset.jpg', platform, settings, mode }) {
+export async function generateGeminiMetadata({ apiKey: providedKey, base64Image, mimeType = 'image/jpeg', filename = 'asset.jpg', platform, settings, mode, model }) {
   const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) throw new Error('Gemini API key is required. Please provide an API key.');
 
@@ -243,7 +243,8 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
     mediaPart = { file_data: { mime_type: effectiveMime, file_uri: fileUri } };
   }
 
-  const url = `${config.geminiBaseUrl}/${config.geminiModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const selectedModel = model || config.geminiModel || 'gemini-2.5-flash';
+  const url = `${config.geminiBaseUrl}/${selectedModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const requestBody = {
     contents: [{

@@ -81,7 +81,7 @@ export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Im
   if (provider === 'gemini') {
     const finalKey = cleanKey || process.env.GEMINI_API_KEY;
     if (!finalKey) throw new Error('Google Gemini API key is required. Add your key in AI Settings.');
-    return await generateGeminiMetadata({ apiKey: finalKey, base64Image, mimeType, filename, platform, settings, mode });
+    return await generateGeminiMetadata({ apiKey: finalKey, base64Image, mimeType, filename, platform, settings, mode, model });
   }
 
   if (!cleanKey) {

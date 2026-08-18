@@ -335,54 +335,167 @@ export async function rasterizeSvgToJpegBase64(svgInput) {
   });
 }
 
-async function extractPdfFirstPageJpegBase64(pdfFile) {
-  const blobB64 = await blobToBase64(pdfFile);
-  return { base64: blobB64, mimeType: 'application/pdf' };
-}
+/**
+ * Optimizes an image or vector for AI vision consumption.
+ * Scales down high-resolution images (DSLR / 4K / 8K / AI gen) to a maximum dimension
+ * of ~1600px and compresses as high-fidelity JPEG (0.88 quality).
+ * This reduces payload size from 20-50MB down to ~300-600KB without any loss
+ * of visual semantic detail for AI vision models (Gemini / OpenAI / Claude).
+ */
+export async function optimizeImageForAi(input, ext = '') {
+  if (!input) throw new Error('No input provided for image optimization.');
 
-async function getImageBase64(item, ext) {
-  if (ext === 'svg') {
-    if (item.file) {
-      try {
-        return await rasterizeSvgToJpegBase64(item.file);
-      } catch (err) {
-        console.warn('SVG file rasterization warning:', err);
-      }
-    }
-    if (item.url) {
-      try {
-        return await rasterizeSvgToJpegBase64(item.url);
-      } catch (err) {
-        console.warn('SVG url rasterization warning:', err);
-      }
-    }
+  const cleanExt = (ext || '').toLowerCase().replace('.', '');
+  if (cleanExt === 'svg') {
+    return await rasterizeSvgToJpegBase64(input);
   }
 
-  if (ext === 'pdf' && item.file) {
+  // Handle PDF
+  if (cleanExt === 'pdf' && (input instanceof Blob || input instanceof File)) {
     try {
-      return await extractPdfFirstPageJpegBase64(item.file);
+      return await extractPdfFirstPageJpegBase64(input);
     } catch (_) {}
   }
 
-  if (item.file) {
-    const base64 = await blobToBase64(item.file);
-    const mimeType = getGeminiMimeType(item, ext);
-    return { base64, mimeType };
+  const MAX_DIM = 1600;
+
+  const canvasToJpeg = (canvas) => {
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+    const base64 = dataUrl.split(',')[1];
+    return { base64, mimeType: 'image/jpeg' };
+  };
+
+  // 1. Try createImageBitmap (modern, high-performance, runs off-main-thread)
+  if (typeof createImageBitmap === 'function' && (input instanceof Blob || input instanceof File)) {
+    try {
+      let bitmap = await createImageBitmap(input);
+      const { width, height } = bitmap;
+      if (width > 0 && height > 0) {
+        const scale = Math.min(1, MAX_DIM / width, MAX_DIM / height);
+        const w = Math.max(1, Math.round(width * scale));
+        const h = Math.max(1, Math.round(height * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(bitmap, 0, 0, w, h);
+          if (bitmap.close) bitmap.close();
+          return canvasToJpeg(canvas);
+        }
+      }
+      if (bitmap.close) bitmap.close();
+    } catch (e) {
+      console.warn('createImageBitmap optimization failed, falling back to HTMLImageElement:', e);
+    }
   }
 
-  if (item.url && item.url.startsWith('data:')) {
-    const parts = item.url.split(',');
-    const mimeMatch = parts[0].match(/:(.*?);/);
-    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-    return { base64: parts[1], mimeType };
+  // 2. Fallback via HTMLImageElement (handles URLs, data URIs, Blobs)
+  return new Promise(async (resolve, reject) => {
+    let objectUrl = null;
+    try {
+      let src = '';
+      if (typeof input === 'string') {
+        src = input;
+      } else if (input instanceof Blob || input instanceof File) {
+        objectUrl = URL.createObjectURL(input);
+        src = objectUrl;
+      } else {
+        return reject(new Error('Unsupported image input format.'));
+      }
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      let isDone = false;
+      const timer = setTimeout(() => {
+        if (!isDone) {
+          isDone = true;
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          if (input instanceof Blob || input instanceof File) {
+            blobToBase64(input).then(base64 => {
+              resolve({ base64, mimeType: getGeminiMimeType({ type: input.type }, cleanExt) });
+            }).catch(reject);
+          } else {
+            reject(new Error('Image decoding timed out.'));
+          }
+        }
+      }, 10000);
+
+      img.onload = () => {
+        if (isDone) return;
+        isDone = true;
+        clearTimeout(timer);
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+
+        try {
+          const naturalW = img.naturalWidth || img.width || 1000;
+          const naturalH = img.naturalHeight || img.height || 1000;
+          const scale = Math.min(1, MAX_DIM / naturalW, MAX_DIM / naturalH);
+          const w = Math.max(1, Math.round(naturalW * scale));
+          const h = Math.max(1, Math.round(naturalH * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+
+          resolve(canvasToJpeg(canvas));
+        } catch (err) {
+          if (input instanceof Blob || input instanceof File) {
+            blobToBase64(input).then(base64 => {
+              resolve({ base64, mimeType: getGeminiMimeType({ type: input.type }, cleanExt) });
+            }).catch(reject);
+          } else {
+            reject(err);
+          }
+        }
+      };
+
+      img.onerror = () => {
+        if (isDone) return;
+        isDone = true;
+        clearTimeout(timer);
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+
+        if (input instanceof Blob || input instanceof File) {
+          blobToBase64(input).then(base64 => {
+            resolve({ base64, mimeType: getGeminiMimeType({ type: input.type }, cleanExt) });
+          }).catch(reject);
+        } else {
+          reject(new Error('Failed to load image for optimization.'));
+        }
+      };
+
+      img.src = src;
+    } catch (err) {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      reject(err);
+    }
+  });
+}
+
+async function getImageBase64(item, ext) {
+  if (item.file) {
+    return await optimizeImageForAi(item.file, ext);
+  }
+
+  if (item.url && item.url.startsWith('data:image/')) {
+    return await optimizeImageForAi(item.url, ext);
   }
 
   if (item.url) {
-    const res = await fetch(item.url);
-    const blob = await res.blob();
-    const base64 = await blobToBase64(blob);
-    const mimeType = getGeminiMimeType(item, ext);
-    return { base64, mimeType };
+    return await optimizeImageForAi(item.url, ext);
   }
 
   throw new Error(`Unable to extract base64 image data for ${item.name || 'asset'}`);

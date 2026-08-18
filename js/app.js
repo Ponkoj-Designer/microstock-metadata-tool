@@ -5,7 +5,7 @@
 
 import { PLATFORMS } from './platforms.js';
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
+import { setApiKey, hasApiKey, clearApiKey, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, optimizeImageForAi, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
 import { runBatchQueue } from './batchProcessor.js';
 import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
@@ -3042,17 +3042,10 @@ async function processImg2PromptQueue() {
       renderImg2PromptCards();
 
       try {
-        let base64Image;
-        let mimeType = 'image/jpeg';
         const fileExt = (item.file.name.split('.').pop() || '').toLowerCase();
-        if (fileExt === 'svg' || item.file.type === 'image/svg+xml') {
-          const rasterized = await rasterizeSvgToJpegBase64(item.file);
-          base64Image = rasterized.base64;
-          mimeType = rasterized.mimeType || 'image/jpeg';
-        } else {
-          base64Image = await fileToBase64(item.file);
-          mimeType = item.file.type || 'image/jpeg';
-        }
+        const optimized = await optimizeImageForAi(item.file, fileExt);
+        const base64Image = optimized.base64;
+        const mimeType = optimized.mimeType || 'image/jpeg';
 
         const platformSpec = PLATFORMS.general || {
           id: 'general', name: 'General',

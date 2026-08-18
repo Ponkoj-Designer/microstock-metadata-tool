@@ -66,21 +66,27 @@ export const PLATFORMS = {
     color: '#38bdf8',
     colorBg: 'rgba(56, 189, 248, 0.16)',
     colorBorder: 'rgba(56, 189, 248, 0.35)',
-    titleMaxLen: 150,
+    titleMaxLen: 200,
     titleMinLen: 5,
     keywordMin: 7,
     keywordMax: 50,
-    keywordRecommended: 35,
-    categoriesRequired: 2,
+    keywordRecommended: 45,
+    categoriesRequired: 1,
     csvColumns: ['Filename', 'Description', 'Keywords', 'Categories'],
     categories: [
       'Abstract', 'Animals/Wildlife', 'Arts', 'Backgrounds/Textures', 'Beauty/Fashion',
-      'Buildings/Landmarks', 'Business/Finance', 'Celebrities', 'Education', 'Food and Drink',
+      'Buildings/Landmarks', 'Business/Finance', 'Celebrities', 'Education', 'Food and drink',
       'Healthcare/Medical', 'Holidays', 'Industrial', 'Interiors', 'Miscellaneous',
-      'Nature', 'Objects', 'Parks/Outdoor', 'People', 'Religion', 'Science', 'Technology',
-      'Signs/Symbols', 'Sports/Recreation', 'Transportation', 'Vectors', 'Vintage'
+      'Nature', 'Objects', 'Parks/Outdoor', 'People', 'Religion', 'Science',
+      'Signs/Symbols', 'Sports/Recreation', 'Technology', 'Transportation', 'Vintage'
     ],
-    description: 'Requires Description, up to 50 keywords, and up to 2 Categories.'
+    videoCategories: [
+      'Animals/Wildlife', 'Arts', 'Backgrounds/Textures', 'Buildings/Landmarks',
+      'Business/Finance', 'Education', 'Food and drink', 'Healthcare/Medical',
+      'Holidays', 'Industrial', 'Nature', 'Objects', 'People', 'Religion',
+      'Science', 'Signs/Symbols', 'Sports/Recreation', 'Technology', 'Transportation'
+    ],
+    description: 'Unique Description in English (max 200 chars), up to 50 keywords, 1 or 2 official Categories.'
   },
   vecteezy: {
     id: 'vecteezy',

@@ -24,8 +24,11 @@ export function formatRowForPlatform(item, platform) {
     case 'adobe':
       return [csvCell(filename), csvCell(title), csvCell(keywords), csvCell(category)];
 
-    case 'shutterstock':
-      return [csvCell(filename), csvCell(description), csvCell(keywords), csvCell(category)];
+    case 'shutterstock': {
+      // Shutterstock Official CSV format: Filename, Description, Keywords, Categories
+      const ssDesc = (description || title || '').trim().slice(0, 200);
+      return [csvCell(filename), csvCell(ssDesc), csvCell(keywords), csvCell(category)];
+    }
 
     case 'freepik':
       return [csvCell(filename), csvCell(title), csvCell(keywords)];
@@ -56,9 +59,16 @@ export function validateItem(item, platform) {
 
   if (!item.name) issues.push('Missing filename');
   if (!meta.title || meta.title.trim().length === 0) issues.push('Missing title');
-  if (platform.id !== 'freepik' && (!meta.description || meta.description.trim().length === 0)) {
+  if (platform.id === 'shutterstock') {
+    const ssDesc = (meta.description || meta.title || '').trim();
+    if (!ssDesc) {
+      issues.push('Missing description');
+    } else if (ssDesc.length > 200) {
+      issues.push(`Description exceeds 200 characters limit (${ssDesc.length}/200)`);
+    }
+  } else if (platform.id !== 'freepik' && (!meta.description || meta.description.trim().length === 0)) {
     // description not required for freepik
-    if (['shutterstock','istock','dreamstime','depositphotos','rf123','custom'].includes(platform.id)) {
+    if (['istock','dreamstime','depositphotos','rf123','custom'].includes(platform.id)) {
       issues.push('Missing description');
     }
   }

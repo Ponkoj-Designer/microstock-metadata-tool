@@ -107,7 +107,20 @@ export async function testGeminiKey(providedKey) {
   return { ok: false, status: 500, message: lastErr || 'Network error reaching Gemini API servers.' };
 }
 
-// ── Shared prompt-building helpers (used by both image and video endpoints) ──
+const SHUTTERSTOCK_IMAGE_CATEGORIES = [
+  'Abstract', 'Animals/Wildlife', 'Arts', 'Backgrounds/Textures', 'Beauty/Fashion',
+  'Buildings/Landmarks', 'Business/Finance', 'Celebrities', 'Education', 'Food and drink',
+  'Healthcare/Medical', 'Holidays', 'Industrial', 'Interiors', 'Miscellaneous',
+  'Nature', 'Objects', 'Parks/Outdoor', 'People', 'Religion', 'Science',
+  'Signs/Symbols', 'Sports/Recreation', 'Technology', 'Transportation', 'Vintage'
+];
+
+const SHUTTERSTOCK_VIDEO_CATEGORIES = [
+  'Animals/Wildlife', 'Arts', 'Backgrounds/Textures', 'Buildings/Landmarks',
+  'Business/Finance', 'Education', 'Food and drink', 'Healthcare/Medical',
+  'Holidays', 'Industrial', 'Nature', 'Objects', 'People', 'Religion',
+  'Science', 'Signs/Symbols', 'Sports/Recreation', 'Technology', 'Transportation'
+];
 
 function buildKwTarget(effectiveKwMax, kwMin) {
   if (effectiveKwMax >= 49) return '42 to 47';
@@ -116,14 +129,19 @@ function buildKwTarget(effectiveKwMax, kwMin) {
   return `5 to ${effectiveKwMax}`;
 }
 
-function buildCategoryOptions(platformObj) {
-  return Array.isArray(platformObj.categories) && platformObj.categories.length > 0
+function buildCategoryOptions(platformObj, isVideo = false) {
+  const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
+  if (isShutterstock) {
+    return (isVideo ? SHUTTERSTOCK_VIDEO_CATEGORIES : SHUTTERSTOCK_IMAGE_CATEGORIES).join(', ');
+  }
+  return Array.isArray(platformObj?.categories) && platformObj.categories.length > 0
     ? platformObj.categories.join(', ')
     : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources';
 }
 
-function buildGenerationPrompt({ platformObj, kwTarget, titleLimit, categoryOptions, settings, mode, filename }) {
+function buildGenerationPrompt({ platformObj, kwTarget, titleLimit, categoryOptions, settings, mode, filename, isVideo = false }) {
   let prompt = '';
+  const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
 
   if (mode === 'img2prompt') {
     prompt = `You are a world-class AI art prompt engineer and visual taxonomist.
@@ -133,8 +151,37 @@ STRICT INSTRUCTIONS:
 - Description: A detailed breakdown of visual elements, color palette, lighting atmosphere, and texture details.
 - Keywords: 25-35 high-value visual modifier keywords, art style tags, lighting terms, and composition tags.
 - Category: The artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art, Concept Art).`;
+  } else if (isShutterstock) {
+    prompt = `You are a world-renowned Microstock SEO Specialist and Shutterstock Contributor Metadata Expert.
+Generate **OFFICIAL SHUTTERSTOCK-COMPLIANT, HIGH-CONVERTING COMMERCIAL METADATA** adhering strictly to Shutterstock Contributor specifications:
+
+=== SHUTTERSTOCK OFFICIAL REQUIREMENTS ===
+
+1. FILENAME:
+   - Preserves original media filename: "${filename}".
+
+2. DESCRIPTION (STRICT LIMIT: MAXIMUM 200 CHARACTERS IN ENGLISH):
+   - A unique and detailed description of the media in English up to 200 characters.
+   - FRONT-LOAD the most powerful commercial search terms in the first 3 to 5 words.
+   - Describe exact subject, format/style (vector/illustration/photo/3D/video), action/mood, and background.
+   - MUST be strictly within 200 characters total.
+
+3. TITLE:
+   - Provide the same high-converting commercial title matching the description (max 200 chars).
+
+4. KEYWORDS (Up to 50 keywords in English, separated by commas):
+   - Generate ${kwTarget} unique, high-traffic English keywords.
+   - First 5-10 keywords carry 80% search algorithm weight: core subject, style, and primary traits.
+   - Followed by specific objects, industry/commercial use cases ("banner", "template", "graphic design", "wallpaper"), vector terms if applicable, and synonyms.
+   - All lowercase, deduplicated, 100% relevant.
+
+5. CATEGORIES (Strictly ONE or TWO categories from the official list):
+   - Select ONE or TWO exact categories in English from this official Shutterstock list:
+     [${categoryOptions}]
+   - If two categories apply, separate them with a comma (Example: "Nature, Animals/Wildlife" or "Backgrounds/Textures, Technology" or "Business/Finance").
+   - NEVER invent or use categories not present in the list above.`;
   } else {
-    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert for top stock agencies (${platformObj.name}, Adobe Stock, Shutterstock, Freepik, Vecteezy, Getty/iStock, 123RF).
+    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert for top stock agencies (${platformObj?.name || 'Stock'}, Adobe Stock, Shutterstock, Freepik, Vecteezy, Getty/iStock, 123RF).
 Your mission is to generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** designed to rank on Page 1 / top search results for high-intent stock buyers.
 
 === MICROSTOCK SEO RANKING ALGORITHM RULES ===
@@ -171,8 +218,72 @@ Your mission is to generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** d
     prompt += `\n\n- USER CUSTOM OVERRIDE INSTRUCTIONS: ${settings.customPrompt}`;
   }
 
-  prompt += `\n\nFILENAME: ${filename}\nPLATFORM: ${platformObj.name}`;
+  prompt += `\n\nFILENAME: ${filename}\nPLATFORM: ${platformObj?.name || 'Stock'}`;
   return prompt;
+}
+
+export function formatCategoryAndMeta(parsed, platformObj, isVideo, effectiveTitleLimit, effectiveKwMax, filename, mode) {
+  const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
+  const maxTitleLimit = isShutterstock ? 200 : effectiveTitleLimit;
+
+  let title = (mode === 'img2prompt'
+    ? String(parsed.title || '')
+    : String(parsed.title || '').substring(0, maxTitleLimit)
+  ).trim();
+
+  let description = String(parsed.description || title).trim();
+  if (isShutterstock) {
+    if (description.length > 200) {
+      description = description.substring(0, 200).trim();
+    }
+    if (!title || title.length > 200) {
+      title = description.substring(0, 200).trim();
+    }
+  }
+
+  let rawCat = String(parsed.category || '').trim();
+  const catList = isShutterstock
+    ? (isVideo ? SHUTTERSTOCK_VIDEO_CATEGORIES : SHUTTERSTOCK_IMAGE_CATEGORIES)
+    : (Array.isArray(platformObj?.categories) && platformObj.categories.length > 0
+      ? platformObj.categories
+      : ['General', 'Abstract', 'Animals', 'Architecture', 'Business', 'Food', 'Landscapes', 'Nature', 'People', 'Technology', 'Graphic Resources']);
+
+  let category;
+  if (isShutterstock) {
+    const parts = rawCat.split(',').map(s => s.trim()).filter(Boolean);
+    const matched = [];
+    for (const p of parts) {
+      const found = catList.find(c => c.toLowerCase() === p.toLowerCase())
+        || catList.find(c => c.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(c.toLowerCase()));
+      if (found && !matched.includes(found)) matched.push(found);
+    }
+    category = matched.slice(0, 2).join(', ') || catList[0];
+  } else {
+    category = catList.find(c => c.toLowerCase() === rawCat.toLowerCase())
+      || catList.find(c => c.toLowerCase().includes(rawCat.toLowerCase()) || rawCat.toLowerCase().includes(c.toLowerCase()))
+      || rawCat
+      || catList[0];
+  }
+
+  let keywords = Array.isArray(parsed.keywords) ? parsed.keywords : String(parsed.keywords || '').split(',');
+  keywords = keywords
+    .map(k => String(k).toLowerCase().trim())
+    .filter(k => k.length > 0);
+
+  // Deduplicate while preserving relevance order
+  const seen = new Set();
+  keywords = keywords.filter(k => { if (seen.has(k)) return false; seen.add(k); return true; });
+  keywords = keywords.slice(0, effectiveKwMax);
+
+  if (!title) throw new Error('Generated metadata title was empty.');
+
+  return {
+    filename: parsed.filename || filename,
+    title,
+    description,
+    keywords,
+    category
+  };
 }
 
 /**
@@ -311,9 +422,6 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
     throw lastError || new Error('Gemini API request failed across all candidate models.');
   }
 
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!rawText) throw new Error('Gemini API returned an empty content candidate.');
-
     // Parse structured JSON output
     let parsed;
     try {
@@ -321,42 +429,7 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
     } catch (_) {
       throw new Error('Failed to parse Gemini metadata response JSON.');
     }
-
-    const title = (mode === 'img2prompt'
-      ? String(parsed.title || '')
-      : String(parsed.title || '').substring(0, effectiveTitleLimit)
-    ).trim();
-    const description = String(parsed.description || title).trim();
-
-    let rawCat = String(parsed.category || '').trim();
-    const catList = Array.isArray(platformObj.categories) && platformObj.categories.length > 0
-      ? platformObj.categories
-      : ['General', 'Abstract', 'Animals', 'Architecture', 'Business', 'Food', 'Landscapes', 'Nature', 'People', 'Technology', 'Graphic Resources'];
-
-    let category = catList.find(c => c.toLowerCase() === rawCat.toLowerCase())
-      || catList.find(c => c.toLowerCase().includes(rawCat.toLowerCase()) || rawCat.toLowerCase().includes(c.toLowerCase()))
-      || rawCat
-      || catList[0];
-
-    let keywords = Array.isArray(parsed.keywords) ? parsed.keywords : String(parsed.keywords || '').split(',');
-    keywords = keywords
-      .map(k => String(k).toLowerCase().trim())
-      .filter(k => k.length > 0);
-
-    // Deduplicate while preserving relevance order
-    const seen = new Set();
-    keywords = keywords.filter(k => { if (seen.has(k)) return false; seen.add(k); return true; });
-    keywords = keywords.slice(0, effectiveKwMax);
-
-    if (!title) throw new Error('Generated metadata title was empty.');
-
-    return {
-      filename: parsed.filename || filename,
-      title,
-      description,
-      keywords,
-      category
-    };
+    return formatCategoryAndMeta(parsed, platformObj, isVideo, effectiveTitleLimit, effectiveKwMax, filename, mode);
 
   } catch (err) {
     console.error('[GeminiService generateMetadata Error]', sanitizeErrorMessage(err.message, apiKey));
@@ -386,8 +459,8 @@ export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer
   const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
 
   const kwTarget = buildKwTarget(effectiveKwMax, settings?.kwMin);
-  const categoryOptions = buildCategoryOptions(platformObj);
-  const prompt = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename });
+  const categoryOptions = buildCategoryOptions(platformObj, true);
+  const prompt = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename, isVideo: true });
 
   // 1. Upload video to Gemini File API
   const uploadUrl = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`;
@@ -474,12 +547,5 @@ export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer
   }
   
   const parsed = JSON.parse(text);
-  
-  return {
-    filename: parsed.filename || filename,
-    title: parsed.title,
-    description: parsed.description,
-    keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, effectiveKwMax) : [],
-    category: parsed.category
-  };
+  return formatCategoryAndMeta(parsed, platformObj, true, effectiveTitleLimit, effectiveKwMax, filename, mode);
 }

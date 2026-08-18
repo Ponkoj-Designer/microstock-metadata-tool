@@ -3,7 +3,7 @@
  * Supports image analysis, commercial metadata generation, and AI prompt engineering.
  */
 
-import { generateGeminiMetadata, generateGeminiMetadataBinary, testGeminiKey } from './geminiService.js';
+import { generateGeminiMetadata, generateGeminiMetadataBinary, testGeminiKey, formatCategoryAndMeta } from './geminiService.js';
 
 export const AI_PROVIDERS = {
   gemini: {
@@ -97,15 +97,21 @@ export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Im
     throw new Error('Invalid or missing image payload.');
   }
 
-  const platformObj = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
-  const platformKwMax = parseInt(platformObj.keywordMax, 10) || 49;
+  const isVideo = (mimeType || '').toLowerCase().startsWith('video/');
+  const isShutterstock = (platformObj.id === 'shutterstock' || (platformObj.name && platformObj.name.toLowerCase().includes('shutterstock')));
+  const platformObj_effective = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
+  const platformKwMax = parseInt(platformObj_effective.keywordMax, 10) || 49;
   const effectiveKwMax = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
-  const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
+  const effectiveTitleLimit = isShutterstock ? 200 : (settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj_effective.titleMaxLen, 10) || 70));
 
   const kwTarget = (effectiveKwMax >= 49) ? '42 to 47' : (effectiveKwMax >= 40 ? `${effectiveKwMax}` : `5 to ${effectiveKwMax}`);
-  const categoryOptions = Array.isArray(platformObj.categories) && platformObj.categories.length > 0
-    ? platformObj.categories.join(', ')
-    : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources';
+  const categoryOptions = isShutterstock
+    ? (isVideo
+      ? 'Animals/Wildlife, Arts, Backgrounds/Textures, Buildings/Landmarks, Business/Finance, Education, Food and drink, Healthcare/Medical, Holidays, Industrial, Nature, Objects, People, Religion, Science, Signs/Symbols, Sports/Recreation, Technology, Transportation'
+      : 'Abstract, Animals/Wildlife, Arts, Backgrounds/Textures, Beauty/Fashion, Buildings/Landmarks, Business/Finance, Celebrities, Education, Food and drink, Healthcare/Medical, Holidays, Industrial, Interiors, Miscellaneous, Nature, Objects, Parks/Outdoor, People, Religion, Science, Signs/Symbols, Sports/Recreation, Technology, Transportation, Vintage')
+    : (Array.isArray(platformObj_effective.categories) && platformObj_effective.categories.length > 0
+      ? platformObj_effective.categories.join(', ')
+      : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources');
 
   let prompt = '';
   if (mode === 'img2prompt') {
@@ -118,8 +124,27 @@ Respond STRICTLY with a valid JSON object matching this schema:
   "keywords": ["25-35 visual modifier keywords", "art style tags", "lighting terms"],
   "category": "Artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art)"
 }`;
+  } else if (isShutterstock) {
+    prompt = `You are a world-renowned Microstock SEO Specialist & Shutterstock Contributor Metadata Expert.
+Generate **OFFICIAL SHUTTERSTOCK-COMPLIANT, HIGH-CONVERTING COMMERCIAL METADATA** adhering strictly to Shutterstock Contributor specifications:
+
+SHUTTERSTOCK OFFICIAL RULES:
+1. FILENAME: "${filename}".
+2. DESCRIPTION (STRICT LIMIT: MAXIMUM 200 CHARACTERS IN ENGLISH): A unique, detailed commercial description in English. Front-load top commercial keywords in the first 3-5 words. Must be <= 200 chars.
+3. TITLE: Same commercial title matching description (max 200 chars).
+4. KEYWORDS: Exactly ${kwTarget} unique high-traffic English keywords. Top 5-10 carry 80% search algorithm weight.
+5. CATEGORY: Select ONE or TWO exact categories from this official list: [${categoryOptions}]. If two, separate by comma (e.g. "Nature, Animals/Wildlife").
+
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Commercial Title (max 200 chars)",
+  "description": "Detailed unique description in English (strictly max 200 characters)",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "PrimaryCategory, SecondaryCategory"
+}`;
   } else {
-    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert for ${platformObj.name}, Adobe Stock, Shutterstock, Freepik, and Vecteezy.
+    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert for ${platformObj_effective.name}, Adobe Stock, Shutterstock, Freepik, and Vecteezy.
 Generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** engineered to rank on Page 1 for high-volume buyer searches.
 
 STRICT MICROSTOCK SEO RULES:
@@ -202,35 +227,5 @@ Respond STRICTLY with a valid JSON object matching this schema:
     }
   }
 
-  const title = (mode === 'img2prompt'
-    ? String(parsed.title || '')
-    : String(parsed.title || '').substring(0, effectiveTitleLimit)
-  ).trim();
-
-  const description = String(parsed.description || title).trim();
-  let rawCat = String(parsed.category || '').trim();
-  const catList = Array.isArray(platformObj.categories) && platformObj.categories.length > 0
-    ? platformObj.categories
-    : ['General', 'Abstract', 'Animals', 'Architecture', 'Business', 'Food', 'Landscapes', 'Nature', 'People', 'Technology', 'Graphic Resources'];
-
-  let category = catList.find(c => c.toLowerCase() === rawCat.toLowerCase())
-    || catList.find(c => c.toLowerCase().includes(rawCat.toLowerCase()) || rawCat.toLowerCase().includes(c.toLowerCase()))
-    || rawCat
-    || catList[0];
-
-  let keywords = Array.isArray(parsed.keywords) ? parsed.keywords : String(parsed.keywords || '').split(',');
-  keywords = keywords.map(k => String(k).toLowerCase().trim()).filter(k => k.length > 0);
-  const seen = new Set();
-  keywords = keywords.filter(k => { if (seen.has(k)) return false; seen.add(k); return true; });
-  keywords = keywords.slice(0, effectiveKwMax);
-
-  if (!title) throw new Error('Generated title was empty.');
-
-  return {
-    filename: parsed.filename || filename,
-    title,
-    description,
-    keywords,
-    category
-  };
+  return formatCategoryAndMeta(parsed, platformObj_effective, isVideo, effectiveTitleLimit, effectiveKwMax, filename, mode);
 }

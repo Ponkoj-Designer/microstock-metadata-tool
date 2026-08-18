@@ -3300,7 +3300,7 @@ async function processImg2PromptQueue() {
       renderImg2PromptCards();
 
       try {
-        const fileExt = (item.file.name.split('.').pop() || '').toLowerCase();
+        const fileExt = ((item.name || item.file?.name || '').split('.').pop() || '').toLowerCase();
         const optimized = await optimizeImageForAi(item.file, fileExt);
         const base64Image = optimized.base64;
         const mimeType = optimized.mimeType || 'image/jpeg';

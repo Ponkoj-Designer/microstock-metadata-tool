@@ -5,7 +5,7 @@
 
 import { PLATFORMS } from './platforms.js';
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, optimizeImageForAi, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
+import { setApiKey, hasApiKey, clearApiKey, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, optimizeImageForAi, compressImageFile, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
 import { runBatchQueue } from './batchProcessor.js';
 import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
@@ -623,28 +623,151 @@ function switchAssetTab(name) {
   updateUploadZoneForTab();
 }
 
-function updateUploadZoneForTab() {
-  const titleEl    = document.getElementById('upload-title-text');
-  const subEl      = document.getElementById('upload-subtitle-text');
-  const tagsEl     = document.getElementById('format-tags-container');
-  const fileInput  = document.getElementById('file-input');
-  const tab = state.activeAssetTab;
-  if (tab === 'images') {
-    if (titleEl)   titleEl.textContent = 'Drop your images here or browse files';
-    if (subEl)     subEl.textContent   = 'JPG, PNG, WEBP, TIFF, SVG supported — batch 100+ files';
-    if (tagsEl)    tagsEl.innerHTML    = ['JPG','JPEG','PNG','WEBP','TIFF','SVG'].map(f=>`<span class="format-tag">${f}</span>`).join('');
-    if (fileInput) fileInput.accept    = '.jpg,.jpeg,.png,.webp,.tiff,.tif,.svg';
-  } else if (tab === 'vectors') {
-    if (titleEl)   titleEl.textContent = 'Drop your vector files here or browse files';
-    if (subEl)     subEl.textContent   = 'EPS, AI, SVG, PDF — batch upload supported';
-    if (tagsEl)    tagsEl.innerHTML    = ['EPS','AI','SVG','PDF'].map(f=>`<span class="format-tag">${f}</span>`).join('');
-    if (fileInput) fileInput.accept    = '.eps,.ai,.svg,.pdf';
-  } else if (tab === 'videos') {
-    if (titleEl)   titleEl.textContent = 'Drop your video files here or browse files';
-    if (subEl)     subEl.textContent   = 'MP4, MOV, AVI, WEBP (Max 100MB per video) — batch upload supported';
-    if (tagsEl)    tagsEl.innerHTML    = ['MP4','MOV','AVI','WEBM'].map(f=>`<span class="format-tag">${f}</span>`).join('');
-    if (fileInput) fileInput.accept    = '.mp4,.mov,.avi,.webm';
+let dropZoneResetTimer = null;
+
+function bindFileInputListener() {
+  const fileInput = document.getElementById('file-input');
+  if (fileInput) {
+    fileInput.onchange = (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length) processFiles(files);
+      e.target.value = '';
+    };
   }
+  const btnBrowse = document.getElementById('btn-browse-files');
+  if (btnBrowse) {
+    btnBrowse.onclick = (e) => {
+      e.stopPropagation();
+      document.getElementById('file-input')?.click();
+    };
+  }
+}
+
+function setDropZoneUploadingState(isUploading, current = 0, total = 0, currentName = '') {
+  const dropZone = document.getElementById('drop-zone');
+  if (!dropZone) return;
+
+  if (dropZoneResetTimer) {
+    clearTimeout(dropZoneResetTimer);
+    dropZoneResetTimer = null;
+  }
+
+  if (isUploading) {
+    dropZone.classList.add('dropzone-uploading');
+    dropZone.classList.remove('dropzone-success');
+    const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+
+    dropZone.innerHTML = `
+      <div class="relative w-16 h-16 flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-[#00dbe9] border-r-[#00dbe9] animate-upload-spin-ring"></div>
+        <div class="w-12 h-12 rounded-full bg-[#191c1f] border border-[#00dbe9]/50 flex items-center justify-center animate-upload-pulse">
+          <span class="material-symbols-outlined text-[26px] text-[#00dbe9]">cloud_upload</span>
+        </div>
+      </div>
+      <div class="flex flex-col items-center gap-1.5 w-full max-w-md px-4">
+        <h2 class="text-title-md font-bold text-white flex items-center gap-2">
+          <span>Compressing & Uploading ${total} File${total === 1 ? '' : 's'}...</span>
+        </h2>
+        <div class="w-full bg-[#12161c] h-2.5 rounded-full overflow-hidden border border-[#2d3748] mt-1 relative">
+          <div class="bg-gradient-to-r from-[#00dbe9] to-[#34d399] h-full transition-all duration-200 rounded-full" style="width: ${pct}%"></div>
+        </div>
+        <div class="flex justify-between w-full text-[11px] text-on-surface-variant mt-0.5 font-mono">
+          <span class="truncate max-w-[240px] text-[#00dbe9]">${currentName ? escHtml(currentName) : 'Optimizing size to ~450KB...'}</span>
+          <span>${current} / ${total} (${pct}%)</span>
+        </div>
+      </div>
+      <p class="text-[10px] font-bold text-outline uppercase tracking-wider">Fast-Track AI Compression Active</p>
+      <input type="file" id="file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.tiff,.tif,.eps,.ai,.svg,.pdf,.mp4">
+    `;
+    bindFileInputListener();
+  }
+}
+
+function setDropZoneSuccessState(count = 1) {
+  const dropZone = document.getElementById('drop-zone');
+  if (!dropZone) return;
+
+  if (dropZoneResetTimer) {
+    clearTimeout(dropZoneResetTimer);
+  }
+
+  dropZone.classList.remove('dropzone-uploading');
+  dropZone.classList.add('dropzone-success');
+
+  dropZone.innerHTML = `
+    <div class="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center animate-success-check">
+      <span class="material-symbols-outlined text-[38px] text-emerald-400 font-bold">check_circle</span>
+    </div>
+    <div class="flex flex-col items-center gap-1">
+      <h2 class="text-title-lg font-bold text-emerald-400 flex items-center gap-1.5">
+        <span>✓ ${count} File${count === 1 ? '' : 's'} Uploaded Successfully!</span>
+      </h2>
+      <p class="text-body-sm text-on-surface-variant">
+        Auto-compressed to ~450KB · Ready to generate metadata
+      </p>
+    </div>
+    <p class="text-[11px] font-bold text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/30 px-3.5 py-1 rounded-full uppercase tracking-wider">
+      Upload Complete · Ready to Process
+    </p>
+    <input type="file" id="file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.tiff,.tif,.eps,.ai,.svg,.pdf,.mp4">
+  `;
+  bindFileInputListener();
+
+  dropZoneResetTimer = setTimeout(() => {
+    resetDropZoneToDefault();
+  }, 3500);
+}
+
+function resetDropZoneToDefault() {
+  const dropZone = document.getElementById('drop-zone');
+  if (!dropZone) return;
+  dropZone.classList.remove('dropzone-uploading', 'dropzone-success');
+  updateUploadZoneForTab();
+}
+
+function updateUploadZoneForTab() {
+  const dropZone = document.getElementById('drop-zone');
+  if (!dropZone) return;
+
+  dropZone.classList.remove('dropzone-uploading', 'dropzone-success');
+
+  const tab = state.activeAssetTab;
+  let title = 'Drop your images here or browse files';
+  let sub = 'JPG, PNG, WEBP, TIFF, SVG supported — batch 100+ files';
+  let tags = ['JPG','JPEG','PNG','WEBP','TIFF','SVG'];
+  let accept = '.jpg,.jpeg,.png,.webp,.tiff,.tif,.svg';
+
+  if (tab === 'vectors') {
+    title = 'Drop your vector files here or browse files';
+    sub = 'EPS, AI, SVG, PDF — batch upload supported';
+    tags = ['EPS','AI','SVG','PDF'];
+    accept = '.eps,.ai,.svg,.pdf';
+  } else if (tab === 'videos') {
+    title = 'Drop your video files here or browse files';
+    sub = 'MP4, MOV, AVI, WEBP (Max 100MB per video) — batch upload supported';
+    tags = ['MP4','MOV','AVI','WEBM'];
+    accept = '.mp4,.mov,.avi,.webm';
+  }
+
+  dropZone.innerHTML = `
+    <div class="w-16 h-16 rounded-full bg-surface-container-highest border border-outline-variant flex items-center justify-center group-hover:border-primary-fixed-dim group-hover:glow-cyan transition-all">
+      <span class="material-symbols-outlined text-[32px] text-primary-fixed-dim">cloud_upload</span>
+    </div>
+    <div class="flex flex-col gap-1">
+      <h2 class="text-title-lg font-bold text-on-surface" id="upload-title-text">${title}</h2>
+      <p class="text-body-sm text-on-surface-variant" id="upload-subtitle-text">${sub}</p>
+    </div>
+    <p class="text-[10px] font-bold text-outline uppercase tracking-wider" id="format-tags-container">${tags.join(' • ')}</p>
+    
+    <div class="flex gap-3 mt-4 relative z-10">
+      <button class="bg-primary-fixed-dim text-background px-5 py-2.5 rounded-lg text-label-md font-label-md hover:bg-primary-container transition-all flex items-center gap-2 glow-cyan" id="btn-browse-files">
+        <span class="material-symbols-outlined text-[18px]">folder_open</span> Browse Files
+      </button>
+    </div>
+    <input type="file" id="file-input" class="hidden" multiple accept="${accept}">
+  `;
+
+  bindFileInputListener();
 }
 
 // ─── File Processing ───────────────────────────────────────────────────────
@@ -716,15 +839,33 @@ async function processFiles(files) {
   if (skippedDup.length)  showToast(`Duplicate: skipped ${skippedDup.length} file(s)`, 'warning');
   if (!accepted.length)   return;
 
-  const BATCH = 10;
+  // Trigger Dropzone Upload & Compression Animation
+  setDropZoneUploadingState(true, 0, accepted.length, 'Optimizing files...');
+
+  const BATCH = 5;
   const newItems = [];
+  let processedCount = 0;
+
   for (let i = 0; i < accepted.length; i += BATCH) {
     const batch = accepted.slice(i, i + BATCH);
     await Promise.all(batch.map(async ({ file, cls, key }) => {
       const { assetType, format, ext } = cls;
       const id = `asset-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+
+      // Auto-compress high-resolution images to ~400-500KB on upload for instant processing
+      let uploadFile = file;
+      if (assetType === 'image' && ext !== 'svg') {
+        const compressed = await compressImageFile(file);
+        if (compressed && compressed.size < file.size) {
+          uploadFile = compressed;
+        }
+      }
+
+      processedCount++;
+      setDropZoneUploadingState(true, processedCount, accepted.length, file.name);
+
       const item = {
-        id, _fileKey: key, file,
+        id, _fileKey: key, file: uploadFile, originalFile: file,
         name: file.name, format, assetType, ext,
         size: file.size, type: file.type || `application/${ext}`,
         status: 'waiting', url: null,
@@ -733,18 +874,21 @@ async function processFiles(files) {
       };
       if (PREVIEWABLE.has(ext)) {
         if (THUMBNAILABLE.has(ext)) {
-          item.url = await createThumbnailUrl(file) || URL.createObjectURL(file);
+          item.url = await createThumbnailUrl(uploadFile) || URL.createObjectURL(uploadFile);
         } else {
-          item.url = URL.createObjectURL(file);
+          item.url = URL.createObjectURL(uploadFile);
         }
       }
       newItems.push(item);
     }));
-    await new Promise(r => setTimeout(r, 0)); // yield
+    await new Promise(r => setTimeout(r, 10)); // yield
   }
 
   state.mediaItems.push(...newItems);
   updateUI();
+
+  // Show Checkmark Success State in Dropzone!
+  setDropZoneSuccessState(newItems.length);
   showToast(`Added ${newItems.length} file(s) — ${state.mediaItems.length} total`, 'success');
 }
 
@@ -2966,6 +3110,90 @@ window.addEventListener('paste', async (e) => {
   }
 });
 
+let img2dropResetTimer = null;
+
+function bindImg2PromptFileInput() {
+  const fileInput = document.getElementById('img2prompt-file-input');
+  if (fileInput) {
+    fileInput.onchange = (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length) handleImageToPromptUploadBatch(files);
+      e.target.value = '';
+    };
+  }
+}
+
+function setImg2PromptDropZoneUploading(isUploading, current = 0, total = 0, currentName = '') {
+  const dz = document.getElementById('img2prompt-drop-zone');
+  if (!dz) return;
+  if (img2dropResetTimer) { clearTimeout(img2dropResetTimer); img2dropResetTimer = null; }
+
+  if (isUploading) {
+    dz.classList.add('dropzone-uploading');
+    dz.classList.remove('dropzone-success');
+    const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+    dz.innerHTML = `
+      <div class="relative w-16 h-16 flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-[#00dbe9] border-r-[#db50ff] animate-upload-spin-ring"></div>
+        <div class="w-12 h-12 rounded-full bg-[#191c1f] border border-[#00dbe9]/50 flex items-center justify-center animate-upload-pulse">
+          <span class="material-symbols-outlined text-[26px] text-[#00dbe9]">image_search</span>
+        </div>
+      </div>
+      <div class="flex flex-col items-center gap-1.5 w-full max-w-md px-4">
+        <h2 class="text-title-md font-bold text-white">Compressing & Adding ${total} Image${total === 1 ? '' : 's'}...</h2>
+        <div class="w-full bg-[#12161c] h-2.5 rounded-full overflow-hidden border border-[#2d3748] mt-1 relative">
+          <div class="bg-gradient-to-r from-[#00dbe9] to-[#db50ff] h-full transition-all duration-200 rounded-full" style="width: ${pct}%"></div>
+        </div>
+        <div class="flex justify-between w-full text-[11px] text-on-surface-variant mt-0.5 font-mono">
+          <span class="truncate max-w-[240px] text-[#00dbe9]">${currentName ? escHtml(currentName) : 'Optimizing size to ~450KB...'}</span>
+          <span>${current} / ${total} (${pct}%)</span>
+        </div>
+      </div>
+      <input type="file" id="img2prompt-file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.svg">
+    `;
+    bindImg2PromptFileInput();
+  }
+}
+
+function setImg2PromptDropZoneSuccess(count = 1) {
+  const dz = document.getElementById('img2prompt-drop-zone');
+  if (!dz) return;
+  if (img2dropResetTimer) clearTimeout(img2dropResetTimer);
+
+  dz.classList.remove('dropzone-uploading');
+  dz.classList.add('dropzone-success');
+
+  dz.innerHTML = `
+    <div class="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center animate-success-check">
+      <span class="material-symbols-outlined text-[38px] text-emerald-400 font-bold">check_circle</span>
+    </div>
+    <div class="flex flex-col items-center gap-1">
+      <h2 class="text-title-lg font-bold text-emerald-400">✓ ${count} Image${count === 1 ? '' : 's'} Added Successfully!</h2>
+      <p class="text-xs text-on-surface-variant">Auto-compressed to ~450KB · Ready to generate prompts</p>
+    </div>
+    <input type="file" id="img2prompt-file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.svg">
+  `;
+  bindImg2PromptFileInput();
+
+  img2dropResetTimer = setTimeout(() => {
+    resetImg2PromptDropZone();
+  }, 3500);
+}
+
+function resetImg2PromptDropZone() {
+  const dz = document.getElementById('img2prompt-drop-zone');
+  if (!dz) return;
+  dz.classList.remove('dropzone-uploading', 'dropzone-success');
+  dz.innerHTML = `
+    <span class="material-symbols-outlined text-[40px] text-primary-fixed-dim">image_search</span>
+    <h2 class="text-title-lg font-bold text-on-surface">Image to Prompt</h2>
+    <p class="text-xs text-on-surface-variant max-w-[80%] mx-auto">Drop images or vectors here, paste (Ctrl+V), or click to browse. Supported: JPG, PNG, WEBP, SVG.</p>
+    <button id="btn-browse-img2prompt" class="bg-primary-fixed-dim text-background px-5 py-2 rounded-lg text-sm font-semibold mt-2 transition-colors group-hover:bg-primary-container">Browse Files</button>
+    <input type="file" id="img2prompt-file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.svg">
+  `;
+  bindImg2PromptFileInput();
+}
+
 async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
   if (!files || !files.length) return;
   const fileArray = Array.from(files).filter(f => f && (
@@ -2985,19 +3213,32 @@ async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
     img2promptState.items = [];
   }
 
-  const newItems = fileArray.map(file => ({
-    id: `img2prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    file,
-    name: file.name,
-    size: file.size,
-    url: URL.createObjectURL(file),
-    status: 'waiting',
-    prompt: null,
-    error: null
+  setImg2PromptDropZoneUploading(true, 0, fileArray.length, 'Optimizing images...');
+
+  let processedCount = 0;
+  const newItems = await Promise.all(fileArray.map(async file => {
+    const compressed = await compressImageFile(file);
+    const useFile = (compressed && compressed.size < file.size) ? compressed : file;
+    processedCount++;
+    setImg2PromptDropZoneUploading(true, processedCount, fileArray.length, file.name);
+
+    return {
+      id: `img2prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file: useFile,
+      originalFile: file,
+      name: file.name,
+      size: file.size,
+      url: URL.createObjectURL(useFile),
+      status: 'waiting',
+      prompt: null,
+      error: null
+    };
   }));
 
   img2promptState.items.push(...newItems);
   renderImg2PromptCards();
+
+  setImg2PromptDropZoneSuccess(newItems.length);
 }
 
 async function processImg2PromptQueue() {

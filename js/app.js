@@ -30,7 +30,9 @@ const state = {
   // Render throttle & Cancellation
   _renderPending: false,
   _lastStats: null,
-  activeBatchAbortController: null
+  activeBatchAbortController: null,
+  _uploadSessionId: 0,
+  _uploadSessionCounter: 0
 };
 
 // ─── File type sets ────────────────────────────────────────────────────────
@@ -174,10 +176,15 @@ function stopAllGenerations() {
   img2promptState.stopBatch = true;
   state.isGenerating = false;
   img2promptState.isProcessing = false;
+  img2promptState._batchSessionId = ++img2promptState._batchSessionCounter;
 
   if (state.activeBatchAbortController) {
     try { state.activeBatchAbortController.abort(); } catch (_) {}
     state.activeBatchAbortController = null;
+  }
+  if (img2promptState.abortController) {
+    try { img2promptState.abortController.abort(); } catch (_) {}
+    img2promptState.abortController = null;
   }
 
   const genBtn = document.getElementById('btn-generate-ai');
@@ -215,6 +222,7 @@ function stopAllGenerations() {
     if (i.status === 'processing') {
       i.status = 'waiting';
       i.error = null;
+      i.prompt = null;
     }
   });
 
@@ -828,7 +836,7 @@ function classifyFile(file) {
 
 function fileKey(file) { return `${file.name}::${file.size}::${file.lastModified}`; }
 
-const PREVIEWABLE = new Set(['jpg','jpeg','png','webp','gif','svg']);
+const PREVIEWABLE = new Set(['jpg','jpeg','png','webp','gif','svg','mp4','mov','webm','avi','pdf','eps','ai']);
 const THUMBNAILABLE = new Set(['jpg','jpeg','png','webp']);
 const THUMB_MAX_DIM = 512;
 
@@ -861,6 +869,7 @@ async function createThumbnailUrl(file) {
 }
 
 async function processFiles(files) {
+  const currentSessionId = ++state._uploadSessionId;
   const existingKeys = new Set(state.mediaItems.map(i => i._fileKey));
   const accepted = []; const skippedDup = []; const skippedBad = [];
 
@@ -894,8 +903,13 @@ async function processFiles(files) {
   let processedCount = 0;
 
   for (let i = 0; i < accepted.length; i += BATCH) {
+    // If the user cleared all assets during upload, abort processing immediately
+    if (state._uploadSessionId !== currentSessionId) return;
+
     const batch = accepted.slice(i, i + BATCH);
     await Promise.all(batch.map(async ({ file, cls, key }) => {
+      if (state._uploadSessionId !== currentSessionId) return;
+
       const { assetType, format, ext } = cls;
       const id = `asset-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
 
@@ -931,8 +945,14 @@ async function processFiles(files) {
     await new Promise(r => setTimeout(r, 10)); // yield
   }
 
+  // Final check: did user clear items while batch was processing?
+  if (state._uploadSessionId !== currentSessionId) return;
+
   state.mediaItems.push(...newItems);
   updateUI();
+
+  // Reset file inputs in DOM so cleared/previous selections never persist
+  document.querySelectorAll('input[type="file"]').forEach(inp => { inp.value = ''; });
 
   // Show Checkmark Success State in Dropzone!
   setDropZoneSuccessState(newItems.length);
@@ -1005,7 +1025,7 @@ async function triggerAiGeneration() {
 
   await runBatchQueue({
     items: toProcess,
-    concurrencyLimit: isVideoBatch ? 1 : 3,
+    concurrencyLimit: isVideoBatch ? 1 : 2,
     shouldStop: () => state.stopBatch,
 
     onItemStart: (item) => {
@@ -1238,12 +1258,10 @@ function updateUI() {
   renderMetadata();
 }
 
-// ─── Render Metadata ───────────────────────────────────────────────────────
+// ─── Render Metadata (Details View) ─────────────────────────────────────────
 function renderMetadata() {
   const items = getFilteredItems();
-  if (state.viewMode === 'detail')     renderDetailView(items);
-  else if (state.viewMode === 'table') renderTableView(items);
-  else if (state.viewMode === 'grid')  renderGridView(items);
+  renderDetailView(items);
 }
 
 // ─── Detailed Cards View (Matches UI Reference Screenshot) ─────────────────
@@ -1386,10 +1404,25 @@ function renderDetailView(items) {
   const container = document.getElementById('detail-view-container');
   if (!container) return;
 
+  if (!items || items.length === 0) {
+    _detailCardCache.clear();
+    container.innerHTML = '';
+    return;
+  }
+
   const p = state.currentPlatform;
   const currentIds = new Set(items.map(i => i.id));
 
-  // Remove deleted items from cache & DOM
+  // 1. Remove DOM cards that are not in current items
+  Array.from(container.children).forEach(child => {
+    const cardId = child.getAttribute('data-detail-card-id');
+    if (!cardId || !currentIds.has(cardId)) {
+      child.remove();
+      if (cardId) _detailCardCache.delete(cardId);
+    }
+  });
+
+  // 2. Prune cache of deleted items
   for (const [id, el] of _detailCardCache.entries()) {
     if (!currentIds.has(id)) {
       el.remove();
@@ -1397,12 +1430,14 @@ function renderDetailView(items) {
     }
   }
 
+  // 3. Render or update cards in exact sequence
+  let prevEl = null;
   items.forEach((item, index) => {
     const meta = item.metadata || {};
     const fp = `${item.id}::${item.status}::${item.name}::${item.size}::${meta.title || ''}::${meta.description || ''}::${(meta.keywords || []).join(',')}::${p.id}`;
 
     let cached = _detailCardCache.get(item.id);
-    if (!cached || cached._fp !== fp) {
+    if (!cached || cached._fp !== fp || !container.contains(cached)) {
       const cardHtml = buildDetailCardHtml(item, index, p);
       const temp = document.createElement('div');
       temp.innerHTML = cardHtml.trim();
@@ -1411,10 +1446,17 @@ function renderDetailView(items) {
 
       if (cached && cached.parentNode === container) {
         container.replaceChild(newEl, cached);
+      } else if (prevEl && prevEl.nextSibling) {
+        container.insertBefore(newEl, prevEl.nextSibling);
+      } else if (!prevEl) {
+        container.prepend(newEl);
       } else {
         container.appendChild(newEl);
       }
       _detailCardCache.set(item.id, newEl);
+      prevEl = newEl;
+    } else {
+      prevEl = cached;
     }
   });
 }
@@ -1447,460 +1489,23 @@ function buildAssetBadge(item) {
   return '';
 }
 
-// ─── Table View — diff-based update ────────────────────────────────────────
-// Builds the full row HTML once per item, keyed by item.id.
-// On re-render, only rows whose content has changed are replaced.
-// New items are appended; removed items are deleted. This eliminates the
-// full innerHTML wipe that caused layout thrashing on every batch tick.
-
-// Cache: item.id → last-rendered HTML fingerprint
-const _tableRowCache = new Map();
-
-function buildRowHtml(item, index, p, catOptions) {
-  const isSelected = state.selectedItemIds.has(item.id);
-  const isProcessing = item.status === 'processing';
-  const meta = item.metadata || { title: '', description: '', keywords: [], category: '' };
-  const kwCount = (meta.keywords || []).length;
-
-  const titleLen = (meta.title || '').length;
-  const titleLenClass = titleLen > p.titleMaxLen ? 'exceeded' : (titleLen > p.titleMaxLen * 0.85 ? 'warning' : '');
-  const kwClass = kwCount > p.keywordMax ? 'exceeded' : (kwCount < p.keywordMin && kwCount > 0 ? 'warning' : '');
-
-  const selectedCat = catOptions.replace(
-    new RegExp(`value="${escHtml(meta.category).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g'),
-    `value="${escHtml(meta.category)}" selected`
-  );
-
-  const kwChips = (meta.keywords || []).slice(0, 12).map((kw, ki) =>
-    `<span class="inline-flex items-center gap-1 bg-[#191c1f] border border-[#3b494b] text-[10px] px-2 py-0.5 rounded-full text-on-surface-variant hover:border-[#00dbe9] hover:text-on-surface transition-colors group">${escHtml(kw)}<span class="keyword-chip-remove cursor-pointer text-error opacity-0 group-hover:opacity-100 transition-opacity font-bold" data-item-id="${item.id}" data-kw-idx="${ki}">×</span></span>`
-  ).join('');
-  const kwMore = kwCount > 12 ? `<span class="text-[9px] text-[#db50ff] font-bold px-1">+${kwCount - 12}</span>` : '';
-
-  const errorHtml = item._error
-    ? `<div class="text-[10px] text-error mt-1.5 max-w-[150px] leading-tight" title="${escHtml(item._error)}">⚠ ${escHtml(item._error.substring(0, 60))}${item._error.length > 60 ? '…' : ''}</div>`
-    : '';
-
-  const rowStyle = item.status === 'failed' ? ' style="background:rgba(239,68,68,0.05)"' : '';
-  const selectedBgClass = isSelected ? 'bg-[#00dbe9]/10 border-[#00dbe9]/50' : 'border-[#3b494b]/50';
-  const titlePlaceholder = isProcessing ? 'Generating title...' : 'Enter title...';
-  const descPlaceholder = isProcessing ? 'Analyzing visual details...' : 'Enter description...';
-  const kwPlaceholder = isProcessing ? 'Generating keywords...' : '+ Add Keyword';
-  const processingPulse = isProcessing
-    ? '<div class="ai-row-working"><span class="ai-row-orb"></span><span>AI is generating metadata</span></div>'
-    : '';
-
-  return `<tr data-row-id="${item.id}" class="border-b hover:bg-[#191c1f]/50 transition-colors ${item.status === 'failed' ? 'bg-error/5' : ''} ${selectedBgClass}">
-    <td class="p-3 align-top">
-      <div class="flex items-center gap-3">
-        <input type="checkbox" class="row-checkbox w-4 h-4 rounded border-[#3b494b] bg-[#191c1f] text-[#00dbe9] focus:ring-[#00dbe9]" data-id="${item.id}" ${isSelected ? 'checked' : ''}>
-        ${buildThumbHtml(item, 48)}
-      </div>
-    </td>
-    <td class="p-3 align-top max-w-[180px]">
-      <div class="text-xs font-semibold text-on-surface truncate" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
-      <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-        ${buildAssetBadge(item)}
-        <span class="text-[10px] text-on-surface-variant">${(item.size / 1048576).toFixed(1)} MB</span>
-      </div>
-      ${processingPulse}
-      ${errorHtml}
-    </td>
-    <td class="p-3 align-top min-w-[200px]">
-      <div class="relative">
-        <textarea class="title-input w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all resize-none" data-id="${item.id}" placeholder="${titlePlaceholder}" rows="2" ${isProcessing ? 'disabled' : ''}>${escHtml(meta.title)}</textarea>
-        <div class="char-counter text-[9px] absolute bottom-1 right-2 ${titleLenClass}">${titleLen} / ${p.titleMaxLen}</div>
-      </div>
-    </td>
-    <td class="p-3 align-top min-w-[240px]">
-      <textarea class="desc-textarea w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all resize-y min-h-[50px]" data-id="${item.id}" placeholder="${descPlaceholder}" ${isProcessing ? 'disabled' : ''}>${escHtml(meta.description)}</textarea>
-    </td>
-    <td class="p-3 align-top min-w-[240px]">
-      <div class="flex flex-wrap gap-1 mb-1.5 max-h-[70px] overflow-y-auto custom-scrollbar">${kwChips}${kwMore}</div>
-      <div class="flex items-center gap-2">
-        <input type="text" class="add-tag-input flex-1 bg-[#191c1f] border border-[#3b494b] rounded-md text-[10px] text-on-surface px-2 py-1 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all" data-id="${item.id}" placeholder="${kwPlaceholder}" ${isProcessing ? 'disabled' : ''}>
-      </div>
-      <div class="flex justify-between items-center mt-1 text-[9px]">
-        <span class="${kwClass} ${kwClass ? 'text-error font-bold' : 'text-on-surface-variant'}">${kwCount}/${p.keywordMax} kw</span>
-        <a href="#" class="copy-kw-link text-[#00dbe9] hover:text-[#00f0ff] transition-colors" data-id="${item.id}">Copy All</a>
-      </div>
-    </td>
-    <td class="p-3 align-top min-w-[120px]">
-      <select class="category-select w-full bg-[#191c1f] border border-[#3b494b] rounded-lg text-xs text-on-surface p-2 focus:border-[#00dbe9] focus:ring-1 focus:ring-[#00dbe9] transition-all" data-id="${item.id}" ${isProcessing ? 'disabled' : ''}>
-        <option value="">Select…</option>${selectedCat}
-      </select>
-    </td>
-    <td class="p-3 align-top">
-      <span class="status-tag status-${item.status} text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider block text-center w-full shadow-sm">${item.status}</span>
-    </td>
-    <td class="p-3 align-top">
-      <div class="flex gap-1.5 flex-wrap">
-        <button class="regen-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-[#db50ff] hover:border-[#db50ff] flex items-center justify-center transition-all disabled:opacity-50" data-id="${item.id}" title="Regenerate with AI" ${isProcessing ? 'disabled' : ''}><span class="material-symbols-outlined text-[14px]">autorenew</span></button>
-        <button class="view-detail-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-[#00dbe9] hover:border-[#00dbe9] flex items-center justify-center transition-all" data-id="${item.id}" title="View Details"><span class="material-symbols-outlined text-[14px]">visibility</span></button>
-        <button class="delete-btn w-7 h-7 rounded-md bg-[#191c1f] border border-[#3b494b] text-on-surface hover:text-error hover:border-error flex items-center justify-center transition-all hover:bg-error/10" data-id="${item.id}" title="Remove"><span class="material-symbols-outlined text-[14px]">delete</span></button>
-      </div>
-    </td>
-  </tr>`;
-}
-
-function renderTableView(items) {
-  const tableBody = document.getElementById('metadata-table-body');
-  if (!tableBody) return;
-
-  if (items.length === 0) {
-    _tableRowCache.clear();
-    tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">No matching assets found.</td></tr>`;
-    return;
-  }
-
-  const p = state.currentPlatform;
-  const catOptions = (p.categories.length > 0 ? p.categories : ['General', 'Business', 'Technology', 'Nature', 'People', 'Food', 'Architecture', 'Graphic Resources'])
-    .map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
-
-  // Build a set of current item ids for removal detection
-  const currentIds = new Set(items.map(i => i.id));
-
-  // 1. Remove rows no longer in the filtered list
-  for (const [id] of _tableRowCache) {
-    if (!currentIds.has(id)) {
-      const oldRow = tableBody.querySelector(`tr[data-row-id="${id}"]`);
-      if (oldRow) oldRow.remove();
-      _tableRowCache.delete(id);
-    }
-  }
-
-  // 2. Patch existing rows or insert new ones, in order
-  let prevEl = null; // track insertion anchor
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const html = buildRowHtml(item, i, p, catOptions);
-    const cached = _tableRowCache.get(item.id);
-    const existingRow = tableBody.querySelector(`tr[data-row-id="${item.id}"]`);
-
-    if (cached === html && existingRow) {
-      // No change — ensure ordering is correct then skip
-      prevEl = existingRow;
-      continue;
-    }
-
-    // Row needs update or insertion
-    const template = document.createElement('template');
-    template.innerHTML = html;
-    const newRow = template.content.firstElementChild;
-
-    if (existingRow) {
-      // Patch in-place: swap out the old row
-      tableBody.replaceChild(newRow, existingRow);
-    } else {
-      // Insert in correct position — add entry animation class
-      newRow.classList.add('row-entering');
-      if (prevEl && prevEl.nextSibling) {
-        tableBody.insertBefore(newRow, prevEl.nextSibling);
-      } else if (!prevEl) {
-        tableBody.prepend(newRow);
-      } else {
-        tableBody.appendChild(newRow);
-      }
-      // Remove entry class after animation completes to free will-change
-      newRow.addEventListener('animationend', () => newRow.classList.remove('row-entering'), { once: true });
-    }
-
-    // Apply processing row class for the shimmer strip
-    if (item.status === 'processing') {
-      newRow.classList.add('row-processing');
-    }
-
-    _tableRowCache.set(item.id, html);
-    prevEl = newRow;
-  }
-}
-
-
-function setupTableEventDelegation() {
-  const tableContainer = document.getElementById('table-view-container') || document.getElementById('view-table-container');
-  if (!tableContainer) return;
-
-  tableContainer.addEventListener('input', (e) => {
-    const titleInput = e.target.closest('.title-input');
-    if (titleInput) {
-      const item = state.mediaItems.find(i => i.id === titleInput.dataset.id);
-      if (!item) return;
-      if (!item.metadata) item.metadata = {};
-      item.metadata.title = titleInput.value;
-      _tableRowCache.delete(item.id); // invalidate only this row
-      const ctr = titleInput.nextElementSibling;
-      if (ctr) {
-        const len = titleInput.value.length, max = state.currentPlatform.titleMaxLen;
-        ctr.textContent = `${len} / ${max}`;
-        ctr.className = `char-counter ${len > max ? 'exceeded' : len > max * 0.85 ? 'warning' : ''}`;
-      }
-      return;
-    }
-
-    const descTextarea = e.target.closest('.desc-textarea');
-    if (descTextarea) {
-      const item = state.mediaItems.find(i => i.id === descTextarea.dataset.id);
-      if (item && item.metadata) {
-        item.metadata.description = descTextarea.value;
-        _tableRowCache.delete(item.id);
-      }
-      return;
-    }
-
-    const categorySelect = e.target.closest('.category-select');
-    if (categorySelect) {
-      const item = state.mediaItems.find(i => i.id === categorySelect.dataset.id);
-      if (item && item.metadata) {
-        item.metadata.category = categorySelect.value;
-        _tableRowCache.delete(item.id);
-        // No full re-render needed — value is already saved, no DOM change required
-      }
-      return;
-    }
-  });
-
-  tableContainer.addEventListener('keydown', (e) => {
-    const addTagInput = e.target.closest('.add-tag-input');
-    if (!addTagInput) return;
-    if (e.key !== 'Enter' && e.key !== ',') return;
-    e.preventDefault();
-    const tag = addTagInput.value.trim().replace(/^,|,$/g, '');
-    if (!tag) return;
-    const item = state.mediaItems.find(i => i.id === addTagInput.dataset.id);
-    if (item && item.metadata) {
-      if (!item.metadata.keywords) item.metadata.keywords = [];
-      if (!item.metadata.keywords.map(k => k.toLowerCase()).includes(tag.toLowerCase())) {
-        item.metadata.keywords.push(tag);
-        _tableRowCache.delete(item.id); // invalidate only this row
-        throttledRender();
-      }
-    }
-    addTagInput.value = '';
-  });
-
-  tableContainer.addEventListener('click', (e) => {
-    const keywordChipRemove = e.target.closest('.keyword-chip-remove');
-    if (keywordChipRemove) {
-      const item = state.mediaItems.find(i => i.id === keywordChipRemove.dataset.itemId);
-      if (item && item.metadata && item.metadata.keywords) {
-        item.metadata.keywords.splice(parseInt(keywordChipRemove.dataset.kwIdx, 10), 1);
-        _tableRowCache.delete(item.id); // invalidate only this row
-      }
-      throttledRender();
-      return;
-    }
-
-    const copyKwLink = e.target.closest('.copy-kw-link');
-    if (copyKwLink) {
-      e.preventDefault();
-      const item = state.mediaItems.find(i => i.id === copyKwLink.dataset.id);
-      if (item && item.metadata && item.metadata.keywords) {
-        navigator.clipboard.writeText(item.metadata.keywords.join(', '));
-        showToast(`Copied ${item.metadata.keywords.length} keywords!`, 'success');
-      }
-      return;
-    }
-
-    const rowCheckbox = e.target.closest('.row-checkbox');
-    if (rowCheckbox) {
-      const id = rowCheckbox.dataset.id;
-      if (rowCheckbox.checked) {
-        state.selectedItemIds.add(id);
-      } else {
-        state.selectedItemIds.delete(id);
-      }
-      
-      // Update the tr class immediately for visual feedback
-      const tr = rowCheckbox.closest('tr');
-      if (tr) {
-        if (rowCheckbox.checked) {
-          tr.classList.add('bg-[#00dbe9]/10', 'border-[#00dbe9]/50');
-          tr.classList.remove('border-[#3b494b]/50');
-        } else {
-          tr.classList.remove('bg-[#00dbe9]/10', 'border-[#00dbe9]/50');
-          tr.classList.add('border-[#3b494b]/50');
-        }
-        // Invalidate cache so subsequent renders retain the styling
-        _tableRowCache.delete(id);
-      }
-      
-      updateStatsBar();
-      return;
-    }
-
-    const regenBtn = e.target.closest('.regen-btn');
-    if (regenBtn) {
-      regenerateSingleItem(regenBtn.dataset.id);
-      return;
-    }
-
-    const viewDetailBtn = e.target.closest('.view-detail-btn');
-    if (viewDetailBtn) {
-      openDetailModal(viewDetailBtn.dataset.id);
-      return;
-    }
-
-    const deleteBtn = e.target.closest('.delete-btn');
-    if (deleteBtn) {
-      deleteItem(deleteBtn.dataset.id);
-      return;
-    }
-  });
-}
-
-function setupGridEventDelegation() {
-  const gridEl = document.getElementById('grid-view-container') || document.getElementById('view-grid-container');
-  if (!gridEl) return;
-
-  gridEl.addEventListener('click', (e) => {
-    const removeBtn = e.target.closest('.card-remove-btn');
-    if (removeBtn) {
-      e.stopPropagation();
-      deleteItem(removeBtn.dataset.id);
-      return;
-    }
-
-    const card = e.target.closest('.grid-card');
-    if (card) {
-      // Use data-card-id (new diff-based attribute)
-      const id = card.dataset.cardId;
-      if (!id) return;
-      if (state.selectedItemIds.has(id)) state.selectedItemIds.delete(id);
-      else state.selectedItemIds.add(id);
-      // Invalidate cache for this card so it re-renders with correct selected class
-      _gridCardCache.delete(id);
-      card.classList.toggle('selected');
-      updateStatsBar();
-      return;
-    }
-  });
-}
-
-
-// ─── Grid View — diff-based update ────────────────────────────────────────
-const _gridCardCache = new Map();
-
-function buildGridCardHtml(item, index) {
-  const isSelected = state.selectedItemIds.has(item.id);
-  const isProcessing = item.status === 'processing';
-  const meta = item.metadata || {};
-  const kwCount = (meta.keywords || []).length;
-
-  let thumbHtml;
-  if (item.url) {
-    thumbHtml = `<img src="${item.url}" class="card-thumb-img" alt="${escHtml(item.name)}" loading="lazy" decoding="async">`;
-  } else {
-    thumbHtml = `<div class="vector-placeholder-box"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg><span class="vector-format-label">${item.format}</span></div>`;
-  }
-
-  const borderStyle = item.status === 'failed' ? ` style="border-color:rgba(239,68,68,0.5)"` : '';
-  const selectedClass = isSelected ? ' selected border-[#00dbe9] shadow-[0_0_15px_rgba(0,219,233,0.3)] bg-[#00dbe9]/10' : ' border-[#3b494b] bg-[#1d2023]';
-  const checkboxHtml = `<input type="checkbox" class="absolute top-2 left-2 w-4 h-4 rounded border-[#3b494b] bg-[#191c1f] text-[#00dbe9] focus:ring-[#00dbe9] z-10 pointer-events-none" ${isSelected ? 'checked' : ''}>`;
-  const processingOverlay = isProcessing
-    ? '<div class="ai-card-processing-overlay"><span class="ai-action-spinner" aria-hidden="true"></span><span>Generating</span></div>'
-    : '';
-
-  return `<div class="grid-card relative border rounded-xl overflow-hidden flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:border-[#00dbe9] cursor-pointer ${selectedClass}" data-card-id="${item.id}"${borderStyle}>
-    ${checkboxHtml}
-    <div class="card-thumb-container relative w-full h-[150px] bg-[#111417] overflow-hidden">
-      ${thumbHtml}
-      ${processingOverlay}
-      <span class="card-number-badge absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-mono backdrop-blur-sm">#${index + 1}</span>
-      <div class="card-actions-overlay absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex justify-end p-2">
-        <button class="card-remove-btn w-6 h-6 rounded-md bg-error text-white hover:bg-error/80 flex items-center justify-center transition-colors" data-id="${item.id}">×</button>
-      </div>
-    </div>
-    <div class="card-content p-3 flex-1 flex flex-col justify-between">
-      <div class="card-filename" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
-      <div class="card-meta-line">
-        <span class="status-tag status-${item.status}">${item.status}</span>
-        <span style="font-size:0.7rem;color:var(--text-muted)">${(item.size / 1048576).toFixed(1)}MB · ${kwCount}kw</span>
-      </div>
-      ${item._error ? `<div style="font-size:0.65rem;color:var(--accent-rose);margin-top:4px">⚠ ${escHtml(item._error.substring(0, 60))}</div>` : ''}
-    </div></div>`;
-}
-
-function renderGridView(items) {
-  const gridEl = document.getElementById('grid-view-container');
-  if (!gridEl) return;
-
-  if (items.length === 0) {
-    _gridCardCache.clear();
-    gridEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)">No matching assets.</div>`;
-    return;
-  }
-
-  const currentIds = new Set(items.map(i => i.id));
-
-  // Remove stale cards
-  for (const [id] of _gridCardCache) {
-    if (!currentIds.has(id)) {
-      const old = gridEl.querySelector(`[data-card-id="${id}"]`);
-      if (old) old.remove();
-      _gridCardCache.delete(id);
-    }
-  }
-
-  // Patch or insert cards
-  let prevEl = null;
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const html = buildGridCardHtml(item, i);
-    const cached = _gridCardCache.get(item.id);
-    const existingCard = gridEl.querySelector(`[data-card-id="${item.id}"]`);
-
-    if (cached === html && existingCard) {
-      prevEl = existingCard;
-      continue;
-    }
-
-    const template = document.createElement('template');
-    template.innerHTML = html;
-    const newCard = template.content.firstElementChild;
-
-    if (existingCard) {
-      gridEl.replaceChild(newCard, existingCard);
-    } else {
-      // New card — add entry animation
-      newCard.classList.add('card-entering');
-      if (prevEl && prevEl.nextSibling) {
-        gridEl.insertBefore(newCard, prevEl.nextSibling);
-      } else if (!prevEl) {
-        gridEl.prepend(newCard);
-      } else {
-        gridEl.appendChild(newCard);
-      }
-      newCard.addEventListener('animationend', () => newCard.classList.remove('card-entering'), { once: true });
-    }
-
-    // State-specific animation classes on the card
-    newCard.classList.remove('card-processing', 'card-just-ready', 'card-just-failed');
-    if (item.status === 'processing') {
-      newCard.classList.add('card-processing');
-    } else if (item.status === 'ready' && !existingCard) {
-      // Only flash success halo on first render as ready (new generation)
-      newCard.classList.add('card-just-ready');
-      newCard.addEventListener('animationend', () => newCard.classList.remove('card-just-ready'), { once: true });
-    } else if (item.status === 'failed' && !existingCard) {
-      newCard.classList.add('card-just-failed');
-      newCard.addEventListener('animationend', () => newCard.classList.remove('card-just-failed'), { once: true });
-    }
-
-    _gridCardCache.set(item.id, html);
-    prevEl = newCard;
-  }
-}
-
-
 // ─── Delete ────────────────────────────────────────────────────────────────
 function deleteItem(id) {
   const item = state.mediaItems.find(i => i.id === id);
   if (item && item.url && item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
   state.mediaItems = state.mediaItems.filter(i => i.id !== id);
   state.selectedItemIds.delete(id);
-  // Evict from all 3 view caches to prevent stale DOM
-  _tableRowCache.delete(id);
-  _gridCardCache.delete(id);
-  _detailCardCache.delete(id);
+
+  // Directly remove cached element & DOM node
+  const cached = _detailCardCache.get(id);
+  if (cached) {
+    cached.remove();
+    _detailCardCache.delete(id);
+  }
+  const domCard = document.querySelector(`[data-detail-card-id="${id}"]`);
+  if (domCard) domCard.remove();
+
+  document.querySelectorAll('input[type="file"]').forEach(inp => { inp.value = ''; });
   updateUI();
   showToast(`Removed: ${item ? item.name : 'asset'}`, 'info');
 }
@@ -1913,43 +1518,57 @@ function removeSelected() {
   const count = state.selectedItemIds.size;
   state.mediaItems.filter(i => state.selectedItemIds.has(i.id)).forEach(i => {
     if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url);
-    _tableRowCache.delete(i.id);
-    _gridCardCache.delete(i.id);
-    _detailCardCache.delete(i.id);
+    const cached = _detailCardCache.get(i.id);
+    if (cached) {
+      cached.remove();
+      _detailCardCache.delete(i.id);
+    }
+    const domCard = document.querySelector(`[data-detail-card-id="${i.id}"]`);
+    if (domCard) domCard.remove();
   });
   state.mediaItems = state.mediaItems.filter(i => !state.selectedItemIds.has(i.id));
   state.selectedItemIds.clear();
+  document.querySelectorAll('input[type="file"]').forEach(inp => { inp.value = ''; });
   updateUI();
   showToast(`Removed ${count} asset(s)`, 'info');
 }
 function clearAll() {
   if (!state.mediaItems.length) return;
   if (state.mediaItems.length >= 5 && !confirm(`Clear all ${state.mediaItems.length} assets?`)) return;
-  state.mediaItems.forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
-  state.mediaItems = []; state.selectedItemIds.clear();
-  _tableRowCache.clear(); _gridCardCache.clear(); _detailCardCache.clear();
-  updateUI(); showToast('Cleared all assets', 'info');
-}
 
-// ─── View Modes (Detail, Table, Grid) ──────────────────────────────────────
-function setViewMode(mode) {
-  state.viewMode = mode;
-  const modes = ['detail', 'table', 'grid'];
-  modes.forEach(m => {
-    const btn = document.getElementById(`btn-view-${m}`);
-    const el  = document.getElementById(`${m}-view-container`);
-    if (btn) {
-      if (m === mode) {
-        btn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 bg-[#00dbe9] text-[#002022] shadow-[0_0_10px_rgba(0,219,233,0.3)]';
-      } else {
-        btn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 text-on-surface-variant hover:text-white';
-      }
-    }
-    if (el) {
-      el.style.display = m === mode ? (m === 'grid' ? 'grid' : (m === 'detail' ? 'flex' : 'block')) : 'none';
-    }
+  // Invalidate any ongoing asynchronous upload sessions
+  state._uploadSessionId = ++state._uploadSessionCounter;
+
+  // Cancel any active generation
+  if (state.isGenerating) {
+    stopAllGenerations();
+  }
+
+  // Clear all DOM file inputs so browser never holds references to cleared files
+  document.querySelectorAll('input[type="file"]').forEach(inp => {
+    inp.value = '';
   });
-  renderMetadata();
+
+  // Reset Dropzone timers and visual state
+  if (dropZoneResetTimer) {
+    clearTimeout(dropZoneResetTimer);
+    dropZoneResetTimer = null;
+  }
+  resetDropZoneToDefault();
+
+  // Revoke all blob URLs and clear items list
+  state.mediaItems.forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
+  state.mediaItems = [];
+  state.selectedItemIds.clear();
+  _detailCardCache.clear();
+
+  // Explicitly wipe the DOM container
+  const detailContainer = document.getElementById('detail-view-container');
+  if (detailContainer) detailContainer.innerHTML = '';
+
+  state._lastStats = null;
+  updateUI();
+  showToast('Cleared all assets', 'info');
 }
 
 function setupDetailViewEventDelegation() {
@@ -1992,8 +1611,6 @@ function setupDetailViewEventDelegation() {
       if (item && item.metadata && Array.isArray(item.metadata.keywords)) {
         item.metadata.keywords.splice(kwIdx, 1);
         _detailCardCache.delete(itemId);
-        _tableRowCache.delete(itemId);
-        _gridCardCache.delete(itemId);
         throttledRender();
       }
       return;
@@ -2031,8 +1648,7 @@ function setupDetailViewEventDelegation() {
       if (item) {
         if (!item.metadata) item.metadata = {};
         item.metadata.title = target.textContent.trim();
-        _tableRowCache.delete(itemId);
-        _gridCardCache.delete(itemId);
+        _detailCardCache.delete(itemId);
       }
     } else if (target.classList.contains('editable-desc')) {
       const itemId = target.dataset.itemId;
@@ -2040,8 +1656,7 @@ function setupDetailViewEventDelegation() {
       if (item) {
         if (!item.metadata) item.metadata = {};
         item.metadata.description = target.textContent.trim();
-        _tableRowCache.delete(itemId);
-        _gridCardCache.delete(itemId);
+        _detailCardCache.delete(itemId);
       }
     }
   }, true);
@@ -2420,8 +2035,7 @@ function setupEventListeners() {
   });
   document.getElementById('btn-generate-all-img2prompt')?.addEventListener('click', () => {
     if (img2promptState.isProcessing) {
-      img2promptState.stopBatch = true;
-      showToast('Stopping prompt generation...', 'warning');
+      stopImg2PromptGeneration();
       return;
     }
     processImg2PromptQueue();
@@ -2437,9 +2051,12 @@ function setupEventListeners() {
     showToast(`Copied ${readyItems.length} prompts to clipboard!`, 'success');
   });
   document.getElementById('btn-clear-img2prompt')?.addEventListener('click', () => {
+    img2promptState._uploadSessionId = ++img2promptState._uploadSessionCounter;
     if (img2promptState.isProcessing) {
       img2promptState.stopBatch = true;
+      img2promptState.isProcessing = false;
     }
+    document.querySelectorAll('#img2prompt-file-input').forEach(inp => { inp.value = ''; });
     img2promptState.items.forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
     img2promptState.items = [];
     renderImg2PromptCards();
@@ -2637,11 +2254,6 @@ function setupEventListeners() {
   document.getElementById('btn-remove-selected')?.addEventListener('click',  removeSelected);
   document.getElementById('btn-batch-edit')?.addEventListener('click',       () => openModal(modal('modal-batch-edit')));
 
-  // View Mode Switchers
-  document.getElementById('btn-view-detail')?.addEventListener('click', () => setViewMode('detail'));
-  document.getElementById('btn-view-table')?.addEventListener('click',  () => setViewMode('table'));
-  document.getElementById('btn-view-grid')?.addEventListener('click',   () => setViewMode('grid'));
-
   // Header Export & Format filter
   document.getElementById('btn-export-csv-header')?.addEventListener('click', exportCsv);
   document.getElementById('export-format-filter')?.addEventListener('change', (e) => {
@@ -2666,8 +2278,6 @@ function setupEventListeners() {
 
   // Delegated event listeners
   setupDetailViewEventDelegation();
-  setupTableEventDelegation();
-  setupGridEventDelegation();
 
   // CSV
   document.getElementById('btn-preview-csv')?.addEventListener('click',       openCsvPreviewModal);
@@ -3146,8 +2756,43 @@ const img2promptState = {
   items: [],
   isProcessing: false,
   stopBatch: false,
-  promptType: 'photo'  // 'photo' | 'video'
+  abortController: null,
+  promptType: 'photo',  // 'photo' | 'video'
+  _uploadSessionId: 0,
+  _uploadSessionCounter: 0,
+  _batchSessionId: 0,
+  _batchSessionCounter: 0
 };
+
+function stopImg2PromptGeneration() {
+  img2promptState.stopBatch = true;
+  img2promptState.isProcessing = false;
+  img2promptState._batchSessionId = ++img2promptState._batchSessionCounter;
+
+  if (img2promptState.abortController) {
+    try {
+      img2promptState.abortController.abort();
+    } catch (_) {}
+    img2promptState.abortController = null;
+  }
+
+  // Immediately reset any processing item back to waiting
+  img2promptState.items.forEach(i => {
+    if (i.status === 'processing') {
+      i.status = 'waiting';
+      i.error = null;
+      i.prompt = null;
+    }
+  });
+
+  const btnGenerateAll = document.getElementById('btn-generate-all-img2prompt');
+  if (btnGenerateAll) {
+    btnGenerateAll.classList.remove('ai-action-running');
+  }
+
+  renderImg2PromptCards();
+  showToast('Image prompt generation stopped', 'info');
+}
 
 // Global Clipboard Paste Listener (Ctrl+V for image files)
 window.addEventListener('paste', async (e) => {
@@ -3314,12 +2959,13 @@ function resetImg2PromptDropZone() {
 
 async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
   if (!files || !files.length) return;
+  const currentSessionId = ++img2promptState._uploadSessionId;
   const fileArray = Array.from(files).filter(f => f && (
     (f.type && f.type.startsWith('image/')) ||
-    (f.name && /\.(jpe?g|png|webp|tiff?|svg)$/i.test(f.name))
+    (f.name && /\.(jpe?g|png|webp|tiff?|svg|eps|ai)$/i.test(f.name))
   ));
   if (!fileArray.length) {
-    showToast('Please select valid image or vector files (JPG, PNG, WEBP, TIFF, SVG)', 'warning');
+    showToast('Please select valid image or vector files (JPG, PNG, WEBP, TIFF, SVG, EPS)', 'warning');
     return;
   }
 
@@ -3336,6 +2982,7 @@ async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
   let processedCount = 0;
   const currentPromptType = img2promptState.promptType || 'photo';
   const newItems = await Promise.all(fileArray.map(async file => {
+    if (img2promptState._uploadSessionId !== currentSessionId) return null;
     const compressed = await compressImageFile(file);
     const useFile = (compressed && compressed.size < file.size) ? compressed : file;
     processedCount++;
@@ -3355,9 +3002,13 @@ async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
     };
   }));
 
-  img2promptState.items.push(...newItems);
+  if (img2promptState._uploadSessionId !== currentSessionId) return;
+
+  const validNewItems = newItems.filter(Boolean);
+  img2promptState.items.push(...validNewItems);
   renderImg2PromptCards();
-  setImg2PromptDropZoneSuccess(newItems.length);
+  document.querySelectorAll('#img2prompt-file-input').forEach(inp => { inp.value = ''; });
+  setImg2PromptDropZoneSuccess(validNewItems.length);
 
   // Auto-start parallel generation immediately on upload/paste
   processImg2PromptQueue();
@@ -3384,16 +3035,42 @@ async function processImg2PromptQueue() {
 
   img2promptState.isProcessing = true;
   img2promptState.stopBatch = false;
-  state.stopBatch = false;
-  state.activeBatchAbortController = new AbortController();
-  const promptSignal = state.activeBatchAbortController.signal;
+  const currentBatchSession = ++img2promptState._batchSessionId;
+  img2promptState._batchSessionCounter = currentBatchSession;
+
+  if (img2promptState.abortController) {
+    try { img2promptState.abortController.abort(); } catch (_) {}
+  }
+  img2promptState.abortController = new AbortController();
+  const promptSignal = img2promptState.abortController.signal;
   
   renderImg2PromptCards();
 
+  const isBatchStopped = () => img2promptState.stopBatch || state.stopBatch || img2promptState._batchSessionId !== currentBatchSession;
+
   const processSingleItem = async (item) => {
+    if (isBatchStopped()) {
+      if (item.status === 'processing') {
+        item.status = 'waiting';
+        item.error = null;
+        item.prompt = null;
+      }
+      return;
+    }
+
     try {
       const fileExt = ((item.name || item.file?.name || '').split('.').pop() || '').toLowerCase();
       const optimized = await optimizeImageForAi(item.file, fileExt);
+
+      if (isBatchStopped()) {
+        if (item.status === 'processing') {
+          item.status = 'waiting';
+          item.error = null;
+          item.prompt = null;
+        }
+        return;
+      }
+
       const base64Image = optimized.base64;
       const mimeType = optimized.mimeType || 'image/jpeg';
 
@@ -3426,11 +3103,22 @@ async function processImg2PromptQueue() {
         })
       });
 
+      if (isBatchStopped()) {
+        if (item.status === 'processing') {
+          item.status = 'waiting';
+          item.error = null;
+          item.prompt = null;
+        }
+        return;
+      }
+
       const data = await res.json().catch(() => ({ ok: false, message: `Server error (${res.status})` }));
-      if (img2promptState.stopBatch || state.stopBatch) {
-        item.status = 'waiting';
-        item.error = null;
-        item.prompt = null;
+      if (isBatchStopped()) {
+        if (item.status === 'processing') {
+          item.status = 'waiting';
+          item.error = null;
+          item.prompt = null;
+        }
         return;
       }
 
@@ -3453,23 +3141,27 @@ async function processImg2PromptQueue() {
         showToast(`✕ Prompt generation failed: ${data.message || 'Error'}`, 'error');
       }
     } catch (err) {
-      if (img2promptState.stopBatch || state.stopBatch) {
-        item.status = 'waiting';
-        item.error = null;
-        item.prompt = null;
+      if (err.name === 'AbortError' || isBatchStopped()) {
+        if (item.status === 'processing') {
+          item.status = 'waiting';
+          item.error = null;
+          item.prompt = null;
+        }
         return;
       }
       item.status = 'failed';
       item.error = err.message || 'Image to prompt conversion failed';
     } finally {
-      renderImg2PromptCards();
+      if (!isBatchStopped()) {
+        renderImg2PromptCards();
+      }
     }
   };
 
-  // Run 3 parallel concurrent workers simultaneously with safe reservation
-  const CONCURRENCY = 3;
+  // Run 2 parallel concurrent workers for optimal throughput within API limits
+  const CONCURRENCY = 2;
   const worker = async () => {
-    while (!img2promptState.stopBatch && !state.stopBatch) {
+    while (!isBatchStopped()) {
       // Synchronously reserve next waiting item
       const item = img2promptState.items.find(i => i.status === 'waiting');
       if (!item) break;
@@ -3485,15 +3177,17 @@ async function processImg2PromptQueue() {
     const workers = Array.from({ length: CONCURRENCY }, () => worker());
     await Promise.all(workers);
   } finally {
-    img2promptState.items.forEach(i => {
-      if (i.status === 'processing' && (img2promptState.stopBatch || state.stopBatch)) {
-        i.status = 'waiting';
-        i.error = null;
-        i.prompt = null;
-      }
-    });
-    img2promptState.isProcessing = false;
-    renderImg2PromptCards();
+    if (img2promptState._batchSessionId === currentBatchSession) {
+      img2promptState.items.forEach(i => {
+        if (i.status === 'processing' && (img2promptState.stopBatch || state.stopBatch)) {
+          i.status = 'waiting';
+          i.error = null;
+          i.prompt = null;
+        }
+      });
+      img2promptState.isProcessing = false;
+      renderImg2PromptCards();
+    }
   }
 }
 

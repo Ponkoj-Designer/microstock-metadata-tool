@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#1c2331" />
+      <stop offset="100%" stop-color="#0a0d14" />
+    </radialGradient>
+
+    <!-- Primary Neon Cyan to Purple AI Gradient -->
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f0ff" />
+      <stop offset="50%" stop-color="#00dbe9" />
+      <stop offset="100%" stop-color="#db50ff" />
+    </linearGradient>
+
+    <!-- Glow Accent Gradient -->
+    <linearGradient id="sparkGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00dbe9" />
+      <stop offset="100%" stop-color="#ffffff" />
+    </linearGradient>
+
+    <!-- Outer Glow Filter -->
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Base Squircle Container (Looks crisp on both dark and light browser chrome) -->
+  <rect x="24" y="24" width="464" height="464" rx="120" ry="120" fill="url(#bgGrad)" stroke="#2b3648" stroke-width="8" />
+
+  <!-- Subtle Inner Ring -->
+  <rect x="40" y="40" width="432" height="432" rx="104" ry="104" fill="none" stroke="rgba(0, 219, 233, 0.15)" stroke-width="3" />
+
+  <!-- Central Microstock AI Emblem Group with Glow -->
+  <g filter="url(#neonGlow)">
+    <!-- Aperture / Stock Frame Dynamic Polygon Rings -->
+    <!-- Top-Left & Bottom-Right Framing Brackets (Stock Viewfinder / Prompt Lens Concept) -->
+    <path d="M140 190 V140 H190" fill="none" stroke="url(#aiGrad)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M372 322 V372 H322" fill="none" stroke="url(#aiGrad)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+    
+    <path d="M372 190 V140 H322" fill="none" stroke="url(#aiGrad)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M140 322 V372 H190" fill="none" stroke="url(#aiGrad)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Center 4-Point AI Spark / Star (Metadata & AI Intelligence) -->
+    <!-- Center Primary Spark Core -->
+    <path d="M256 160 Q256 256 160 256 Q256 256 256 352 Q256 256 352 256 Q256 256 256 160 Z" fill="url(#aiGrad)" />
+    
+    <!-- Inner Radiant Core Star -->
+    <path d="M256 200 Q256 256 200 256 Q256 256 256 312 Q256 256 312 256 Q256 256 256 200 Z" fill="url(#sparkGrad)" opacity="0.9" />
+
+    <!-- Mini Neural Data Nodes / Tag Points -->
+    <circle cx="256" cy="256" r="16" fill="#ffffff" />
+    <circle cx="390" cy="122" r="14" fill="#00f0ff" />
+    <circle cx="122" cy="390" r="12" fill="#db50ff" />
+  </g>
+</svg>

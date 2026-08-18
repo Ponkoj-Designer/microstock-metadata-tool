@@ -126,121 +126,300 @@ function buildCategoryOptions(platformObj, isVideo = false) {
 }
 
 function buildGenerationPrompt({ platformObj, kwTarget, titleLimit, categoryOptions, settings, mode, filename, isVideo = false }) {
+  const pId = (platformObj?.id || platformObj?.name || '').toLowerCase();
+  const isAdobe         = pId === 'adobe' || pId.includes('adobestock') || pId.includes('adobe');
+  const isShutterstock  = pId === 'shutterstock' || pId.includes('shutterstock');
+  const isVecteezy      = pId === 'vecteezy' || pId.includes('vecteezy');
+  const isDepositphotos = pId === 'depositphotos' || pId.includes('depositphotos');
+  const is123RF         = pId === 'rf123' || pId === '123rf' || pId.includes('123rf');
+  const isDreamstime    = pId === 'dreamstime' || pId.includes('dreamstime');
+  const isMagnific      = pId === 'magnific' || pId.includes('magnific');
+
   let prompt = '';
-  const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
 
   if (mode === 'img2prompt' || mode === 'img2prompt-photo') {
-    prompt = `You are a world-class AI image prompt engineer specializing in copyright-safe, commercially usable AI-generated photography prompts.
-Analyze this photograph or image and generate a hyper-detailed, high-converting master AI prompt for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
+    prompt = `You are a world-class AI Image Prompt Engineer specializing in commercial-safe, microstock-friendly, original AI image prompts for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
 
-CRITICAL COPYRIGHT & TRADEMARK SAFETY RULES (MUST FOLLOW):
-- NEVER reference any real person's name, celebrity, public figure, actor, musician, athlete, or politician.
-- NEVER reference any brand name, logo, trademark, product name, or company name (e.g. no Nike, Apple, Coca-Cola, etc.).
-- NEVER reference any copyrighted character, fictional character from movies/TV/games, or franchise IP.
-- NEVER reference any specific landmark that may have architectural copyright (use generic descriptions instead, e.g. "iconic arch bridge" not a specific bridge name).
-- NEVER reference any song title, book title, movie title, or other copyrighted creative work.
-- Instead, describe VISUAL CHARACTERISTICS ONLY: shapes, colors, textures, lighting, composition, mood, atmosphere, and generic subject types.
-- Replace any recognizable person with generic descriptors: "young adult woman", "elderly man with beard", "athletic male figure", etc.
-- Replace branded items with generic descriptions: "red athletic shoes", "glass smartphone", "luxury sedan".
+CRITICAL VISUAL ANALYSIS & GENERATION RULES (MUST FOLLOW):
+1. VISUAL ANALYSIS:
+   - Thoroughly analyze the reference image for: subject, composition, lighting, color palette, mood, style, camera angle, and visual concept.
+2. ORIGINAL & UNIQUE CREATION (NON-REPETITIVE):
+   - Create a NEW and UNIQUE generation prompt inspired by the visual concept, NOT a copy or reproduction.
+   - Every generated image must contain unique and non-repetitive visual elements.
+   - Never generate duplicate, cloned, repeated, mirrored, or unnecessarily identical objects, icons, patterns, decorations, or design elements.
+   - Each main object must have its own unique shape, position, angle, detail, and visual characteristics.
+   - Avoid repetitive layouts and predictable duplication.
+   - If multiple similar objects are necessary, make each one visibly different in size, orientation, shape, position, or details.
+   - Do not repeat the same design element more than necessary.
+   - The final prompt should encourage one-of-a-kind, non-duplicated elements while preserving the original concept.
+   - Always prioritize: ORIGINAL + UNIQUE + COMMERCIAL-SAFE + MICROSTOCK-FRIENDLY.
+3. COPYRIGHT & TRADEMARK SAFETY:
+   - NEVER include or reproduce logos, brand names, trademarks, copyrighted characters, famous artwork, protected designs, or recognizable branded products.
+   - Do NOT identify or imitate a specific artist, photographer, designer, or living creator's exact style.
+   - NEVER add brand names, trademark names, copyrighted character names, or unnecessary references to existing works.
+4. GENERIC DESCRIPTORS FOR PEOPLE & OBJECTS:
+   - If a recognizable person appears, describe generic visual characteristics (e.g. "young adult woman with curly hair", "elderly man with gray beard") instead of identifying or reproducing that person.
+   - Replace protected elements with original, generic alternatives while preserving the overall concept and commercial usefulness.
+5. MICROSTOCK SUITABILITY & CLEAN COMPOSITION:
+   - Prioritize originality, visual variety, clean composition, and commercial microstock usability.
+   - Make the final prompt suitable for commercial/microstock use and designed to minimize copyright, trademark, similarity, and infringement risks.
 
-STRICT OUTPUT INSTRUCTIONS:
-- Title: A vivid, copyright-safe master prompt describing the primary subject, environment, lighting, composition, mood, camera settings, and exact photography style. Use cinematic or photographic terminology.
-- Description: A detailed breakdown of visual elements, color palette, lighting atmosphere, depth of field, lens characteristics, and texture details. No brand names or real people.
+STRICT OUTPUT FORMAT:
+- Title: A vivid, original, copyright-safe master prompt describing: subject + composition + lighting + color atmosphere + mood + camera angle/style + photography details.
+- Description: Detailed breakdown of visual elements, color palette, lighting atmosphere, depth of field, lens characteristics, and textures.
 - Keywords: 25-35 high-value visual modifier keywords covering: photography style, lighting terms, composition tags, color descriptors, mood/atmosphere, and camera/lens terms.
-- Category: The photography genre (e.g. Portrait Photography, Landscape Photography, Street Photography, Commercial Photography, Macro Photography, Aerial Photography).`;
+- Category: The photography/art genre (e.g. Portrait Photography, Landscape Photography, Street Photography, Commercial Photography, Macro Photography, 3D Render).`;
+
   } else if (mode === 'img2prompt-video') {
-    prompt = `You are a world-class AI video prompt engineer specializing in copyright-safe, commercially usable AI-generated video prompts.
-Analyze this image/frame and generate a hyper-detailed, high-converting master AI video prompt for Sora, Runway ML Gen-3, Pika Labs, Kling AI, and Stable Video Diffusion.
+    prompt = `You are a world-class AI Video Prompt Engineer specializing in commercial-safe, microstock-friendly, silent AI video prompts for Sora, Runway Gen-3, Pika Labs, Kling AI, and Stable Video Diffusion.
 
-CRITICAL COPYRIGHT & TRADEMARK SAFETY RULES (MUST FOLLOW):
-- NEVER reference any real person's name, celebrity, public figure, actor, musician, athlete, or politician.
-- NEVER reference any brand name, logo, trademark, product name, or company name.
-- NEVER reference any copyrighted character, fictional character from movies/TV/games, or franchise IP.
-- NEVER reference any specific location by its trademarked/copyrighted name; use generic visual descriptors only.
-- NEVER reference any film, TV show, or media franchise stylistically in a way that implies reproduction.
-- Instead, describe VISUAL CHARACTERISTICS ONLY: motion dynamics, camera movement, lighting progression, color grading, environment type, subject behavior, and cinematic style.
-- Replace any recognizable person with generic descriptors: "young adult woman with flowing hair", "elderly man walking slowly", "child playing".
-- Replace branded items with generic descriptions: "red sports car", "glass-faced smartwatch", "chrome coffee machine".
+CRITICAL VISUAL & MOTION RULES (MUST FOLLOW):
+1. ORIGINAL & UNIQUE VIDEO CONCEPT:
+   - Create an ORIGINAL, commercially safe video concept based on the reference's subject, composition, motion dynamics, lighting, and visual idea.
+   - Make the scene visually unique, dynamic, and commercially usable for microstock.
+   - Always prioritize: ORIGINAL + UNIQUE + COMMERCIAL-SAFE + MICROSTOCK-FRIENDLY.
+2. STRICT COPYRIGHT & TRADEMARK SAFETY:
+   - NEVER reproduce copyrighted characters, logos, trademarks, branded products, famous people, or protected designs.
+   - Replace protected or recognizable elements with generic, copyright-free descriptions.
+3. ABSOLUTELY NO AUDIO / SILENT VIDEO ONLY (MANDATORY):
+   - NEVER include voice, dialogue, narration, speech, lyrics, music, sound effects, ambient audio, or any other audio references.
+   - Every video prompt MUST explicitly specify: "silent video, no audio, no voice, no dialogue, no music, no sound effects."
+   - Focus only on visuals, camera movement (pan, dolly, tracking, zoom, orbit), subject movement, environment, lighting, optics, and cinematic details.
 
-CRITICAL NO VOICE / NO SOUND / NO AUDIO RULES (MUST FOLLOW):
-- STRICTLY NO VOICE, NO SPEECH, NO DIALOGUE, NO TALKING, NO SINGING, and NO NARRATION / VOICEOVER.
-- STRICTLY NO SOUND EFFECTS, NO BACKGROUND NOISE, NO AMBIENT AUDIO, and NO MUSIC / SOUNDTRACK references.
-- All video prompts MUST BE 100% VISUAL-ONLY (focus strictly on visual motion, camera angles, lighting transitions, physics, and optics).
-
-STRICT OUTPUT INSTRUCTIONS:
-- Title: A vivid, copyright-safe, visual-only master VIDEO prompt describing: subject + visual motion/action + camera movement (pan/zoom/dolly/orbit/tracking) + lighting + environment + mood + color grade + clip duration hint. Completely silent visual description without any sound or voice references.
-- Description: A detailed breakdown of: scene composition, motion dynamics, visual progression over time, color palette, atmospheric visual effects (fog/dust particles), camera lens optics, and final frame state. Strictly no voice, dialogue, or audio.
+STRICT OUTPUT FORMAT:
+- Title: An original, copyright-safe, silent master VIDEO prompt describing: subject + visual motion/action + camera movement + lighting + environment + mood + cinematic grade. Must explicitly specify: "silent video, no audio, no voice, no dialogue, no music, no sound effects."
+- Description: Detailed breakdown of scene composition, motion dynamics, visual progression over time, color palette, atmospheric visual effects, camera lens optics, final frame state. Strictly silent visual description without any audio.
 - Keywords: 25-35 high-value visual video modifier keywords covering: motion style, camera technique, visual effects, color grading terms, mood/atmosphere, video format tags, and cinematic style descriptors.
 - Category: The video genre (e.g. Cinematic B-Roll, Aerial Footage, Timelapse, Slow Motion, Animation, Motion Graphics, Documentary Style, Commercial Video).`;
-  } else if (isShutterstock) {
-    prompt = `You are a world-renowned Microstock SEO Specialist and Shutterstock Contributor Metadata Expert.
-Generate **OFFICIAL SHUTTERSTOCK-COMPLIANT, HIGH-CONVERTING COMMERCIAL METADATA** adhering strictly to Shutterstock Contributor specifications:
 
-=== SHUTTERSTOCK OFFICIAL REQUIREMENTS ===
+  } else if (isAdobe) {
+    prompt = `You are a world-renowned Microstock SEO Specialist and Adobe Stock Contributor Metadata Expert.
+Your mission is to generate **OFFICIAL ADOBE STOCK-OPTIMIZED, TOP-RANKING METADATA** engineered for maximum commercial visibility and buyer conversion.
 
-1. FILENAME:
-   - Preserves original media filename: "${filename}".
-
-2. DESCRIPTION (STRICT LIMIT: MAXIMUM 200 CHARACTERS IN ENGLISH):
-   - A unique and detailed description of the media in English up to 200 characters.
-   - FRONT-LOAD the most powerful commercial search terms in the first 3 to 5 words.
-   - Describe exact subject, format/style (vector/illustration/photo/3D/video), action/mood, and background.
-   - MUST be strictly within 200 characters total.
-
-3. TITLE:
-   - Provide the same high-converting commercial title matching the description (max 200 chars).
-
-4. KEYWORDS (Up to 50 keywords in English, separated by commas):
-   - Generate ${kwTarget} unique, high-traffic English keywords.
-   - First 5-10 keywords carry 80% search algorithm weight: core subject, style, and primary traits.
-   - Followed by specific objects, industry/commercial use cases ("banner", "template", "graphic design", "wallpaper"), vector terms if applicable, and synonyms.
-   - All lowercase, deduplicated, 100% relevant.
-
-5. CATEGORIES (Strictly ONE or TWO categories from the official list):
-   - Select ONE or TWO exact categories in English from this official Shutterstock list:
-     [${categoryOptions}]
-   - If two categories apply, separate them with a comma (Example: "Nature, Animals/Wildlife" or "Backgrounds/Textures, Technology" or "Business/Finance").
-   - NEVER invent or use categories not present in the list above.`;
-  } else {
-    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert for top stock agencies (${platformObj?.name || 'Stock'}, Adobe Stock, Shutterstock, Freepik, Vecteezy, Getty/iStock, 123RF).
-Your mission is to generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** designed to rank on Page 1 / top search results for high-intent stock buyers.
-
-=== MICROSTOCK SEO RANKING ALGORITHM RULES ===
-
-1. TOP-RANKING COMMERCIAL TITLE (Strict limit: ${titleLimit} characters):
-   - FRONT-LOAD the most powerful, highest search-volume commercial search terms in the FIRST 3 TO 5 WORDS.
-   - Formula: [Core Subject / Focus] + [Format/Style: Vector / Illustration / Photo / 3D] + [Action / Theme / Mood] + [Composition / Background].
-   - Focus on what real commercial buyers search for (e.g. "Cyberpunk Neon City Skyline Vector Background with Glowing Cyan Lights" instead of vague "City at night").
-   - NEVER start with filler words like "A photo of", "An image of", "Illustration of", or artistic metaphors.
-   - Keep within ${titleLimit} characters while maximizing keyword density.
-
-2. TOP 5-10 KEYWORDS (CRITICAL ALGORITHM WEIGHT - 80% SEARCH RANKING):
-   - Algorithms on Adobe Stock, Shutterstock, and Freepik weigh the FIRST 5-10 KEYWORDS most heavily.
-   - Keywords 1-5 MUST be the absolute primary subject, core theme, and asset format (e.g. "vector", "background", "technology", "abstract", "banner").
+=== ADOBE STOCK SEO ALGORITHM RULES ===
+1. VISUAL ANALYSIS FIRST:
+   - Analyze the image thoroughly: identify the main subject, secondary elements, concept, style (photo/vector/3D/illustration), composition, colors, and commercial search intent.
+2. CRITICAL FIRST 10 KEYWORDS (80% SEARCH ALGORITHM WEIGHT):
+   - Adobe Stock weighs the FIRST 10 KEYWORDS most heavily in its search ranking algorithm.
+   - Keywords 1-5 MUST be the absolute primary subject, core theme, and asset format (e.g. "vector", "background", "technology", "abstract").
    - Keywords 6-10 MUST be primary visual traits, primary colors, and main contextual environment.
+3. REMAINING KEYWORDS (Generate exactly ${kwTarget} unique keywords):
+   - Prioritize high-search-potential buyer queries ONLY when genuinely relevant: specific objects, commercial usage ("banner", "template", "graphic design", "marketing"), vector terms if applicable, and synonyms.
+   - ALL keywords in lowercase, deduplicated, 100% relevant.
+   - NEVER keyword-stuff, repeat keywords unnecessarily, invent details, or use irrelevant/trademarked terms.
+   - Put the strongest and most important search terms first.
+4. FRONT-LOADED COMMERCIAL TITLE (Strict limit: ${titleLimit} characters):
+   - Front-load the most powerful, highest search-volume commercial keywords in the FIRST 3 TO 5 WORDS.
+   - Formula: [Core Subject / Focus] + [Format/Style: Vector / Illustration / Photo / 3D] + [Action / Theme / Mood] + [Composition / Background].
+   - Max ${titleLimit} characters. Never use generic filler words like "A photo of" or "An image of".
+5. COMMERCIAL DESCRIPTION:
+   - 1-2 natural, informative English sentences with rich secondary search phrases.
+6. PLATFORM CATEGORY:
+   - Select the single best matching category from: [${categoryOptions}].
 
-3. REMAINING KEYWORDS (Generate exactly ${kwTarget} unique, high-traffic keywords):
-   - Include high search-volume buyer intent queries:
-     * Specific objects, shapes, textures, materials, and concepts visible.
-     * Commercial usage & industry terms: "banner", "template", "wallpaper", "graphic design", "marketing", "web design", "presentation", "ui design".
-     * If vector/illustration/SVG/EPS: Include essential vector search terms ("illustration", "vector", "scalable", "eps", "svg", "isolated", "clipart", "graphic element", "editable").
-     * Relevant synonyms, mood, emotions, and seasonal/trend terms.
-   - ALL keywords must be lowercase, separated, relevant, and 100% deduplicated.
-   - No spamming or irrelevant keywords that cause stock reviewer rejections.
-
-4. COMMERCIAL DESCRIPTION:
-   - 1-2 natural, informative sentences with rich secondary search phrases for Google Image SEO indexing.
-
-5. PLATFORM CATEGORY:
-   - Choose the single best matching high-traffic category from: [${categoryOptions}].
-
-STRICT OUTPUT FORMAT (You MUST respond ONLY with a valid JSON object matching this schema):
+STRICT OUTPUT FORMAT (JSON ONLY):
 {
   "filename": "${filename}",
   "title": "Front-Loaded Commercial Title (Strictly max ${titleLimit} characters)",
   "description": "Natural, high-SEO commercial description in English",
   "keywords": ["keyword1", "keyword2", ...],
-  "category": "Exact Category Name"
+  "category": "Selected Category Name"
+}`;
+
+  } else if (isShutterstock) {
+    prompt = `You are a world-renowned Microstock SEO Specialist and Shutterstock Contributor Metadata Expert.
+Generate **OFFICIAL SHUTTERSTOCK-COMPLIANT, HIGH-CONVERTING COMMERCIAL METADATA** adhering strictly to Shutterstock Contributor specifications:
+
+=== SHUTTERSTOCK OFFICIAL REQUIREMENTS ===
+1. VISUAL ANALYSIS FIRST:
+   - Analyze the image thoroughly: identify main subject, secondary elements, concept, style, composition, colors, and commercial search intent.
+2. FACTUAL, DESCRIPTIVE TITLE & DESCRIPTION (STRICT LIMIT: MAXIMUM 200 CHARACTERS):
+   - A unique, detailed, factual description of the media in English up to 200 characters.
+   - FRONT-LOAD top commercial search terms in the first 3 to 5 words.
+   - Describe exact subject, format/style (vector/illustration/photo/3D/video), action/mood, and background.
+   - Provide the same high-converting commercial title matching the description (max 200 chars).
+3. KEYWORDS (7 to 50 highly relevant keywords, separated by commas):
+   - Generate ${kwTarget} unique, high-traffic English keywords.
+   - First 5-10 keywords carry heavy discovery weight: core subject, style, and primary traits.
+   - Followed by specific objects, industry/commercial use cases, vector terms if applicable, and synonyms.
+   - Prioritize precise, specific search terms and avoid spam/trademarks. Never keyword-stuff or invent details.
+   - Put the strongest and most important search terms first.
+4. CATEGORIES (Strictly ONE or TWO categories from the official list):
+   - Select ONE or TWO exact categories in English from this official Shutterstock list:
+     [${categoryOptions}]
+   - If two categories apply, separate them with a comma (e.g. "Nature, Animals/Wildlife" or "Backgrounds/Textures, Technology").
+   - NEVER invent or use categories not present in the list above.
+
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Factual Commercial Title (max 200 chars)",
+  "description": "Factual, detailed description in English (strictly max 200 chars)",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "PrimaryCategory, SecondaryCategory"
+}`;
+
+  } else if (isVecteezy) {
+    prompt = `You are a world-renowned Graphic Design & Vector SEO Specialist for Vecteezy.
+Your mission is to generate **HIGH-DISCOVERABILITY VECTEEZY METADATA** optimized for vector, illustration, and graphic design buyer search intent.
+
+=== VECTEEZY SEO ALGORITHM RULES ===
+1. VISUAL ANALYSIS FIRST:
+   - Analyze the asset: identify main subject, graphic elements, format (vector/illustration/icon/pattern/template), composition, colors, and commercial intent.
+2. CRITICAL FIRST 5 KEYWORDS:
+   - Vecteezy's search engine prioritizes the FIRST 5 KEYWORDS heavily for ranking.
+   - Keywords 1-5 MUST be the absolute primary subject, asset type ("vector", "icon", "illustration", "background", "pattern", "banner"), and primary theme.
+3. RELEVANT KEYWORDS (Generate around 20–30 strong keywords, target ${kwTarget}):
+   - Focus heavily on discoverability and buyer search intent.
+   - Include essential vector/design terms if applicable: "vector", "illustration", "scalable", "eps", "svg", "isolated", "clipart", "graphic element", "editable", "template".
+   - Prioritize high-search-potential keywords ONLY when genuinely relevant. Never keyword-stuff or repeat terms.
+   - Put the strongest and most important search terms first.
+4. COMMERCIAL TITLE (Strict limit: ${titleLimit} characters):
+   - Front-load the primary subject and asset type (e.g. "Minimalist Web Contact Icons Vector Set"). Max ${titleLimit} characters.
+5. DESCRIPTION & CATEGORY:
+   - Clear summary of graphic elements and usage. Select category from: [${categoryOptions}].
+
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Front-Loaded Vector Title (Strictly max ${titleLimit} characters)",
+  "description": "Clear graphic summary and usage description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+
+  } else if (isDepositphotos) {
+    prompt = `You are a professional Microstock Metadata Specialist for Depositphotos.
+Generate **ACCURATE, HIGH-RANKING DEPOSITPHOTOS METADATA** with natural descriptive titles and strong searchable keywords.
+
+=== DEPOSITPHOTOS METADATA RULES ===
+1. VISUAL ANALYSIS:
+   - Identify main subject, secondary details, style, mood, composition, colors, and buyer search intent.
+2. NATURAL DESCRIPTIVE TITLE (Strict limit: ${titleLimit} characters):
+   - Clear, natural, and descriptive commercial title front-loading key search terms. Max ${titleLimit} characters.
+3. STRONG SEARCHABLE KEYWORDS (Generate exactly ${kwTarget} keywords):
+   - Accurate English metadata with strong searchable keywords ordered from primary subject to contextual attributes.
+   - Include specific visible objects, commercial uses, concepts, and synonyms.
+   - Prioritize high-search-potential keywords ONLY when genuinely relevant. Put strongest terms first.
+4. ACCURATE DESCRIPTION & CATEGORY:
+   - 1-2 natural descriptive sentences. Select category from: [${categoryOptions}].
+
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Natural Descriptive Commercial Title (max ${titleLimit} chars)",
+  "description": "Informative and natural English description",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+
+  } else if (is123RF) {
+    prompt = `You are a professional Microstock SEO Specialist for 123RF.
+Generate **COMMERCIALLY OPTIMIZED 123RF METADATA** with clear commercial search intent and high-volume relevant keywords.
+
+=== 123RF METADATA RULES ===
+1. VISUAL ANALYSIS:
+   - Identify the main subject, setting, style, mood, composition, colors, and commercial buyer intent.
+2. CLEAR COMMERCIAL TITLE (Strict limit: ${titleLimit} characters):
+   - Prioritize clear commercial search intent, front-loading the core subject in the first 3-5 words. Max ${titleLimit} characters.
+3. HIGH-VOLUME RELEVANT KEYWORDS (Generate exactly ${kwTarget} keywords):
+   - Prioritize clear commercial search intent and relevant high-volume keywords.
+   - Order from most important core subject/medium to secondary details, concepts, and synonyms.
+   - Put the strongest and most important search terms first. Never keyword-stuff.
+4. ACCURATE DESCRIPTION:
+   - Accurate, commercial visual summary for search indexing. Select category from: [${categoryOptions}].
+
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Commercial Search Title (max ${titleLimit} chars)",
+  "description": "Accurate commercial description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+
+  } else if (isDreamstime) {
+    prompt = `You are a professional Microstock Metadata Specialist for Dreamstime.
+Generate **DISCOVERABILITY-OPTIMIZED DREAMSTIME METADATA** with relevant, descriptive, commercially useful keywords.
+
+=== DREAMSTIME METADATA RULES ===
+1. VISUAL ANALYSIS:
+   - Identify the primary subject, concept, visual technique, background, colors, and commercial application.
+2. DESCRIPTIVE IMAGE NAME / TITLE (Strict limit: ${titleLimit} characters):
+   - Clear, descriptive title front-loading key search terms. Max ${titleLimit} characters.
+3. COMMERCIALLY USEFUL KEYWORDS (Generate exactly ${kwTarget} keywords):
+   - Prioritize relevant, descriptive, commercially useful keywords and strong search discoverability.
+   - Order keywords logically: core subject $\rightarrow$ action/theme $\rightarrow$ visual details $\rightarrow$ commercial use cases $\rightarrow$ synonyms.
+   - Put the strongest and most important search terms first. Genuinely relevant terms only.
+4. DESCRIPTION & CATEGORY:
+   - Detailed visual description. Select primary category from: [${categoryOptions}].
+
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Descriptive Image Title (max ${titleLimit} chars)",
+  "description": "Detailed visual description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+
+  } else if (isMagnific) {
+    prompt = `You are an AI Art & Visual Content Metadata Specialist for Magnific.
+Generate **CONCISE, DESCRIPTIVE, SEO-FRIENDLY METADATA** focused on the actual visual content and aesthetic characteristics.
+
+=== MAGNIFIC METADATA RULES ===
+1. VISUAL CONTENT ANALYSIS:
+   - Analyze actual visual content: main subject, art style, rendering quality, lighting atmosphere, composition, color palette, and textures.
+2. CONCISE DESCRIPTIVE TITLE (Strict limit: ${titleLimit} characters):
+   - Concise, descriptive, SEO-friendly title capturing the exact visual subject and artistic style. Max ${titleLimit} characters.
+3. AESTHETIC & VISUAL KEYWORDS (Generate exactly ${kwTarget} keywords):
+   - Create concise, descriptive, SEO-friendly keywords focused on actual visual content.
+   - Cover: core subject, style/medium, lighting/atmosphere, textures, colors, composition, and aesthetic descriptors.
+   - Put strongest visual search terms first. No invented details.
+4. VISUAL DESCRIPTION & CATEGORY:
+   - Detailed breakdown of visual elements. Select category from: [${categoryOptions}].
+
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Concise Descriptive Visual Title (max ${titleLimit} chars)",
+  "description": "Detailed aesthetic breakdown in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+
+  } else {
+    // General / Universal Microstock
+    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert across all major stock marketplaces (Adobe Stock, Shutterstock, Freepik, Vecteezy, Getty/iStock, 123RF, Depositphotos, Dreamstime).
+Generate **BALANCED, TOP-RANKING UNIVERSAL MICROSTOCK METADATA** engineered for maximum discoverability across all major stock agencies.
+
+=== UNIVERSAL MICROSTOCK SEO RULES ===
+1. VISUAL ANALYSIS FIRST:
+   - Analyze the image first: identify main subject, secondary elements, concept, style (photo/vector/3D/illustration), composition, colors, and commercial search intent.
+2. STRONGEST SEARCH TERMS FIRST (TOP 5-10 KEYWORDS):
+   - Keywords 1-5 MUST be the absolute primary subject, core theme, and asset format ("vector", "background", "technology", "photo", etc.).
+   - Keywords 6-10 MUST be primary visual traits, primary colors, and main contextual environment.
+3. BALANCED KEYWORDS (Generate exactly ${kwTarget} unique keywords):
+   - Use a balanced microstock SEO strategy suitable across major stock marketplaces.
+   - Prioritize high-search-potential keywords ONLY when genuinely relevant: specific objects, commercial usage queries, industry terms, vector terms if applicable, and synonyms.
+   - Never keyword-stuff, repeat keywords unnecessarily, invent details, or use irrelevant/trademarked terms.
+   - Put the strongest and most important search terms first.
+4. TOP-RANKING COMMERCIAL TITLE (Strict limit: ${titleLimit} characters):
+   - Front-load the highest search volume commercial keywords in the FIRST 3 TO 5 WORDS.
+   - Formula: [Core Subject / Focus] + [Format/Style: Vector / Illustration / Photo / 3D] + [Action / Theme / Mood] + [Composition / Background].
+   - Max ${titleLimit} characters. Never start with filler words like "A photo of" or "An image of".
+5. COMMERCIAL DESCRIPTION:
+   - 1-2 natural, informative commercial sentences with rich secondary search phrases.
+6. PLATFORM CATEGORY:
+   - Select the single best matching category from: [${categoryOptions}].
+
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Front-Loaded Commercial Title (Strictly max ${titleLimit} characters)",
+  "description": "Natural, high-SEO commercial description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
 }`;
   }
 
@@ -368,65 +547,68 @@ async function uploadVideoToGemini(buffer, effectiveMime, apiKey) {
 
 /**
  * Build candidate model list for fallback loop.
- * Only includes models that are currently active in the Gemini API.
- * gemini-1.5-pro is deprecated and removed from the fallback chain.
+ * Primary: Gemini 3.5 Flash-Lite (Ultra Fast)
+ * Backup:  Gemini 3.6 Flash
  */
-function buildCandidateModels(primaryModel) {
-  // Official active models (Google recommends gemini-3.6-flash)
-  const ACTIVE_FALLBACKS = [
-    'gemini-3.6-flash',
-    'gemini-3.6-flash-lite',
-    'gemini-3.7-flash',
-    'gemini-2.5-flash',
-    'gemini-1.5-flash'
-  ];
-  return [
-    primaryModel,
-    ...ACTIVE_FALLBACKS
-  ].filter((m, idx, arr) => m && arr.indexOf(m) === idx);
+function buildCandidateModels(primaryModel = 'gemini-3.5-flash-lite') {
+  if (primaryModel === 'gemini-3.6-flash') {
+    return ['gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+  }
+  return ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
 }
 
 /**
  * Extract and parse JSON text from a Gemini candidate response.
- * Includes regex fallback parser for 100% reliable metadata generation.
  */
 function extractJsonFromCandidate(candidate) {
   if (!candidate || !candidate.content || !candidate.content.parts || !candidate.content.parts[0]?.text) {
-    throw new Error('Gemini API returned an unexpected response structure.');
+    const finishReason = candidate?.finishReason || 'UNKNOWN';
+    throw new Error(`Gemini response missing text. finishReason=${finishReason}`);
   }
 
   const rawText = candidate.content.parts[0].text;
+  console.log('[GeminiService] Raw response preview:', rawText.substring(0, 120));
+
+  // Clean markdown code fences
   let text = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+
+  // Extract first { ... } block
   const firstBrace = text.indexOf('{');
   const lastBrace  = text.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
     text = text.substring(firstBrace, lastBrace + 1).trim();
   }
 
+  // Fix common JSON issues: trailing commas before ] or }
+  text = text
+    .replace(/,\s*([}\]])/g, '$1')   // trailing commas
+    .replace(/[\u0000-\u001F]/g, ' '); // control chars
+
   try {
     return JSON.parse(text);
-  } catch (_) {
-    // Robust fallback regex extraction
-    const titleMatch = rawText.match(/(?:title|prompt)\s*["':]+\s*([^\n\r"}]+)/i);
-    const descMatch  = rawText.match(/(?:description|summary)\s*["':]+\s*([^\n\r"}]+)/i);
-    const catMatch   = rawText.match(/(?:category|genre)\s*["':]+\s*([^\n\r"}]+)/i);
-    const kwMatches  = rawText.match(/["']([a-zA-Z0-9\s-]{2,30})["']/g);
+  } catch (jsonErr) {
+    console.warn('[GeminiService] JSON.parse failed, using regex fallback. Error:', jsonErr.message);
+    const titleMatch = rawText.match(/"title"\s*:\s*"([^"]+)"/i);
+    const descMatch  = rawText.match(/"description"\s*:\s*"([^"]+)"/i);
+    const catMatch   = rawText.match(/"category"\s*:\s*"([^"]+)"/i);
+    const kwMatches  = [...rawText.matchAll(/"([a-zA-Z][a-zA-Z0-9\s-]{1,29})"/g)]
+      .map(m => m[1].trim())
+      .filter(k => k.length > 1 && !['title','description','keywords','category','filename','json'].includes(k.toLowerCase()));
 
-    const title = titleMatch ? titleMatch[1].trim() : '';
-    const description = descMatch ? descMatch[1].trim() : title;
-    const category = catMatch ? catMatch[1].trim() : 'General';
-    const keywords = kwMatches ? kwMatches.map(k => k.replace(/['"]/g, '').trim()).filter(k => k.length > 1 && !['title','description','keywords','category','json','object'].includes(k.toLowerCase())) : [];
+    const title       = titleMatch ? titleMatch[1].trim() : '';
+    const description = descMatch  ? descMatch[1].trim()  : title;
+    const category    = catMatch   ? catMatch[1].trim()   : 'General';
 
     if (title || description) {
-      return { title: title || description, description, keywords, category };
+      console.log('[GeminiService] Regex fallback OK:', { title: title.substring(0,40), kw: kwMatches.length });
+      return { title: title || description, description, keywords: kwMatches, category };
     }
-    throw new Error('Failed to parse Gemini metadata response JSON.');
+    throw new Error('Failed to parse Gemini response. Raw: ' + rawText.substring(0, 80));
   }
 }
 
 /**
- * Run Gemini generateContent with model fallback loop.
- * Returns the parsed response JSON data object.
+ * Run Gemini generateContent with model fallback and lightning-fast failover.
  */
 async function runGeminiWithFallback(candidateModels, requestBody, apiKey) {
   let lastError = null;
@@ -436,56 +618,77 @@ async function runGeminiWithFallback(candidateModels, requestBody, apiKey) {
     const url = `${config.geminiBaseUrl}/${curModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     try {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 14000); // 14s max per model attempt
+
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: abortController.signal
       });
 
+      clearTimeout(timeoutId);
       const resJson = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const classified = classifyGeminiError(res.status, resJson);
+        const classified   = classifyGeminiError(res.status, resJson);
         const safeErrorMsg = sanitizeErrorMessage(classified, apiKey);
         lastError = new Error(safeErrorMsg);
 
-        // Model not found or model-specific error → try next candidate
-        if (res.status === 404 || (res.status === 400 && JSON.stringify(resJson).toLowerCase().includes('model'))) {
-          console.warn(`[GeminiService] Model '${curModel}' not available (${res.status}), trying fallback...`);
+        // FATAL: bad API key — stop everything immediately
+        if (res.status === 401 || res.status === 403 ||
+            (res.status === 400 && safeErrorMsg.toLowerCase().includes('invalid gemini api key'))) {
+          throw lastError;
+        }
+
+        // Model not found (404) — immediately try next model
+        if (res.status === 404) {
+          console.warn(`[GeminiService] '${curModel}' returned 404, switching to backup model...`);
           continue;
         }
 
-        // 503 (High demand / overloaded) or 500 (server error) → immediate switch to next fallback model
-        if ((res.status === 503 || res.status === 500 || res.status >= 500) && idx < candidateModels.length - 1) {
-          console.warn(`[GeminiService] Model '${curModel}' overloaded (${res.status}), instantly switching to next model...`);
-          await new Promise(r => setTimeout(r, 100));
+        // 503 / 500 Overloaded / 429 Rate limited — try next candidate model
+        if (res.status >= 500 || res.status === 429) {
+          if (res.status === 429) await new Promise(r => setTimeout(r, 400)); // Brief pause for token bucket refill
+          console.warn(`[GeminiService] '${curModel}' returned ${res.status}, switching to backup model...`);
           continue;
         }
 
-        // Rate limited (429) → brief pause then try next model
-        if (res.status === 429 && idx < candidateModels.length - 1) {
-          console.warn(`[GeminiService] Model '${curModel}' rate limited (429), switching to next model...`);
-          await new Promise(r => setTimeout(r, 600));
+        // If there's a backup model available, try it
+        if (idx < candidateModels.length - 1) {
+          console.warn(`[GeminiService] '${curModel}' failed (${res.status}), trying next candidate...`);
           continue;
         }
 
         throw lastError;
       }
 
-      return resJson; // Success
+      console.log(`[GeminiService] ✅ Success with model: ${curModel}`);
+      return resJson;
+
     } catch (err) {
       lastError = err;
-      // If there are more candidate models, continue trying
+      const msg = (err.message || '').toLowerCase();
+      // Fatal auth errors — stop immediately
+      if (msg.includes('invalid gemini api key') || msg.includes('unauthorized') || msg.includes('403')) {
+        throw err;
+      }
+      if (err.name === 'AbortError') {
+        console.warn(`[GeminiService] '${curModel}' timed out (>14s), switching to backup model...`);
+      } else {
+        console.warn(`[GeminiService] Error with '${curModel}' (${err.message}), switching...`);
+      }
       if (idx < candidateModels.length - 1) {
-        console.warn(`[GeminiService] Error with '${curModel}' (${err.message}), trying next fallback model...`);
         continue;
       }
-      throw err;
     }
   }
 
-  throw lastError || new Error('Gemini API request failed across all candidate models.');
+  throw lastError || new Error('All configured Gemini models are currently busy. Please try again in a moment.');
 }
+
+
 
 /**
  * Server-side metadata generation proxy for image / vector / video assets.
@@ -539,16 +742,26 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
         }
       ],
       generationConfig: {
-        temperature: 0.15,
-        topK: 1,
-        topP: 0.9,
-        maxOutputTokens: 600,
-        responseMimeType: 'application/json'
+        temperature: 0.3,
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            filename:    { type: 'STRING' },
+            title:       { type: 'STRING' },
+            description: { type: 'STRING' },
+            keywords:    { type: 'ARRAY', items: { type: 'STRING' } },
+            category:    { type: 'STRING' }
+          },
+          required: ['title', 'description', 'keywords', 'category']
+        }
       }
     };
 
-    const primaryModel    = model || config.geminiModel || 'gemini-2.0-flash';
-    const candidateModels = buildCandidateModels(primaryModel);
+    const requestedModel  = (model === 'gemini-3.6-flash') ? 'gemini-3.6-flash' : (config.geminiModel || 'gemini-3.5-flash-lite');
+    const candidateModels = buildCandidateModels(requestedModel);
+    console.log(`[GeminiService] Using models: ${candidateModels.join(' → ')}`);
 
     // BUG FIX #2 (partial) & #3: unified fallback loop also used here
     const data      = await runGeminiWithFallback(candidateModels, requestBody, apiKey);
@@ -618,8 +831,8 @@ export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer
     };
 
     // BUG FIX #2 & #4: use model parameter + full fallback loop instead of hardcoded model
-    const primaryModel    = model || config.geminiModel || 'gemini-2.0-flash';
-    const candidateModels = buildCandidateModels(primaryModel);
+    const requestedModel  = (model === 'gemini-3.6-flash') ? 'gemini-3.6-flash' : (config.geminiModel || 'gemini-3.5-flash-lite');
+    const candidateModels = buildCandidateModels(requestedModel);
 
     const data      = await runGeminiWithFallback(candidateModels, requestBody, apiKey);
     const candidate = data.candidates?.[0];

@@ -46,6 +46,12 @@ export function formatRowForPlatform(item, platform) {
     case 'rf123':
       return [csvCell(filename), csvCell(title), csvCell(description), csvCell(keywords)];
 
+    case 'vecteezy':
+      return [csvCell(filename), csvCell(title), csvCell(keywords), csvCell('Standard')];
+
+    case 'magnific':
+      return [csvCell(filename), csvCell(title), csvCell(description), csvCell(keywords)];
+
     case 'custom':
     default:
       return [csvCell(filename), csvCell(title), csvCell(description), csvCell(keywords), csvCell(category)];

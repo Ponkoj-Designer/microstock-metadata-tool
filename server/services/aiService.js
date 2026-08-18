@@ -11,7 +11,7 @@ export const AI_PROVIDERS = {
     name: 'Google Gemini',
     getKeyUrl: 'https://aistudio.google.com/app/apikey',
     placeholder: 'AIzaSy...',
-    defaultModel: 'gemini-2.0-flash'
+    defaultModel: 'gemini-3.5-flash-lite'
   },
   openai: {
     id: 'openai',
@@ -118,7 +118,15 @@ export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Im
   }
 
   const platformObj_effective = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
-  const isShutterstock = (platformObj_effective.id === 'shutterstock' || (platformObj_effective.name && platformObj_effective.name.toLowerCase().includes('shutterstock')));
+  const pId = (platformObj_effective?.id || platformObj_effective?.name || '').toLowerCase();
+  const isAdobe         = pId === 'adobe' || pId.includes('adobestock') || pId.includes('adobe');
+  const isShutterstock  = pId === 'shutterstock' || pId.includes('shutterstock');
+  const isVecteezy      = pId === 'vecteezy' || pId.includes('vecteezy');
+  const isDepositphotos = pId === 'depositphotos' || pId.includes('depositphotos');
+  const is123RF         = pId === 'rf123' || pId === '123rf' || pId.includes('123rf');
+  const isDreamstime    = pId === 'dreamstime' || pId.includes('dreamstime');
+  const isMagnific      = pId === 'magnific' || pId.includes('magnific');
+
   const platformKwMax       = parseInt(platformObj_effective.keywordMax, 10) || 49;
   const effectiveKwMax      = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
   const effectiveTitleLimit = isShutterstock ? 200 : (settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj_effective.titleMaxLen, 10) || 70));
@@ -134,27 +142,81 @@ export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Im
 
   let prompt = '';
   if (mode === 'img2prompt' || mode === 'img2prompt-photo') {
-    prompt = `You are a world-class AI image prompt engineer specializing in copyright-safe photography prompts.
-Analyze this image and generate a master AI photo prompt for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
-CRITICAL COPYRIGHT & TRADEMARK SAFETY: NEVER reference real people's names, brand names, trademarks, copyrighted characters, or specific copyrighted locations. Describe VISUAL CHARACTERISTICS ONLY using generic descriptors.
+    prompt = `You are a world-class AI Image Prompt Engineer specializing in commercial-safe, microstock-friendly, original AI image prompts for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
+
+CRITICAL VISUAL ANALYSIS & GENERATION RULES (MUST FOLLOW):
+1. VISUAL ANALYSIS:
+   - Thoroughly analyze the reference image for: subject, composition, lighting, color palette, mood, style, camera angle, and visual concept.
+2. ORIGINAL & UNIQUE CREATION (NON-REPETITIVE):
+   - Create a NEW and UNIQUE generation prompt inspired by the visual concept, NOT a copy or reproduction.
+   - Every generated image must contain unique and non-repetitive visual elements.
+   - Never generate duplicate, cloned, repeated, mirrored, or unnecessarily identical objects, icons, patterns, decorations, or design elements.
+   - Each main object must have its own unique shape, position, angle, detail, and visual characteristics.
+   - Avoid repetitive layouts and predictable duplication.
+   - If multiple similar objects are necessary, make each one visibly different in size, orientation, shape, position, or details.
+   - Do not repeat the same design element more than necessary.
+   - The final prompt should encourage one-of-a-kind, non-duplicated elements while preserving the original concept.
+   - Always prioritize: ORIGINAL + UNIQUE + COMMERCIAL-SAFE + MICROSTOCK-FRIENDLY.
+3. COPYRIGHT & TRADEMARK SAFETY:
+   - NEVER include or reproduce logos, brand names, trademarks, copyrighted characters, famous artwork, protected designs, or recognizable branded products.
+   - Do NOT identify or imitate a specific artist, photographer, designer, or living creator's exact style.
+   - NEVER add brand names, trademark names, copyrighted character names, or unnecessary references to existing works.
+4. GENERIC DESCRIPTORS FOR PEOPLE & OBJECTS:
+   - If a recognizable person appears, describe generic visual characteristics (e.g. "young adult woman with curly hair", "elderly man with gray beard") instead of identifying or reproducing that person.
+   - Replace protected elements with original, generic alternatives while preserving the overall concept and commercial usefulness.
+5. MICROSTOCK SUITABILITY & CLEAN COMPOSITION:
+   - Prioritize originality, visual variety, clean composition, and commercial microstock usability.
+   - Make the final prompt suitable for commercial/microstock use and designed to minimize copyright, trademark, similarity, and infringement risks.
+
 Respond STRICTLY with a valid JSON object matching this schema:
 {
-  "title": "Copyright-safe master photo prompt: subject + lighting + composition + mood + camera style (no names/brands)",
+  "title": "Original, unique, non-duplicated master prompt: subject + composition + lighting + color atmosphere + mood + camera style (no names/brands)",
   "description": "Detailed breakdown: visual elements, color palette, depth of field, lens characteristics, atmosphere. No brand names or real people.",
   "keywords": ["25-35 visual modifier keywords", "photography style", "lighting terms", "composition tags", "camera/lens terms"],
   "category": "Photography genre (e.g. Portrait Photography, Landscape Photography, Street Photography, Commercial Photography)"
 }`;
   } else if (mode === 'img2prompt-video') {
-    prompt = `You are a world-class AI video prompt engineer specializing in copyright-safe cinematic video prompts.
-Analyze this image/frame and generate a master AI video prompt for Sora, Runway ML Gen-3, Pika Labs, Kling AI, and Stable Video Diffusion.
-CRITICAL COPYRIGHT & TRADEMARK SAFETY: NEVER reference real people's names, brand names, trademarks, copyrighted characters, or specific copyrighted locations. Describe VISUAL & MOTION CHARACTERISTICS ONLY using generic descriptors.
-CRITICAL NO VOICE / NO AUDIO: STRICTLY NO VOICE, NO SPEECH, NO DIALOGUE, NO NARRATION, NO SOUND EFFECTS, NO AUDIO, and NO MUSIC. Visual-only prompt.
+    prompt = `You are a world-class AI Video Prompt Engineer specializing in commercial-safe, microstock-friendly, silent AI video prompts for Sora, Runway Gen-3, Pika Labs, Kling AI, and Stable Video Diffusion.
+
+CRITICAL VISUAL & MOTION RULES (MUST FOLLOW):
+1. ORIGINAL & UNIQUE VIDEO CONCEPT:
+   - Create an ORIGINAL, commercially safe video concept based on the reference's subject, composition, motion dynamics, lighting, and visual idea.
+   - Make the scene visually unique, dynamic, and commercially usable for microstock.
+   - Always prioritize: ORIGINAL + UNIQUE + COMMERCIAL-SAFE + MICROSTOCK-FRIENDLY.
+2. STRICT COPYRIGHT & TRADEMARK SAFETY:
+   - NEVER reproduce copyrighted characters, logos, trademarks, branded products, famous people, or protected designs.
+   - Replace protected or recognizable elements with generic, copyright-free descriptions.
+3. ABSOLUTELY NO AUDIO / SILENT VIDEO ONLY (MANDATORY):
+   - NEVER include voice, dialogue, narration, speech, lyrics, music, sound effects, ambient audio, or any other audio references.
+   - Every video prompt MUST explicitly specify: "silent video, no audio, no voice, no dialogue, no music, no sound effects."
+   - Focus only on visuals, camera movement (pan, dolly, tracking, zoom, orbit), subject movement, environment, lighting, optics, and cinematic details.
+
 Respond STRICTLY with a valid JSON object matching this schema:
 {
-  "title": "Copyright-safe, silent visual-only master VIDEO prompt: subject + motion/action + camera movement (pan/zoom/dolly/orbit) + lighting + environment + mood + color grade (strictly no voice/sound/music)",
-  "description": "Scene visual composition, motion dynamics, visual progression over time, color palette, atmospheric visual effects, camera lens style, final frame state. Strictly no voice, dialogue, or sound.",
+  "title": "Original, copyright-safe, silent master VIDEO prompt: subject + visual motion/action + camera movement + lighting + environment + mood + cinematic grade. Must specify: silent video, no audio, no voice, no dialogue, no music, no sound effects.",
+  "description": "Scene visual composition, motion dynamics, visual progression over time, color palette, atmospheric visual effects, camera lens style, final frame state. Strictly silent/visual-only without any audio.",
   "keywords": ["25-35 video visual modifier keywords", "motion style", "camera technique", "visual effects", "color grading", "mood/atmosphere", "cinematic style"],
   "category": "Video genre (e.g. Cinematic B-Roll, Aerial Footage, Timelapse, Slow Motion, Animation, Motion Graphics, Documentary Style)"
+}`;
+  } else if (isAdobe) {
+    prompt = `You are a world-renowned Microstock SEO Specialist and Adobe Stock Contributor Metadata Expert.
+Generate **OFFICIAL ADOBE STOCK-OPTIMIZED, TOP-RANKING METADATA** engineered for maximum commercial visibility and buyer conversion.
+
+=== ADOBE STOCK SEO ALGORITHM RULES ===
+1. VISUAL ANALYSIS FIRST: Analyze main subject, secondary elements, concept, style (photo/vector/3D/illustration), composition, colors, and commercial search intent.
+2. CRITICAL FIRST 10 KEYWORDS: Adobe Stock weighs the FIRST 10 KEYWORDS most heavily. Keywords 1-5 MUST be primary subject, core theme, and asset format. Keywords 6-10 must be primary visual traits and colors.
+3. REMAINING KEYWORDS: Exactly ${kwTarget} unique keywords. Prioritize high-search-potential buyer queries ONLY when genuinely relevant. Never keyword-stuff or invent details. Put strongest terms first.
+4. FRONT-LOADED COMMERCIAL TITLE: Max ${effectiveTitleLimit} characters. Front-load top commercial keywords in the first 3-5 words.
+5. COMMERCIAL DESCRIPTION: 1-2 natural, informative sentences for Google Image SEO.
+6. PLATFORM CATEGORY: Select single best category from: [${categoryOptions}].
+
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Front-Loaded Commercial Title",
+  "description": "Natural commercial description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
 }`;
   } else if (isShutterstock) {
     prompt = `You are a world-renowned Microstock SEO Specialist & Shutterstock Contributor Metadata Expert.
@@ -162,34 +224,121 @@ Generate **OFFICIAL SHUTTERSTOCK-COMPLIANT, HIGH-CONVERTING COMMERCIAL METADATA*
 
 SHUTTERSTOCK OFFICIAL RULES:
 1. FILENAME: "${filename}".
-2. DESCRIPTION (STRICT LIMIT: MAXIMUM 200 CHARACTERS IN ENGLISH): A unique, detailed commercial description in English. Front-load top commercial keywords in the first 3-5 words. Must be <= 200 chars.
+2. DESCRIPTION (STRICT LIMIT: MAXIMUM 200 CHARACTERS IN ENGLISH): A unique, detailed factual description in English. Front-load top commercial keywords in the first 3-5 words. Must be <= 200 chars.
 3. TITLE: Same commercial title matching description (max 200 chars).
-4. KEYWORDS: Exactly ${kwTarget} unique high-traffic English keywords. Top 5-10 carry 80% search algorithm weight.
-5. CATEGORY: Select ONE or TWO exact categories from this official list: [${categoryOptions}]. If two, separate by comma (e.g. "Nature, Animals/Wildlife").
+4. KEYWORDS: Exactly ${kwTarget} unique high-traffic English keywords (7 to 50). Top 5-10 carry 80% search algorithm weight. Prioritize precise, specific search terms and avoid spam/trademarks. Put strongest terms first.
+5. CATEGORY: Select ONE or TWO exact categories from this official list: [${categoryOptions}]. If two, separate by comma.
 
 Respond STRICTLY with a valid JSON object matching this schema:
 {
   "filename": "${filename}",
-  "title": "Commercial Title (max 200 chars)",
+  "title": "Factual Commercial Title (max 200 chars)",
   "description": "Detailed unique description in English (strictly max 200 characters)",
   "keywords": ["keyword1", "keyword2", ...],
   "category": "PrimaryCategory, SecondaryCategory"
 }`;
-  } else {
-    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert for ${platformObj_effective.name}, Adobe Stock, Shutterstock, Freepik, and Vecteezy.
-Generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** engineered to rank on Page 1 for high-volume buyer searches.
+  } else if (isVecteezy) {
+    prompt = `You are a world-renowned Graphic Design & Vector SEO Specialist for Vecteezy.
+Generate **HIGH-DISCOVERABILITY VECTEEZY METADATA** optimized for vector, illustration, and graphic design search intent.
 
-STRICT MICROSTOCK SEO RULES:
-1. TITLE: Front-load the highest search volume commercial keywords in the FIRST 3-5 WORDS. Format: [Subject] + [Medium/Vector/Photo] + [Action/Theme] + [Composition]. Max ${effectiveTitleLimit} chars. Never use generic filler words.
-2. FIRST 5-10 KEYWORDS: Crucial algorithm ranking weight. Keywords 1-5 MUST be primary subject, core theme & format ("vector", "background", "technology", etc). Keywords 6-10 must be main visual attributes and colors.
-3. REMAINING KEYWORDS: Exactly ${kwTarget} unique high-traffic buyer queries including objects, commercial uses ("banner", "template", "graphic design"), vector terms ("illustration", "svg", "eps", "scalable", "isolated") if vector, and synonyms. All lowercase, strictly unique.
-4. DESCRIPTION: 1-2 informative commercial sentences for Google Image SEO.
-5. CATEGORY: Select single best matching category from: [${categoryOptions}].
+VECTEEZY RULES:
+1. CRITICAL FIRST 5 KEYWORDS: Vecteezy prioritizes the FIRST 5 KEYWORDS heavily. Keywords 1-5 MUST be primary subject, asset type ("vector", "icon", "illustration", "template"), and primary theme.
+2. RELEVANT KEYWORDS: Generate around 20–30 strong keywords (target ${kwTarget}). Include vector terms if applicable. Put strongest search terms first.
+3. TITLE: Front-load primary subject and asset type (max ${effectiveTitleLimit} chars).
+4. CATEGORY: Select category from: [${categoryOptions}].
 
 Respond STRICTLY with a valid JSON object matching this schema:
 {
-  "title": "High-Converting Front-Loaded Commercial Title",
-  "description": "Natural commercial visual summary",
+  "filename": "${filename}",
+  "title": "Front-Loaded Vector Title",
+  "description": "Clear graphic summary and usage description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+  } else if (isDepositphotos) {
+    prompt = `You are a professional Microstock Metadata Specialist for Depositphotos.
+Generate **ACCURATE, HIGH-RANKING DEPOSITPHOTOS METADATA** with natural descriptive titles and strong searchable keywords.
+
+DEPOSITPHOTOS RULES:
+1. NATURAL DESCRIPTIVE TITLE: Max ${effectiveTitleLimit} chars front-loading key search terms.
+2. STRONG SEARCHABLE KEYWORDS: Exactly ${kwTarget} keywords ordered by importance from primary subject to contextual attributes. Put strongest terms first.
+3. DESCRIPTION & CATEGORY: Natural descriptive sentences. Category from: [${categoryOptions}].
+
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Natural Descriptive Commercial Title",
+  "description": "Informative and natural English description",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+  } else if (is123RF) {
+    prompt = `You are a professional Microstock SEO Specialist for 123RF.
+Generate **COMMERCIALLY OPTIMIZED 123RF METADATA** with clear commercial search intent and high-volume relevant keywords.
+
+123RF RULES:
+1. COMMERCIAL TITLE: Max ${effectiveTitleLimit} chars with core subject in first 3-5 words.
+2. KEYWORDS: Exactly ${kwTarget} high-volume keywords front-loaded by search volume and commercial intent.
+3. DESCRIPTION & CATEGORY: Category from: [${categoryOptions}].
+
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Commercial Search Title",
+  "description": "Accurate commercial description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+  } else if (isDreamstime) {
+    prompt = `You are a professional Microstock Metadata Specialist for Dreamstime.
+Generate **DISCOVERABILITY-OPTIMIZED DREAMSTIME METADATA** with relevant, descriptive, commercially useful keywords.
+
+DREAMSTIME RULES:
+1. DESCRIPTIVE TITLE: Clear descriptive image name/title (max ${effectiveTitleLimit} chars).
+2. COMMERCIALLY USEFUL KEYWORDS: Exactly ${kwTarget} keywords ordered logically from primary subject to visual details and synonyms. Put strongest terms first.
+3. DESCRIPTION & CATEGORY: Category from: [${categoryOptions}].
+
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Descriptive Image Title",
+  "description": "Detailed visual description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+  } else if (isMagnific) {
+    prompt = `You are an AI Art & Visual Content Metadata Specialist for Magnific.
+Generate **CONCISE, DESCRIPTIVE, SEO-FRIENDLY METADATA** focused on the actual visual content and aesthetic characteristics.
+
+MAGNIFIC RULES:
+1. CONCISE TITLE: Descriptive title capturing the visual aesthetics and subject (max ${effectiveTitleLimit} chars).
+2. VISUAL KEYWORDS: Exactly ${kwTarget} visual descriptors, style tags, lighting, atmosphere, and aesthetic modifiers. Put strongest terms first.
+3. DESCRIPTION & CATEGORY: Category from: [${categoryOptions}].
+
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Concise Descriptive Visual Title",
+  "description": "Detailed aesthetic breakdown in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category Name"
+}`;
+  } else {
+    // General / Universal Microstock
+    prompt = `You are a world-renowned Microstock SEO Specialist & Commercial Metadata Ranking Expert across all major stock marketplaces.
+Generate **BALANCED, TOP-RANKING UNIVERSAL MICROSTOCK METADATA** engineered for maximum discoverability across all major stock agencies.
+
+UNIVERSAL MICROSTOCK SEO RULES:
+1. TITLE: Front-load highest search volume commercial keywords in FIRST 3-5 WORDS. Max ${effectiveTitleLimit} chars.
+2. FIRST 5-10 KEYWORDS: Keywords 1-5 MUST be primary subject, core theme & format. Keywords 6-10 must be main visual attributes and colors.
+3. REMAINING KEYWORDS: Exactly ${kwTarget} unique buyer queries including objects, commercial uses, vector terms if applicable, and synonyms. Put strongest search terms first.
+4. DESCRIPTION & CATEGORY: Category from: [${categoryOptions}].
+
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Front-Loaded Commercial Title",
+  "description": "Natural commercial visual summary in English",
   "keywords": ["keyword1", "keyword2", ...],
   "category": "Selected Category Name"
 }`;

@@ -143,14 +143,49 @@ function buildGenerationPrompt({ platformObj, kwTarget, titleLimit, categoryOpti
   let prompt = '';
   const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
 
-  if (mode === 'img2prompt') {
-    prompt = `You are a world-class AI art prompt engineer and visual taxonomist.
-Analyze this visual asset accurately and generate a hyper-detailed, high-converting master AI prompt for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
-STRICT INSTRUCTIONS:
-- Title: A vivid, comprehensive master prompt describing the primary subject, environment, lighting, composition, mood, and exact art style.
-- Description: A detailed breakdown of visual elements, color palette, lighting atmosphere, and texture details.
-- Keywords: 25-35 high-value visual modifier keywords, art style tags, lighting terms, and composition tags.
-- Category: The artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art, Concept Art).`;
+  if (mode === 'img2prompt' || mode === 'img2prompt-photo') {
+    prompt = `You are a world-class AI image prompt engineer specializing in copyright-safe, commercially usable AI-generated photography prompts.
+Analyze this photograph or image and generate a hyper-detailed, high-converting master AI prompt for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
+
+CRITICAL COPYRIGHT & TRADEMARK SAFETY RULES (MUST FOLLOW):
+- NEVER reference any real person's name, celebrity, public figure, actor, musician, athlete, or politician.
+- NEVER reference any brand name, logo, trademark, product name, or company name (e.g. no Nike, Apple, Coca-Cola, etc.).
+- NEVER reference any copyrighted character, fictional character from movies/TV/games, or franchise IP.
+- NEVER reference any specific landmark that may have architectural copyright (use generic descriptions instead, e.g. "iconic arch bridge" not a specific bridge name).
+- NEVER reference any song title, book title, movie title, or other copyrighted creative work.
+- Instead, describe VISUAL CHARACTERISTICS ONLY: shapes, colors, textures, lighting, composition, mood, atmosphere, and generic subject types.
+- Replace any recognizable person with generic descriptors: "young adult woman", "elderly man with beard", "athletic male figure", etc.
+- Replace branded items with generic descriptions: "red athletic shoes", "glass smartphone", "luxury sedan".
+
+STRICT OUTPUT INSTRUCTIONS:
+- Title: A vivid, copyright-safe master prompt describing the primary subject, environment, lighting, composition, mood, camera settings, and exact photography style. Use cinematic or photographic terminology.
+- Description: A detailed breakdown of visual elements, color palette, lighting atmosphere, depth of field, lens characteristics, and texture details. No brand names or real people.
+- Keywords: 25-35 high-value visual modifier keywords covering: photography style, lighting terms, composition tags, color descriptors, mood/atmosphere, and camera/lens terms.
+- Category: The photography genre (e.g. Portrait Photography, Landscape Photography, Street Photography, Commercial Photography, Macro Photography, Aerial Photography).`;
+  } else if (mode === 'img2prompt-video') {
+    prompt = `You are a world-class AI video prompt engineer specializing in copyright-safe, commercially usable AI-generated video prompts.
+Analyze this image/frame and generate a hyper-detailed, high-converting master AI video prompt for Sora, Runway ML Gen-3, Pika Labs, Kling AI, and Stable Video Diffusion.
+
+CRITICAL COPYRIGHT & TRADEMARK SAFETY RULES (MUST FOLLOW):
+- NEVER reference any real person's name, celebrity, public figure, actor, musician, athlete, or politician.
+- NEVER reference any brand name, logo, trademark, product name, or company name.
+- NEVER reference any copyrighted character, fictional character from movies/TV/games, or franchise IP.
+- NEVER reference any specific location by its trademarked/copyrighted name; use generic visual descriptors only.
+- NEVER reference any film, TV show, or media franchise stylistically in a way that implies reproduction.
+- Instead, describe VISUAL CHARACTERISTICS ONLY: motion dynamics, camera movement, lighting progression, color grading, environment type, subject behavior, and cinematic style.
+- Replace any recognizable person with generic descriptors: "young adult woman with flowing hair", "elderly man walking slowly", "child playing".
+- Replace branded items with generic descriptions: "red sports car", "glass-faced smartwatch", "chrome coffee machine".
+
+CRITICAL NO VOICE / NO SOUND / NO AUDIO RULES (MUST FOLLOW):
+- STRICTLY NO VOICE, NO SPEECH, NO DIALOGUE, NO TALKING, NO SINGING, and NO NARRATION / VOICEOVER.
+- STRICTLY NO SOUND EFFECTS, NO BACKGROUND NOISE, NO AMBIENT AUDIO, and NO MUSIC / SOUNDTRACK references.
+- All video prompts MUST BE 100% VISUAL-ONLY (focus strictly on visual motion, camera angles, lighting transitions, physics, and optics).
+
+STRICT OUTPUT INSTRUCTIONS:
+- Title: A vivid, copyright-safe, visual-only master VIDEO prompt describing: subject + visual motion/action + camera movement (pan/zoom/dolly/orbit/tracking) + lighting + environment + mood + color grade + clip duration hint. Completely silent visual description without any sound or voice references.
+- Description: A detailed breakdown of: scene composition, motion dynamics, visual progression over time, color palette, atmospheric visual effects (fog/dust particles), camera lens optics, and final frame state. Strictly no voice, dialogue, or audio.
+- Keywords: 25-35 high-value visual video modifier keywords covering: motion style, camera technique, visual effects, color grading terms, mood/atmosphere, video format tags, and cinematic style descriptors.
+- Category: The video genre (e.g. Cinematic B-Roll, Aerial Footage, Timelapse, Slow Motion, Animation, Motion Graphics, Documentary Style, Commercial Video).`;
   } else if (isShutterstock) {
     prompt = `You are a world-renowned Microstock SEO Specialist and Shutterstock Contributor Metadata Expert.
 Generate **OFFICIAL SHUTTERSTOCK-COMPLIANT, HIGH-CONVERTING COMMERCIAL METADATA** adhering strictly to Shutterstock Contributor specifications:
@@ -226,7 +261,8 @@ export function formatCategoryAndMeta(parsed, platformObj, isVideo, effectiveTit
   const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
   const maxTitleLimit = isShutterstock ? 200 : effectiveTitleLimit;
 
-  let title = (mode === 'img2prompt'
+  const isImg2Prompt = mode === 'img2prompt' || mode === 'img2prompt-photo' || mode === 'img2prompt-video';
+  let title = (isImg2Prompt
     ? String(parsed.title || '')
     : String(parsed.title || '').substring(0, maxTitleLimit)
   ).trim();

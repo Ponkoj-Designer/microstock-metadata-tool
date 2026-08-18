@@ -114,15 +114,28 @@ export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Im
       : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources');
 
   let prompt = '';
-  if (mode === 'img2prompt') {
-    prompt = `You are a world-class AI art prompt engineer and visual taxonomist.
-Analyze this visual asset accurately and generate a hyper-detailed, high-converting master AI prompt for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
+  if (mode === 'img2prompt' || mode === 'img2prompt-photo') {
+    prompt = `You are a world-class AI image prompt engineer specializing in copyright-safe photography prompts.
+Analyze this image and generate a master AI photo prompt for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
+CRITICAL COPYRIGHT & TRADEMARK SAFETY: NEVER reference real people's names, brand names, trademarks, copyrighted characters, or specific copyrighted locations. Describe VISUAL CHARACTERISTICS ONLY using generic descriptors.
 Respond STRICTLY with a valid JSON object matching this schema:
 {
-  "title": "A vivid, comprehensive master prompt describing subject, environment, lighting, composition, mood, art style",
-  "description": "Detailed breakdown of visual elements, color palette, atmosphere, texture",
-  "keywords": ["25-35 visual modifier keywords", "art style tags", "lighting terms"],
-  "category": "Artistic genre/medium (e.g. Photography, 3D Render, Digital Painting, Vector Art)"
+  "title": "Copyright-safe master photo prompt: subject + lighting + composition + mood + camera style (no names/brands)",
+  "description": "Detailed breakdown: visual elements, color palette, depth of field, lens characteristics, atmosphere. No brand names or real people.",
+  "keywords": ["25-35 visual modifier keywords", "photography style", "lighting terms", "composition tags", "camera/lens terms"],
+  "category": "Photography genre (e.g. Portrait Photography, Landscape Photography, Street Photography, Commercial Photography)"
+}`;
+  } else if (mode === 'img2prompt-video') {
+    prompt = `You are a world-class AI video prompt engineer specializing in copyright-safe cinematic video prompts.
+Analyze this image/frame and generate a master AI video prompt for Sora, Runway ML Gen-3, Pika Labs, Kling AI, and Stable Video Diffusion.
+CRITICAL COPYRIGHT & TRADEMARK SAFETY: NEVER reference real people's names, brand names, trademarks, copyrighted characters, or specific copyrighted locations. Describe VISUAL & MOTION CHARACTERISTICS ONLY using generic descriptors.
+CRITICAL NO VOICE / NO AUDIO: STRICTLY NO VOICE, NO SPEECH, NO DIALOGUE, NO NARRATION, NO SOUND EFFECTS, NO AUDIO, and NO MUSIC. Visual-only prompt.
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "title": "Copyright-safe, silent visual-only master VIDEO prompt: subject + motion/action + camera movement (pan/zoom/dolly/orbit) + lighting + environment + mood + color grade (strictly no voice/sound/music)",
+  "description": "Scene visual composition, motion dynamics, visual progression over time, color palette, atmospheric visual effects, camera lens style, final frame state. Strictly no voice, dialogue, or sound.",
+  "keywords": ["25-35 video visual modifier keywords", "motion style", "camera technique", "visual effects", "color grading", "mood/atmosphere", "cinematic style"],
+  "category": "Video genre (e.g. Cinematic B-Roll, Aerial Footage, Timelapse, Slow Motion, Animation, Motion Graphics, Documentary Style)"
 }`;
   } else if (isShutterstock) {
     prompt = `You are a world-renowned Microstock SEO Specialist & Shutterstock Contributor Metadata Expert.

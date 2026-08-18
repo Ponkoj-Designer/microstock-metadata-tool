@@ -232,10 +232,10 @@ function updateAiStatusBadge() {
 
   if (hasApiKey(provider)) {
     badge.innerHTML = `<span class="ai-dot ai-dot-connected"></span> ${providerConfig.name} ON`;
-    badge.className = 'ai-status-badge connected';
+    badge.className = 'ai-status-badge connected hidden md:inline-flex';
   } else {
     badge.innerHTML = `<span class="ai-dot ai-dot-disconnected"></span> AI OFF`;
-    badge.className = 'ai-status-badge disconnected';
+    badge.className = 'ai-status-badge disconnected hidden md:inline-flex';
   }
 }
 
@@ -303,16 +303,28 @@ function updateAuthNav() {
   const user           = getCurrentUser();
 
   if (user && loggedOut && loggedIn) {
+    loggedOut.classList.add('hidden');
+    loggedOut.classList.remove('md:flex');
     loggedOut.style.display = 'none';
-    loggedIn.style.display  = 'flex';
+
+    loggedIn.classList.remove('hidden');
+    loggedIn.classList.add('md:flex');
+    loggedIn.style.display = ''; // Respects md:flex (hidden on mobile, flex on desktop)
+
     if (nameSpan)        nameSpan.textContent = user.fullName || user.email;
     if (planBadge)       planBadge.textContent = (user.plan || 'free').toUpperCase();
     if (creditBadge)     creditBadge.textContent = `⚡ ${user.credits ?? 0} Credits`;
     if (adminBtn)        adminBtn.style.display = user.role === 'admin' ? 'inline-flex' : 'none';
     if (sidebarAdminBtn) sidebarAdminBtn.style.display = user.role === 'admin' ? 'flex' : 'none';
   } else if (loggedOut && loggedIn) {
-    loggedOut.style.display = 'flex';
-    loggedIn.style.display  = 'none';
+    loggedOut.classList.remove('hidden');
+    loggedOut.classList.add('md:flex');
+    loggedOut.style.display = ''; // Respects md:flex (hidden on mobile, flex on desktop)
+
+    loggedIn.classList.add('hidden');
+    loggedIn.classList.remove('md:flex');
+    loggedIn.style.display = 'none';
+
     if (adminBtn)        adminBtn.style.display = 'none';
     if (sidebarAdminBtn) sidebarAdminBtn.style.display = 'none';
   }
@@ -656,9 +668,19 @@ function setDropZoneUploadingState(isUploading, current = 0, total = 0, currentN
     dropZone.classList.remove('dropzone-success');
     const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
 
+    const existingBar = dropZone.querySelector('#upload-progress-fill');
+    if (existingBar) {
+      existingBar.style.width = `${pct}%`;
+      const nameEl = dropZone.querySelector('#upload-current-name');
+      const countEl = dropZone.querySelector('#upload-current-count');
+      if (nameEl) nameEl.textContent = currentName || 'Optimizing size to ~450KB...';
+      if (countEl) countEl.textContent = `${current} / ${total} (${pct}%)`;
+      return;
+    }
+
     dropZone.innerHTML = `
       <div class="relative w-16 h-16 flex items-center justify-center">
-        <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-[#00dbe9] border-r-[#00dbe9] animate-upload-spin-ring"></div>
+        <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-[#00dbe9] border-r-[#db50ff] animate-upload-spin-ring"></div>
         <div class="w-12 h-12 rounded-full bg-[#191c1f] border border-[#00dbe9]/50 flex items-center justify-center animate-upload-pulse">
           <span class="material-symbols-outlined text-[26px] text-[#00dbe9]">cloud_upload</span>
         </div>
@@ -668,11 +690,11 @@ function setDropZoneUploadingState(isUploading, current = 0, total = 0, currentN
           <span>Compressing & Uploading ${total} File${total === 1 ? '' : 's'}...</span>
         </h2>
         <div class="w-full bg-[#12161c] h-2.5 rounded-full overflow-hidden border border-[#2d3748] mt-1 relative">
-          <div class="bg-gradient-to-r from-[#00dbe9] to-[#34d399] h-full transition-all duration-200 rounded-full" style="width: ${pct}%"></div>
+          <div id="upload-progress-fill" class="bg-gradient-to-r from-[#00dbe9] to-[#db50ff] h-full transition-all duration-300 ease-out rounded-full" style="width: ${pct}%"></div>
         </div>
         <div class="flex justify-between w-full text-[11px] text-on-surface-variant mt-0.5 font-mono">
-          <span class="truncate max-w-[240px] text-[#00dbe9]">${currentName ? escHtml(currentName) : 'Optimizing size to ~450KB...'}</span>
-          <span>${current} / ${total} (${pct}%)</span>
+          <span id="upload-current-name" class="truncate max-w-[240px] text-[#00dbe9]">${currentName ? escHtml(currentName) : 'Optimizing size to ~450KB...'}</span>
+          <span id="upload-current-count">${current} / ${total} (${pct}%)</span>
         </div>
       </div>
       <p class="text-[10px] font-bold text-outline uppercase tracking-wider">Fast-Track AI Compression Active</p>
@@ -2360,6 +2382,18 @@ function setupEventListeners() {
   document.getElementById('sidebar-mode-img2prompt')?.addEventListener('click', () => switchAppMode('img2prompt'));
 
   // Image to Prompt event listeners
+  renderImg2PromptTypeToggle(); // initialize toggle state on load
+
+  // Delegated click for the Photo/Video type toggle (works after drop-zone re-renders)
+  document.getElementById('img2prompt-drop-zone')?.addEventListener('click', (e) => {
+    const typeBtn = e.target.closest('.img2prompt-type-btn');
+    if (typeBtn) {
+      e.stopPropagation();
+      img2promptState.promptType = typeBtn.dataset.type;
+      renderImg2PromptTypeToggle();
+    }
+  });
+
   document.getElementById('btn-browse-img2prompt')?.addEventListener('click', (e) => {
     e.stopPropagation();
     document.getElementById('img2prompt-file-input')?.click();
@@ -2370,6 +2404,11 @@ function setupEventListeners() {
     e.target.value = ''; // reset for re-selection
   });
   document.getElementById('btn-generate-all-img2prompt')?.addEventListener('click', () => {
+    if (img2promptState.isProcessing) {
+      img2promptState.stopBatch = true;
+      showToast('Stopping prompt generation...', 'warning');
+      return;
+    }
     processImg2PromptQueue();
   });
   document.getElementById('btn-copy-all-img2prompt')?.addEventListener('click', () => {
@@ -2383,6 +2422,9 @@ function setupEventListeners() {
     showToast(`Copied ${readyItems.length} prompts to clipboard!`, 'success');
   });
   document.getElementById('btn-clear-img2prompt')?.addEventListener('click', () => {
+    if (img2promptState.isProcessing) {
+      img2promptState.stopBatch = true;
+    }
     img2promptState.items.forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
     img2promptState.items = [];
     renderImg2PromptCards();
@@ -2395,6 +2437,18 @@ function setupEventListeners() {
       if (item && item.prompt) {
         navigator.clipboard.writeText(item.prompt);
         showToast(`Copied prompt for ${item.name}!`, 'success');
+      }
+      return;
+    }
+
+    const retryBtn = e.target.closest('.btn-retry-single-prompt');
+    if (retryBtn) {
+      const item = img2promptState.items.find(i => i.id === retryBtn.dataset.id);
+      if (item) {
+        item.status = 'waiting';
+        item.error = null;
+        renderImg2PromptCards();
+        processImg2PromptQueue();
       }
       return;
     }
@@ -2643,7 +2697,8 @@ function initAiSettingsModal() {
     closeModal(document.getElementById('modal-ai-settings'));
   });
 
-  selectAiProvider('gemini');
+  const initialProvider = getActiveProvider() || 'gemini';
+  selectAiProvider(initialProvider);
 }
 
 function selectAiProvider(providerId) {
@@ -2697,8 +2752,10 @@ function selectAiProvider(providerId) {
 
   // Update Status Indicator
   if (hasApiKey(providerId)) {
+    state.geminiConnected = true;
     updateConnectionStatus('connected');
   } else {
+    state.geminiConnected = false;
     updateConnectionStatus('disconnected');
   }
   updateAiStatusBadge();
@@ -3075,7 +3132,8 @@ function fileToBase64(file) {
 const img2promptState = {
   items: [],
   isProcessing: false,
-  stopBatch: false
+  stopBatch: false,
+  promptType: 'photo'  // 'photo' | 'video'
 };
 
 // Global Clipboard Paste Listener (Ctrl+V for image files)
@@ -3113,17 +3171,13 @@ window.addEventListener('paste', async (e) => {
   }
 
   if (pastedFiles.length > 0) {
-    // If text input is focused, prevent pasting raw data/unwanted text
-    e.preventDefault();
-
     const isImg2Prompt = state.activeAppMode === 'img2prompt' || (document.getElementById('workspace-img2prompt')?.style.display !== 'none');
     if (isImg2Prompt) {
+      e.preventDefault();
       showToast(`Pasted ${pastedFiles.length} image(s) from clipboard!`, 'info');
-      handleImageToPromptUploadBatch(pastedFiles, true);
-    } else {
-      showToast(`Pasted ${pastedFiles.length} image(s) from clipboard into workspace!`, 'info');
-      processFiles(pastedFiles);
+      handleImageToPromptUploadBatch(pastedFiles, false);
     }
+    // If in Metadata mode, image paste is completely disabled.
   }
 });
 
@@ -3149,6 +3203,17 @@ function setImg2PromptDropZoneUploading(isUploading, current = 0, total = 0, cur
     dz.classList.add('dropzone-uploading');
     dz.classList.remove('dropzone-success');
     const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+
+    const existingBar = dz.querySelector('#img2prompt-upload-fill');
+    if (existingBar) {
+      existingBar.style.width = `${pct}%`;
+      const nameEl = dz.querySelector('#img2prompt-current-name');
+      const countEl = dz.querySelector('#img2prompt-current-count');
+      if (nameEl) nameEl.textContent = currentName || 'Optimizing size to ~450KB...';
+      if (countEl) countEl.textContent = `${current} / ${total} (${pct}%)`;
+      return;
+    }
+
     dz.innerHTML = `
       <div class="relative w-16 h-16 flex items-center justify-center">
         <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-[#00dbe9] border-r-[#db50ff] animate-upload-spin-ring"></div>
@@ -3159,11 +3224,11 @@ function setImg2PromptDropZoneUploading(isUploading, current = 0, total = 0, cur
       <div class="flex flex-col items-center gap-1.5 w-full max-w-md px-4">
         <h2 class="text-title-md font-bold text-white">Compressing & Adding ${total} Image${total === 1 ? '' : 's'}...</h2>
         <div class="w-full bg-[#12161c] h-2.5 rounded-full overflow-hidden border border-[#2d3748] mt-1 relative">
-          <div class="bg-gradient-to-r from-[#00dbe9] to-[#db50ff] h-full transition-all duration-200 rounded-full" style="width: ${pct}%"></div>
+          <div id="img2prompt-upload-fill" class="bg-gradient-to-r from-[#00dbe9] to-[#db50ff] h-full transition-all duration-300 ease-out rounded-full" style="width: ${pct}%"></div>
         </div>
         <div class="flex justify-between w-full text-[11px] text-on-surface-variant mt-0.5 font-mono">
-          <span class="truncate max-w-[240px] text-[#00dbe9]">${currentName ? escHtml(currentName) : 'Optimizing size to ~450KB...'}</span>
-          <span>${current} / ${total} (${pct}%)</span>
+          <span id="img2prompt-current-name" class="truncate max-w-[240px] text-[#00dbe9]">${currentName ? escHtml(currentName) : 'Optimizing size to ~450KB...'}</span>
+          <span id="img2prompt-current-count">${current} / ${total} (${pct}%)</span>
         </div>
       </div>
       <input type="file" id="img2prompt-file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.svg">
@@ -3197,6 +3262,27 @@ function setImg2PromptDropZoneSuccess(count = 1) {
   }, 3500);
 }
 
+function renderImg2PromptTypeToggle() {
+  const toggle = document.getElementById('img2prompt-type-toggle');
+  if (!toggle) return;
+  const isPhoto = img2promptState.promptType === 'photo';
+  toggle.innerHTML = `
+    <button id="btn-type-photo" class="img2prompt-type-btn${isPhoto ? ' active' : ''}" data-type="photo" title="Generate AI photo prompts">
+      <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> Photo
+    </button>
+    <button id="btn-type-video" class="img2prompt-type-btn${!isPhoto ? ' active' : ''}" data-type="video" title="Generate AI video prompts">
+      <span class="material-symbols-outlined" style="font-size:16px">videocam</span> Video
+    </button>
+  `;
+  toggle.querySelectorAll('.img2prompt-type-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      img2promptState.promptType = btn.dataset.type;
+      renderImg2PromptTypeToggle();
+    });
+  });
+}
+
 function resetImg2PromptDropZone() {
   const dz = document.getElementById('img2prompt-drop-zone');
   if (!dz) return;
@@ -3205,9 +3291,11 @@ function resetImg2PromptDropZone() {
     <span class="material-symbols-outlined text-[40px] text-primary-fixed-dim">image_search</span>
     <h2 class="text-title-lg font-bold text-on-surface">Image to Prompt</h2>
     <p class="text-xs text-on-surface-variant max-w-[80%] mx-auto">Drop images or vectors here, paste (Ctrl+V), or click to browse. Supported: JPG, PNG, WEBP, SVG.</p>
+    <div id="img2prompt-type-toggle" class="img2prompt-type-toggle"></div>
     <button id="btn-browse-img2prompt" class="bg-primary-fixed-dim text-background px-5 py-2 rounded-lg text-sm font-semibold mt-2 transition-colors group-hover:bg-primary-container">Browse Files</button>
     <input type="file" id="img2prompt-file-input" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.svg">
   `;
+  renderImg2PromptTypeToggle();
   bindImg2PromptFileInput();
 }
 
@@ -3222,7 +3310,7 @@ async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
     return;
   }
 
-  // Clear previous items and generated prompts if requested (e.g. on new paste)
+  // Clear previous items and generated prompts only if explicitly requested
   if (clearPrevious && img2promptState.items.length > 0) {
     img2promptState.items.forEach(i => {
       if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url);
@@ -3233,6 +3321,7 @@ async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
   setImg2PromptDropZoneUploading(true, 0, fileArray.length, 'Optimizing images...');
 
   let processedCount = 0;
+  const currentPromptType = img2promptState.promptType || 'photo';
   const newItems = await Promise.all(fileArray.map(async file => {
     const compressed = await compressImageFile(file);
     const useFile = (compressed && compressed.size < file.size) ? compressed : file;
@@ -3247,6 +3336,7 @@ async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
       size: file.size,
       url: URL.createObjectURL(useFile),
       status: 'waiting',
+      promptType: currentPromptType,
       prompt: null,
       error: null
     };
@@ -3254,8 +3344,10 @@ async function handleImageToPromptUploadBatch(files, clearPrevious = false) {
 
   img2promptState.items.push(...newItems);
   renderImg2PromptCards();
-
   setImg2PromptDropZoneSuccess(newItems.length);
+
+  // Auto-start parallel generation immediately on upload/paste
+  processImg2PromptQueue();
 }
 
 async function processImg2PromptQueue() {
@@ -3274,108 +3366,109 @@ async function processImg2PromptQueue() {
     return;
   }
 
-  const itemsToProcess = img2promptState.items.filter(i => i.status === 'waiting');
-  if (!itemsToProcess.length) return;
+  const hasWaiting = img2promptState.items.some(i => i.status === 'waiting');
+  if (!hasWaiting) return;
 
   img2promptState.isProcessing = true;
   img2promptState.stopBatch = false;
   state.stopBatch = false;
   state.activeBatchAbortController = new AbortController();
   const promptSignal = state.activeBatchAbortController.signal;
-  const promptBtn = document.getElementById('btn-generate-all-img2prompt');
-  setBtnLoading(promptBtn, true, '<span class="ai-action-spinner" aria-hidden="true"></span><span>Generating Prompts...</span>');
-  promptBtn?.classList.add('ai-action-running');
-  showAiWorkspaceOverlay({ mode: 'prompt', total: itemsToProcess.length });
+  
   renderImg2PromptCards();
 
-  try {
-    let completedPrompts = 0;
-    for (const item of itemsToProcess) {
+  const processSingleItem = async (item) => {
+    try {
+      const fileExt = ((item.name || item.file?.name || '').split('.').pop() || '').toLowerCase();
+      const optimized = await optimizeImageForAi(item.file, fileExt);
+      const base64Image = optimized.base64;
+      const mimeType = optimized.mimeType || 'image/jpeg';
+
+      const platformSpec = PLATFORMS.general || {
+        id: 'general', name: 'General',
+        keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
+      };
+
+      const itemMode = (item.promptType || img2promptState.promptType) === 'video' ? 'img2prompt-video' : 'img2prompt-photo';
+      const key = getSessionKey(provider);
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        signal: promptSignal,
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ai-provider': provider,
+          'x-ai-api-key': key,
+          'x-gemini-api-key': key
+        },
+        body: JSON.stringify({
+          provider,
+          apiKey: key,
+          base64Image,
+          mimeType,
+          filename: item.name,
+          platform: platformSpec,
+          mode: itemMode
+        })
+      });
+
+      const data = await res.json();
       if (img2promptState.stopBatch || state.stopBatch) {
-        showToast('Prompt generation stopped.', 'warning');
-        break;
+        item.status = 'waiting';
+        item.error = null;
+        item.prompt = null;
+        return;
       }
-      item.status = 'processing';
-      updateAiWorkspaceOverlay(completedPrompts, itemsToProcess.length, `Generating prompt for ${item.name}`);
-      renderImg2PromptCards();
 
-      try {
-        const fileExt = ((item.name || item.file?.name || '').split('.').pop() || '').toLowerCase();
-        const optimized = await optimizeImageForAi(item.file, fileExt);
-        const base64Image = optimized.base64;
-        const mimeType = optimized.mimeType || 'image/jpeg';
+      if (data.ok && data.data) {
+        const d = data.data;
+        const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
 
-        const platformSpec = PLATFORMS.general || {
-          id: 'general', name: 'General',
-          keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
-        };
+        const promptParts = [];
+        if (d.title) promptParts.push(d.title);
+        if (d.description && d.description !== d.title) promptParts.push(d.description);
+        if (d.category && d.category !== 'General') promptParts.push(`Style: ${d.category}`);
+        if (kwStr) promptParts.push(`Visual details: ${kwStr}`);
 
-        const key = getSessionKey(provider);
-        const res = await fetch('/api/ai/generate', {
-          method: 'POST',
-          signal: promptSignal,
-          credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-ai-provider': provider,
-            'x-ai-api-key': key,
-            'x-gemini-api-key': key
-          },
-          body: JSON.stringify({
-            provider,
-            apiKey: key,
-            base64Image,
-            mimeType,
-            filename: item.name,
-            platform: platformSpec,
-            mode: 'img2prompt'
-          })
-        });
-
-        const data = await res.json();
-        if (img2promptState.stopBatch || state.stopBatch) {
-          item.status = 'waiting';
-          item.error = null;
-          item.prompt = null;
-          break;
-        }
-
-        if (data.ok && data.data) {
-          const d = data.data;
-          const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
-
-          const promptParts = [];
-          if (d.title) promptParts.push(d.title);
-          if (d.description && d.description !== d.title) promptParts.push(d.description);
-          if (d.category && d.category !== 'General') promptParts.push(`Style: ${d.category}`);
-          if (kwStr) promptParts.push(`Visual details: ${kwStr}`);
-
-          item.prompt = promptParts.join('. ') + '.';
-          item.status = 'ready';
-          item.error = null;
-        } else {
-          item.status = 'failed';
-          item.error = data.message || 'Generation failed';
-        }
-      } catch (err) {
-        if (img2promptState.stopBatch || state.stopBatch) {
-          item.status = 'waiting';
-          item.error = null;
-          item.prompt = null;
-          break;
-        }
+        item.prompt = promptParts.join('. ') + '.';
+        item.status = 'ready';
+        item.error = null;
+      } else {
         item.status = 'failed';
-        item.error = err.message || 'Image to prompt conversion failed';
+        item.error = data.message || 'Generation failed';
       }
-
-      completedPrompts++;
-      updateAiWorkspaceOverlay(
-        completedPrompts,
-        itemsToProcess.length,
-        completedPrompts === itemsToProcess.length ? 'Finishing up...' : `${itemsToProcess.length - completedPrompts} remaining...`
-      );
+    } catch (err) {
+      if (img2promptState.stopBatch || state.stopBatch) {
+        item.status = 'waiting';
+        item.error = null;
+        item.prompt = null;
+        return;
+      }
+      item.status = 'failed';
+      item.error = err.message || 'Image to prompt conversion failed';
+    } finally {
       renderImg2PromptCards();
     }
+  };
+
+  // Run 2 parallel concurrent workers simultaneously
+  const CONCURRENCY = 2;
+  const worker = async () => {
+    while (!img2promptState.stopBatch && !state.stopBatch) {
+      // Synchronously reserve next waiting item
+      const item = img2promptState.items.find(i => i.status === 'waiting');
+      if (!item) break;
+
+      item.status = 'processing';
+      renderImg2PromptCards();
+
+      await processSingleItem(item);
+    }
+  };
+
+  try {
+    const workers = Array.from({ length: CONCURRENCY }, () => worker());
+    await Promise.all(workers);
   } finally {
     img2promptState.items.forEach(i => {
       if (i.status === 'processing' && (img2promptState.stopBatch || state.stopBatch)) {
@@ -3385,9 +3478,6 @@ async function processImg2PromptQueue() {
       }
     });
     img2promptState.isProcessing = false;
-    setBtnLoading(promptBtn, false);
-    promptBtn?.classList.remove('ai-action-running');
-    hideAiWorkspaceOverlay();
     renderImg2PromptCards();
   }
 }
@@ -3406,22 +3496,33 @@ function renderImg2PromptCards() {
   }
 
   wrapper.style.display = 'block';
-  if (titleEl) titleEl.textContent = `Generated Prompts (${img2promptState.items.length} ${img2promptState.items.length === 1 ? 'image' : 'images'})`;
+
+  const waitingCount = img2promptState.items.filter(i => i.status === 'waiting').length;
+  const processingCount = img2promptState.items.filter(i => i.status === 'processing').length;
+  const readyCount = img2promptState.items.filter(i => i.status === 'ready').length;
+
+  if (titleEl) {
+    if (img2promptState.isProcessing) {
+      titleEl.innerHTML = `Generated Prompts <span class="text-xs font-normal text-cyan-400 ml-2 animate-pulse">● Processing (${readyCount}/${img2promptState.items.length} done, ${waitingCount} queued)...</span>`;
+    } else {
+      titleEl.textContent = `Generated Prompts (${img2promptState.items.length} ${img2promptState.items.length === 1 ? 'image' : 'images'})`;
+    }
+  }
 
   const btnGenerateAll = document.getElementById('btn-generate-all-img2prompt');
-  const hasWaiting = img2promptState.items.some(i => i.status === 'waiting');
   if (btnGenerateAll) {
     if (img2promptState.isProcessing) {
       btnGenerateAll.style.display = 'inline-flex';
-      btnGenerateAll.innerHTML = '<span class="ai-action-spinner" aria-hidden="true"></span><span>Generating Prompts...</span>';
+      btnGenerateAll.innerHTML = `<span class="ai-action-spinner" aria-hidden="true"></span><span>Generating (${processingCount + waitingCount} in queue) — Stop</span>`;
       btnGenerateAll.classList.add('ai-action-running');
-      btnGenerateAll.disabled = true;
-    } else if (hasWaiting) {
+      btnGenerateAll.disabled = false;
+      btnGenerateAll.title = "Click to stop prompt generation";
+    } else if (waitingCount > 0) {
       btnGenerateAll.style.display = 'inline-flex';
-      const waitingCount = img2promptState.items.filter(i => i.status === 'waiting').length;
       btnGenerateAll.innerHTML = `<span class="material-symbols-outlined text-[20px]">bolt</span> Generate Prompts (${waitingCount})`;
       btnGenerateAll.classList.remove('ai-action-running');
       btnGenerateAll.disabled = false;
+      btnGenerateAll.title = "Start generating prompts for waiting items";
     } else {
       btnGenerateAll.style.display = 'none';
       btnGenerateAll.classList.remove('ai-action-running');
@@ -3433,6 +3534,12 @@ function renderImg2PromptCards() {
     const isProcessing = item.status === 'processing';
     const isReady = item.status === 'ready';
     const isFailed = item.status === 'failed';
+    const isWaiting = item.status === 'waiting';
+
+    const isVideo = (item.promptType || 'photo') === 'video';
+    const typeBadge = isVideo
+      ? `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">🎬 Video</span>`
+      : `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">📷 Photo</span>`;
 
     let statusBadgeHtml;
     if (isProcessing) {
@@ -3442,19 +3549,21 @@ function renderImg2PromptCards() {
     } else if (isFailed) {
       statusBadgeHtml = `<span class="status-tag status-failed">✕ Failed</span>`;
     } else {
-      statusBadgeHtml = `<span class="status-tag status-waiting">Waiting</span>`;
+      statusBadgeHtml = `<span class="status-tag status-waiting">In Queue</span>`;
     }
 
     let promptContentHtml;
     if (isProcessing) {
-      promptContentHtml = `<span class="img2prompt-analyzing">Analyzing image visual features &amp; engineering detailed AI prompt <span class="loading-dots"><span></span><span></span><span></span></span></span>`;
+      promptContentHtml = `<span class="img2prompt-analyzing">Analyzing ${isVideo ? 'video' : 'photo'} visual features &amp; engineering detailed AI prompt <span class="loading-dots"><span></span><span></span><span></span></span></span>`;
     } else if (isFailed) {
       promptContentHtml = `<span style="color:var(--accent-rose)">Error: ${escHtml(item.error || 'Failed to generate prompt')}</span>`;
+    } else if (isWaiting) {
+      promptContentHtml = `<span style="color:var(--text-muted);font-style:italic">Waiting in generation queue...</span>`;
     } else {
       promptContentHtml = escHtml(item.prompt || 'No prompt generated');
     }
 
-    const cardStateClass = isProcessing ? ' is-processing' : (isReady ? ' is-ready' : (isFailed ? ' is-failed' : ''));
+    const cardStateClass = isProcessing ? ' is-processing' : (isReady ? ' is-ready' : (isFailed ? ' is-failed' : ' is-waiting'));
 
     return `<div class="img2prompt-card glass-panel${cardStateClass}" data-id="${item.id}" style="padding:16px;background:rgba(21, 32, 54, 0.88)">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap">
@@ -3464,12 +3573,17 @@ function renderImg2PromptCards() {
           </div>
           <div>
             <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);word-break:break-all">${escHtml(item.name)}</div>
-            <div style="font-size:0.725rem;color:var(--text-muted)">${(item.size / 1048576).toFixed(2)} MB</div>
+            <div style="font-size:0.725rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:2px">
+              <span>${(item.size / 1048576).toFixed(2)} MB</span>
+              <span>•</span>
+              ${typeBadge}
+            </div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           ${statusBadgeHtml}
           ${isReady ? `<button class="btn btn-secondary btn-sm btn-copy-single-prompt" data-id="${item.id}">📋 Copy</button>` : ''}
+          ${isFailed ? `<button class="btn btn-secondary btn-sm btn-retry-single-prompt" data-id="${item.id}">🔄 Retry</button>` : ''}
           <button class="btn btn-icon-only btn-sm btn-remove-prompt" data-id="${item.id}" title="Remove">🗑️</button>
         </div>
       </div>

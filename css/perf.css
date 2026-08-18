@@ -171,3 +171,19 @@ img[loading="lazy"] {
 .sidebar-slider:hover::-webkit-slider-thumb {
   will-change: transform;
 }
+
+/* ── 15. Upload Animation Smoothness & Hardware Acceleration ─────────────── */
+.animate-upload-spin-ring,
+.animate-upload-pulse,
+.animate-success-check {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+#upload-progress-fill,
+#img2prompt-upload-fill {
+  will-change: width;
+  transform: translateZ(0);
+}
+

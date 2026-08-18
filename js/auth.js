@@ -9,8 +9,29 @@
  * This file never touches the token directly — it just calls the API.
  */
 
-// ── In-memory session state (cleared on page refresh, restored by checkAuthState) ──
-let _currentUser = null;
+// ── Persistent (localStorage) + In-memory session state ──────────────────────
+function getSavedUser() {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('pk_auth_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveUser(user) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (user) {
+      localStorage.setItem('pk_auth_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('pk_auth_user');
+    }
+  } catch (_) {}
+}
+
+let _currentUser = getSavedUser();
 
 export function getCurrentUser() { return _currentUser; }
 export function isLoggedIn()     { return !!_currentUser; }
@@ -18,9 +39,10 @@ export function isLoggedIn()     { return !!_currentUser; }
 /**
  * Called on page load — asks the server if the browser's cookie is valid.
  * Returns the user object if authenticated, or null if not.
- * Silently degrades to null if the backend is unreachable.
+ * Preserves cached user if server is temporarily unreachable.
  */
 export async function checkAuthState() {
+  _currentUser = getSavedUser();
   try {
     const res = await fetch('/api/auth/me', {
       method:      'GET',
@@ -31,14 +53,18 @@ export async function checkAuthState() {
       const data = await res.json();
       if (data.ok && data.user) {
         _currentUser = data.user;
+        saveUser(data.user);
         return data.user;
       }
+    } else if (res.status === 401 || res.status === 403) {
+      _currentUser = null;
+      saveUser(null);
+      return null;
     }
   } catch (_) {
-    // Network error or server not running — treat as not logged in
+    // Network error or local mode — retain cached session from localStorage
   }
-  _currentUser = null;
-  return null;
+  return _currentUser;
 }
 
 /**
@@ -57,6 +83,7 @@ export async function signup({ fullName, email, password }) {
     const data = await res.json();
     if (res.ok && data.ok && data.user) {
       _currentUser = data.user;
+      saveUser(data.user);
       return { ok: true, user: data.user };
     }
     return { ok: false, message: data.message || 'Signup failed. Please try again.' };
@@ -81,6 +108,7 @@ export async function login({ email, password }) {
     const data = await res.json();
     if (res.ok && data.ok && data.user) {
       _currentUser = data.user;
+      saveUser(data.user);
       return { ok: true, user: data.user };
     }
     return { ok: false, message: data.message || 'Login failed. Please try again.' };
@@ -95,6 +123,7 @@ export async function login({ email, password }) {
  */
 export async function logout() {
   _currentUser = null;
+  saveUser(null);
   try {
     await fetch('/api/auth/logout', {
       method:      'POST',

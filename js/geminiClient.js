@@ -48,22 +48,56 @@ export const AI_PROVIDERS_CONFIG = {
   }
 };
 
-// ── In-memory key & provider store (cleared on page refresh) ─────────────
-let _activeProvider = 'gemini';
+// ── Persistent (localStorage) Key & Provider Store ──────────────────────────
+const STORAGE_KEYS = {
+  activeProvider: 'pk_ai_active_provider',
+  keys: 'pk_ai_provider_keys',
+  models: 'pk_ai_provider_models'
+};
+
+function loadStoredData() {
+  if (typeof localStorage === 'undefined') return { activeProvider: 'gemini', keys: {}, models: {} };
+  try {
+    const active = localStorage.getItem(STORAGE_KEYS.activeProvider);
+    const keysStr = localStorage.getItem(STORAGE_KEYS.keys);
+    const modelsStr = localStorage.getItem(STORAGE_KEYS.models);
+    return {
+      activeProvider: active || 'gemini',
+      keys: keysStr ? JSON.parse(keysStr) : {},
+      models: modelsStr ? JSON.parse(modelsStr) : {}
+    };
+  } catch (_) {
+    return { activeProvider: 'gemini', keys: {}, models: {} };
+  }
+}
+
+const _initialData = loadStoredData();
+
+let _activeProvider = _initialData.activeProvider || 'gemini';
 let _providerKeys = {
-  gemini: null,
-  openrouter: null,
-  openai: null
+  gemini: _initialData.keys?.gemini || null,
+  openrouter: _initialData.keys?.openrouter || null,
+  openai: _initialData.keys?.openai || null
 };
 let _selectedModels = {
-  gemini: 'gemini-2.5-flash',
-  openrouter: 'google/gemini-2.5-flash',
-  openai: 'gpt-4o-mini'
+  gemini: _initialData.models?.gemini || 'gemini-2.5-flash',
+  openrouter: _initialData.models?.openrouter || 'google/gemini-2.5-flash',
+  openai: _initialData.models?.openai || 'gpt-4o-mini'
 };
+
+function saveStorage() {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.activeProvider, _activeProvider);
+    localStorage.setItem(STORAGE_KEYS.keys, JSON.stringify(_providerKeys));
+    localStorage.setItem(STORAGE_KEYS.models, JSON.stringify(_selectedModels));
+  } catch (_) {}
+}
 
 export function setAiProvider(provider) {
   if (AI_PROVIDERS_CONFIG[provider]) {
     _activeProvider = provider;
+    saveStorage();
   }
 }
 
@@ -73,6 +107,7 @@ export function getActiveProvider() {
 
 export function setProviderModel(modelId, provider = _activeProvider) {
   _selectedModels[provider] = modelId;
+  saveStorage();
 }
 
 export function getProviderModel(provider = _activeProvider) {
@@ -81,6 +116,7 @@ export function getProviderModel(provider = _activeProvider) {
 
 export function setApiKey(key, provider = _activeProvider) {
   _providerKeys[provider] = key ? key.trim() : null;
+  saveStorage();
 }
 
 export function hasApiKey(provider = _activeProvider) {
@@ -90,6 +126,7 @@ export function hasApiKey(provider = _activeProvider) {
 
 export function clearApiKey(provider = _activeProvider) {
   _providerKeys[provider] = null;
+  saveStorage();
 }
 
 export function getSessionKey(provider = _activeProvider) {

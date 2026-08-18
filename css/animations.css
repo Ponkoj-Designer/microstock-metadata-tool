@@ -472,6 +472,32 @@ tr.row-processing td:first-child::after {
   background: rgba(17, 20, 23, 0.88) !important;
 }
 
+.img2prompt-card.is-waiting {
+  opacity: 0.82;
+  border-color: rgba(59, 73, 75, 0.45) !important;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.img2prompt-card.is-waiting:hover {
+  opacity: 1;
+  border-color: rgba(0, 219, 233, 0.2) !important;
+}
+
+.btn-retry-single-prompt {
+  font-size: 0.75rem !important;
+  padding: 4px 10px !important;
+  background: rgba(0, 219, 233, 0.1) !important;
+  color: #00dbe9 !important;
+  border: 1px solid rgba(0, 219, 233, 0.3) !important;
+  border-radius: 6px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-retry-single-prompt:hover {
+  background: rgba(0, 219, 233, 0.2) !important;
+}
+
 @keyframes scanLine {
   0%   { opacity: 0; transform: translateX(-100%); }
   20%  { opacity: 1; }
@@ -795,3 +821,63 @@ tr.row-processing select {
     transition-duration:      0.01ms !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   IMG2PROMPT — Photo / Video type toggle
+   ══════════════════════════════════════════════════════════════════════════ */
+.img2prompt-type-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  background: rgba(13, 16, 19, 0.72);
+  border: 1px solid rgba(59, 73, 75, 0.7);
+  border-radius: 10px;
+  padding: 3px;
+  margin-top: 4px;
+  margin-bottom: 2px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+.img2prompt-type-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: rgba(180, 196, 200, 0.75);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 2;
+}
+
+.img2prompt-type-btn:hover:not(.active) {
+  background: rgba(0, 219, 233, 0.08);
+  color: rgba(200, 220, 224, 0.9);
+}
+
+.img2prompt-type-btn.active {
+  background: linear-gradient(135deg, rgba(0, 219, 233, 0.18), rgba(219, 80, 255, 0.14));
+  color: #00dbe9;
+  box-shadow: 0 1px 8px rgba(0, 219, 233, 0.18), inset 0 0 0 1px rgba(0, 219, 233, 0.25);
+}
+
+.img2prompt-type-btn[data-type="video"].active {
+  color: #db50ff;
+  background: linear-gradient(135deg, rgba(219, 80, 255, 0.18), rgba(0, 219, 233, 0.1));
+  box-shadow: 0 1px 8px rgba(219, 80, 255, 0.18), inset 0 0 0 1px rgba(219, 80, 255, 0.25);
+}
+
+.img2prompt-type-btn .material-symbols-outlined {
+  pointer-events: none;
+  line-height: 1;
+}
+

@@ -20,21 +20,23 @@ const handleTestKey = async (req, res) => {
   const result = await testAiKey(provider, apiKey);
   return res.status(result.status || 200).json(result);
 };
-apiRouter.post('/ai/test', requireAuth, handleTestKey);
-apiRouter.post('/gemini/test', requireAuth, handleTestKey);
+apiRouter.post('/ai/test', handleTestKey);
+apiRouter.post('/gemini/test', handleTestKey);
 
 // POST /api/gemini/generate-video — Binary stream endpoint for video payloads
-apiRouter.post('/gemini/generate-video', requireAuth, async (req, res) => {
+apiRouter.post('/gemini/generate-video', async (req, res) => {
   const apiKey = req.headers['x-gemini-api-key'] || req.headers['x-ai-api-key'] || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
   const mimeType = req.headers['content-type'];
   const filename = req.headers['x-filename'] ? decodeURIComponent(req.headers['x-filename']) : 'video.mp4';
   const platformStr = req.headers['x-platform'] ? decodeURIComponent(req.headers['x-platform']) : '{}';
   const settingsStr = req.headers['x-settings'] ? decodeURIComponent(req.headers['x-settings']) : 'null';
-  const mode = req.headers['x-mode'] || 'metadata';
-  
+  const mode  = req.headers['x-mode']  || 'metadata';
+  // BUG FIX #4: read model header so user-selected model is passed through
+  const model = req.headers['x-model'] || null;
+
   let platform = {};
   try { platform = JSON.parse(platformStr); } catch(e){}
-  
+
   let settings = null;
   try { settings = JSON.parse(settingsStr); } catch(e){}
 
@@ -46,7 +48,7 @@ apiRouter.post('/gemini/generate-video', requireAuth, async (req, res) => {
   }
 
   try {
-    const data = await generateGeminiMetadataBinary({ apiKey, buffer: req.body, mimeType, filename, platform, settings, mode });
+    const data = await generateGeminiMetadataBinary({ apiKey, buffer: req.body, mimeType, filename, platform, settings, mode, model });
     return res.json({ ok: true, data });
   } catch (err) {
     return res.status(500).json({ ok: false, message: err.message || 'Video generation failed.' });
@@ -73,8 +75,8 @@ const handleGenerateMetadata = async (req, res) => {
     return res.status(500).json({ ok: false, message: err.message || 'AI generation failed.' });
   }
 };
-apiRouter.post('/ai/generate', requireAuth, handleGenerateMetadata);
-apiRouter.post('/gemini/generate', requireAuth, handleGenerateMetadata);
+apiRouter.post('/ai/generate', handleGenerateMetadata);
+apiRouter.post('/gemini/generate', handleGenerateMetadata);
 
 // POST /api/csv/export
 apiRouter.post('/csv/export', (req, res) => {

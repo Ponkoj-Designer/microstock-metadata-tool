@@ -72,19 +72,26 @@ export async function submitManualPayment({ userId, plan: planId, amount, paymen
     if (!error && data) {
       paymentRecord.id = data.id;
     } else {
+      // BUG FIX #1: Properly await fallback Supabase calls so errors surface correctly.
       // Fallback: update subscriptions to pending and log audit transaction
-      await db.from('subscriptions').upsert({
+      const subResult = await db.from('subscriptions').upsert({
         user_id: userId,
         plan: plan.id,
         status: 'pending'
       });
+      if (subResult.error) {
+        console.warn('[PaymentService] Fallback subscription upsert failed:', subResult.error.message);
+      }
 
-      await db.from('credit_transactions').insert({
+      const txnResult = await db.from('credit_transactions').insert({
         user_id: userId,
         amount: 0,
         type: 'purchase',
         description: `MANUAL_PAYMENT_PENDING [${method.toUpperCase()}] Sender: ${senderNumber} | TrxID: ${trx_id_format(trxId)} | Plan: ${plan.id.toUpperCase()} | Amount: ৳${numAmount}`
       });
+      if (txnResult.error) {
+        console.warn('[PaymentService] Fallback credit_transactions insert failed:', txnResult.error.message);
+      }
 
       fallbackPaymentsStore.set(paymentRecord.id, {
         ...paymentRecord,
@@ -222,6 +229,15 @@ export async function rejectManualPaymentAdmin(paymentId, adminNotes = '') {
 
   if (!payment) {
     throw new Error('Payment submission record not found.');
+  }
+
+  // BUG FIX #8: Guard against double-rejection (mirrors the approved guard in approveManualPaymentAdmin)
+  if (payment.status === 'rejected') {
+    throw new Error('This payment submission has already been rejected.');
+  }
+
+  if (payment.status === 'approved') {
+    throw new Error('This payment has already been approved and cannot be rejected.');
   }
 
   // Update status to rejected

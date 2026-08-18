@@ -23,7 +23,7 @@ export async function runBatchQueue({
   onItemDone,
   onProgress,
   shouldStop,
-  concurrencyLimit = 2
+  concurrencyLimit = 4
 }) {
   const total = items.length;
   if (total === 0) return;
@@ -32,12 +32,7 @@ export async function runBatchQueue({
   let index = 0;
   let globalPausePromise = null;
 
-  async function worker(workerId) {
-    // Stagger worker start to avoid synchronized request bursts
-    if (workerId > 0) {
-      await new Promise(r => setTimeout(r, workerId * 350));
-    }
-
+  async function worker() {
     while (index < total) {
       if (shouldStop && shouldStop()) break;
       if (globalPausePromise) await globalPausePromise;
@@ -49,7 +44,7 @@ export async function runBatchQueue({
       onItemStart && onItemStart(item, i);
 
       let attempts = 0;
-      const maxAttempts = 4;
+      const maxAttempts = 2;
       let lastErr = null;
       let result = null;
 
@@ -86,23 +81,20 @@ export async function runBatchQueue({
             lowerMsg.includes('rate limit') ||
             lowerMsg.includes('quota') ||
             lowerMsg.includes('429') ||
-            lowerMsg.includes('resource_exhausted') ||
-            lowerMsg.includes('too many requests')
+            lowerMsg.includes('resource_exhausted')
           );
 
           if (isRateLimit) {
             if (!globalPausePromise) {
-              console.warn('[BatchProcessor] Rate limit / quota limit encountered. Backing off for 4s...');
-              globalPausePromise = new Promise(resolve => setTimeout(resolve, 4000));
+              console.warn('[BatchProcessor] Rate limit encountered. Brief 1.5s backoff...');
+              globalPausePromise = new Promise(resolve => setTimeout(resolve, 1500));
               globalPausePromise.then(() => { globalPausePromise = null; });
             }
             await globalPausePromise;
           }
 
           if (attempts < maxAttempts) {
-            // Exponential backoff: 2s, 4s, 7s...
-            const delayMs = Math.min(10000, Math.pow(2, attempts) * 1000 + Math.floor(Math.random() * 500));
-            await new Promise(r => setTimeout(r, delayMs));
+            await new Promise(r => setTimeout(r, 600));
           }
         }
       }
@@ -115,16 +107,13 @@ export async function runBatchQueue({
 
       completed++;
       onProgress && onProgress(completed, total);
-
-      // Brief gentle delay between items to avoid hammering the AI endpoints
-      await new Promise(r => setTimeout(r, 200));
     }
   }
 
-  const activeConcurrency = Math.max(1, Math.min(concurrencyLimit || 2, total));
+  const activeConcurrency = Math.max(1, Math.min(concurrencyLimit || 4, total));
   const workers = [];
   for (let w = 0; w < activeConcurrency; w++) {
-    workers.push(worker(w));
+    workers.push(worker());
   }
   await Promise.all(workers);
 }

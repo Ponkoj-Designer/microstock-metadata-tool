@@ -253,8 +253,39 @@
     <!-- SideNavBar -->
     <aside class="fixed left-0 top-[68px] w-[280px] md:w-[375px] h-[calc(100vh-68px)] bg-[#191c1f] border-r border-[#3b494b] overflow-y-auto flex flex-col z-40 transition-transform duration-300 transform -translate-x-full md:translate-x-0" id="sidebar">
       
+      <!-- Mobile/Sidebar User Account & Auth Section -->
+      <div id="sidebar-auth-section" class="px-4 pt-3 pb-2 border-b border-[#3b494b]/60 mb-2">
+        <!-- Logged-Out State -->
+        <div id="sidebar-logged-out" class="flex flex-col gap-2">
+          <button type="button" id="sidebar-btn-login" class="w-full flex items-center justify-center gap-2 py-2 px-3.5 rounded-lg bg-[#00dbe9]/10 border border-[#00dbe9]/40 hover:bg-[#00dbe9]/20 text-[#00dbe9] text-xs font-bold transition-all cursor-pointer">
+            <span class="material-symbols-outlined text-[18px]">login</span>
+            <span>Login / Sign Up</span>
+          </button>
+        </div>
+
+        <!-- Logged-In State -->
+        <div id="sidebar-logged-in" class="hidden flex-col gap-2">
+          <div class="flex items-center justify-between bg-[#161c24] border border-[#2d3748] rounded-xl p-2.5">
+            <div class="flex items-center gap-2.5 overflow-hidden">
+              <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-[#00dbe9] to-[#db50ff] p-[1px] shrink-0">
+                <div class="w-full h-full rounded-full bg-[#191c1f] flex items-center justify-center text-xs font-bold text-[#00dbe9]">
+                  <span class="material-symbols-outlined text-[16px]">person</span>
+                </div>
+              </div>
+              <div class="flex flex-col min-w-0">
+                <span id="sidebar-user-name" class="text-xs font-bold text-white truncate max-w-[140px]">User</span>
+                <span id="sidebar-user-credits" class="text-[10px] text-[#00dbe9] font-mono font-semibold">⚡ 10 Credits</span>
+              </div>
+            </div>
+            <button type="button" id="sidebar-user-logout-top" class="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer" title="Logout">
+              <span class="material-symbols-outlined text-[18px]">logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Minimal Theme-Colored API Key Button -->
-      <div class="px-4 mt-4 mb-3">
+      <div class="px-4 mt-1 mb-3">
         <button type="button" id="sidebar-btn-add-api" class="w-full flex items-center justify-between py-2 px-3.5 rounded-lg bg-[#161c24] border border-[#00dbe9]/35 hover:border-[#00dbe9] hover:bg-[#00dbe9]/10 text-cyan-400 text-xs font-semibold shadow-sm hover:shadow-[0_0_14px_rgba(0,219,233,0.18)] transition-all cursor-pointer group">
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-[17px] text-[#00dbe9] group-hover:rotate-12 transition-transform">vpn_key</span>

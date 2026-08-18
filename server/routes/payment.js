@@ -21,8 +21,9 @@ paymentRouter.get('/plans', (req, res) => {
       number: MANUAL_PAYMENT_NUMBER,
       methods: ['bKash', 'Nagad'],
       type: 'Personal (Send Money / Cash In)',
-      proPrice: 150,
-      businessPrice: 300
+      // BUG FIX #7: Read prices from PLANS config instead of hardcoded values
+      proPrice:      PLANS.pro.price,
+      businessPrice: PLANS.business.price
     }
   });
 });

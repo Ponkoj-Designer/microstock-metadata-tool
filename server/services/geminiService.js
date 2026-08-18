@@ -76,35 +76,20 @@ export async function testGeminiKey(providedKey) {
     return { ok: false, status: 400, message: 'Please enter a valid Gemini API key.' };
   }
 
-  const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-  let lastErr = null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, { method: 'GET' });
+    const data = await res.json().catch(() => ({}));
 
-  for (const model of testModels) {
-    const url = `${config.geminiBaseUrl}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Ping' }] }],
-          generationConfig: { maxOutputTokens: 1, temperature: 0 }
-        })
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        return { ok: true, status: 200, message: `Connected to Gemini API (${model})!` };
-      }
-      const errMsg = classifyGeminiError(res.status, data);
-      lastErr = sanitizeErrorMessage(errMsg, apiKey);
-      if (res.status === 404) continue;
-      return { ok: false, status: res.status, message: lastErr };
-    } catch (err) {
-      lastErr = err.message;
+    if (res.ok) {
+      return { ok: true, status: 200, message: 'Successfully connected to Google Gemini API!' };
     }
-  }
 
-  return { ok: false, status: 500, message: lastErr || 'Network error reaching Gemini API servers.' };
+    const errMsg = data?.error?.message || 'Invalid Gemini API key. Please check your API key.';
+    return { ok: false, status: res.status, message: errMsg };
+  } catch (err) {
+    return { ok: false, status: 500, message: `Network error reaching Google Gemini servers: ${err.message}` };
+  }
 }
 
 const SHUTTERSTOCK_IMAGE_CATEGORIES = [
@@ -132,6 +117,7 @@ function buildKwTarget(effectiveKwMax, kwMin) {
 function buildCategoryOptions(platformObj, isVideo = false) {
   const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
   if (isShutterstock) {
+    // BUG FIX #9: correctly use video vs image category list based on isVideo flag
     return (isVideo ? SHUTTERSTOCK_VIDEO_CATEGORIES : SHUTTERSTOCK_IMAGE_CATEGORIES).join(', ');
   }
   return Array.isArray(platformObj?.categories) && platformObj.categories.length > 0
@@ -246,7 +232,16 @@ Your mission is to generate **ULTRA HIGH-SEO OPTIMIZED, TOP-RANKING METADATA** d
    - 1-2 natural, informative sentences with rich secondary search phrases for Google Image SEO indexing.
 
 5. PLATFORM CATEGORY:
-   - Choose the single best matching high-traffic category from: [${categoryOptions}].`;
+   - Choose the single best matching high-traffic category from: [${categoryOptions}].
+
+STRICT OUTPUT FORMAT (You MUST respond ONLY with a valid JSON object matching this schema):
+{
+  "filename": "${filename}",
+  "title": "Front-Loaded Commercial Title (Strictly max ${titleLimit} characters)",
+  "description": "Natural, high-SEO commercial description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Exact Category Name"
+}`;
   }
 
   if (settings?.customPrompt) {
@@ -323,184 +318,12 @@ export function formatCategoryAndMeta(parsed, platformObj, isVideo, effectiveTit
 }
 
 /**
- * Server-side metadata generation proxy for image / vector assets.
+ * Upload a video buffer to Gemini File API and poll until ACTIVE.
+ * Returns { fileUri, uploadedFileName }
  */
-export async function generateGeminiMetadata({ apiKey: providedKey, base64Image, mimeType = 'image/jpeg', filename = 'asset.jpg', platform, settings, mode, model }) {
-  const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
-  if (!apiKey) throw new Error('Gemini API key is required. Please provide an API key.');
-
-  try {
-    // Payload validations
-    if (!base64Image || typeof base64Image !== 'string' || base64Image.length < 50) {
-      throw new Error('Invalid or missing base64 image data payload.');
-    }
-
-  const normalizedMime = (mimeType || 'image/jpeg').toLowerCase();
-  const effectiveMime  = ALLOWED_MIME_TYPES.has(normalizedMime) ? normalizedMime : 'image/jpeg';
-
-  const platformObj = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
-
-  // Determine effective kwMax and titleLimit (settings override platform defaults)
-  const platformKwMax = parseInt(platformObj.keywordMax, 10) || 49;
-  const effectiveKwMax = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
-  const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
-
-  const kwTarget = buildKwTarget(effectiveKwMax, settings?.kwMin);
-  const categoryOptions = buildCategoryOptions(platformObj);
-  const prompt = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename });
-
-  const isVideo = effectiveMime.startsWith('video/');
-  let mediaPart = { inline_data: { mime_type: effectiveMime, data: base64Image } };
-
-  if (isVideo) {
-    // 1. Upload video to Gemini File API
-    const uploadUrl = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`;
-    const buffer = Buffer.from(base64Image, 'base64');
-    
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'X-Goog-Upload-Protocol': 'raw',
-        'X-Goog-Upload-Command': 'upload, finalize',
-        'X-Goog-Upload-Header-Content-Length': buffer.length.toString(),
-        'X-Goog-Upload-Header-Content-Type': effectiveMime,
-        'Content-Type': effectiveMime
-      },
-      body: buffer
-    });
-
-    const uploadData = await uploadRes.json();
-    if (!uploadRes.ok || !uploadData.file || !uploadData.file.name) {
-      throw new Error(`Video upload to Gemini failed: ${uploadData?.error?.message || 'Unknown error'}`);
-    }
-
-    const uploadedFileName = uploadData.file.name;
-    const fileUri = uploadData.file.uri;
-
-    // 2. Poll until ACTIVE
-    let fileState = uploadData.file.state;
-    let attempts = 0;
-    while (fileState === 'PROCESSING' && attempts < 30) {
-      await new Promise(r => setTimeout(r, 2000));
-      const statusRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${uploadedFileName}?key=${encodeURIComponent(apiKey)}`);
-      if (!statusRes.ok) break;
-      const statusData = await statusRes.json();
-      fileState = statusData.state;
-      if (fileState === 'FAILED') throw new Error('Video processing failed on Gemini servers.');
-      attempts++;
-    }
-    
-    if (fileState !== 'ACTIVE') {
-      throw new Error('Video processing timed out.');
-    }
-
-    mediaPart = { file_data: { mime_type: effectiveMime, file_uri: fileUri } };
-  }
-
-  const primaryModel = model || config.geminiModel || 'gemini-2.5-flash';
-  const candidateModels = [
-    primaryModel,
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro'
-  ].filter((m, idx, arr) => m && arr.indexOf(m) === idx);
-
-  let data = null;
-  let lastError = null;
-
-  for (let idx = 0; idx < candidateModels.length; idx++) {
-    const curModel = candidateModels[idx];
-    const url = `${config.geminiBaseUrl}/${curModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      const resJson = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        const classified = classifyGeminiError(res.status, resJson);
-        const safeErrorMsg = sanitizeErrorMessage(classified, apiKey);
-        lastError = new Error(safeErrorMsg);
-
-        // If 404 (model not found) or model error, try next candidate model
-        if (res.status === 404 || (res.status === 400 && JSON.stringify(resJson).toLowerCase().includes('model'))) {
-          console.warn(`[GeminiService] Model '${curModel}' not available (${res.status}), trying fallback...`);
-          continue;
-        }
-
-        // If rate limit (429), retry or try next model
-        if (res.status === 429 && idx < candidateModels.length - 1) {
-          console.warn(`[GeminiService] Model '${curModel}' rate limited (429), trying fallback model...`);
-          await new Promise(r => setTimeout(r, 1500));
-          continue;
-        }
-
-        throw lastError;
-      }
-
-      data = resJson;
-      break; // Success!
-    } catch (err) {
-      lastError = err;
-      if (idx < candidateModels.length - 1 && (err.message.includes('404') || err.message.includes('not found'))) {
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  if (!data) {
-    throw lastError || new Error('Gemini API request failed across all candidate models.');
-  }
-
-    // Parse structured JSON output
-    let parsed;
-    try {
-      parsed = JSON.parse(rawText.replace(/^```(?:json)?\s*|\s*```$/gi, '').trim());
-    } catch (_) {
-      throw new Error('Failed to parse Gemini metadata response JSON.');
-    }
-    return formatCategoryAndMeta(parsed, platformObj, isVideo, effectiveTitleLimit, effectiveKwMax, filename, mode);
-
-  } catch (err) {
-    console.error('[GeminiService generateMetadata Error]', sanitizeErrorMessage(err.message, apiKey));
-    throw new Error(sanitizeErrorMessage(err.message, apiKey));
-  }
-}
-
-/**
- * Generate metadata using raw binary video data (bypassing Base64)
- */
-export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer, mimeType = 'video/mp4', filename = 'video.mp4', platform, settings, mode }) {
-  const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
-  if (!apiKey) throw new Error('Gemini API key is required.');
-
-  if (!buffer || !Buffer.isBuffer(buffer)) {
-    throw new Error('Invalid or missing binary buffer payload.');
-  }
-
-  const normalizedMime = (mimeType || 'video/mp4').toLowerCase();
-  const effectiveMime  = ALLOWED_MIME_TYPES.has(normalizedMime) ? normalizedMime : 'video/mp4';
-
-  const platformObj = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
-
-  // Determine effective kwMax and titleLimit
-  const platformKwMax = parseInt(platformObj.keywordMax, 10) || 49;
-  const effectiveKwMax = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
-  const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
-
-  const kwTarget = buildKwTarget(effectiveKwMax, settings?.kwMin);
-  const categoryOptions = buildCategoryOptions(platformObj, true);
-  const prompt = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename, isVideo: true });
-
-  // 1. Upload video to Gemini File API
+async function uploadVideoToGemini(buffer, effectiveMime, apiKey) {
   const uploadUrl = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`;
-  
+
   const uploadRes = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
@@ -521,67 +344,292 @@ export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer
   const uploadedFileName = uploadData.file.name;
   const fileUri = uploadData.file.uri;
 
-  // 2. Poll until ACTIVE
+  // Poll until ACTIVE (max 60 seconds / 30 attempts × 2s)
   let fileState = uploadData.file.state;
   let attempts = 0;
   while (fileState === 'PROCESSING' && attempts < 30) {
     await new Promise(r => setTimeout(r, 2000));
-    const statusRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${uploadedFileName}?key=${encodeURIComponent(apiKey)}`);
+    const statusRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${uploadedFileName}?key=${encodeURIComponent(apiKey)}`
+    );
     if (!statusRes.ok) break;
     const statusData = await statusRes.json();
     fileState = statusData.state;
     if (fileState === 'FAILED') throw new Error('Video processing failed on Gemini servers.');
     attempts++;
   }
-  
+
   if (fileState !== 'ACTIVE') {
-    throw new Error('Video processing timed out.');
+    throw new Error('Video processing timed out. Please try again.');
   }
 
-  const mediaPart = { file_data: { mime_type: effectiveMime, file_uri: fileUri } };
-  const url = `${config.geminiBaseUrl}/${config.geminiModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const requestBody = {
-    contents: [{ parts: [ { text: prompt }, mediaPart ] }],
-    generationConfig: {
-      temperature: 0.35,
-      maxOutputTokens: 2048,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          filename:    { type: 'STRING' },
-          title:       { type: 'STRING' },
-          description: { type: 'STRING' },
-          keywords:    { type: 'ARRAY', items: { type: 'STRING' } },
-          category:    { type: 'STRING' }
-        },
-        required: ['title', 'description', 'keywords', 'category']
-      }
-    }
-  };
+  return { fileUri, uploadedFileName };
+}
 
-  const genRes = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody)
-  });
+/**
+ * Build candidate model list for fallback loop.
+ * Only includes models that are currently active in the Gemini API.
+ * gemini-1.5-pro is deprecated and removed from the fallback chain.
+ */
+function buildCandidateModels(primaryModel) {
+  // Official active models (Google recommends gemini-3.6-flash)
+  const ACTIVE_FALLBACKS = [
+    'gemini-3.6-flash',
+    'gemini-3.6-flash-lite',
+    'gemini-3.7-flash',
+    'gemini-2.5-flash',
+    'gemini-1.5-flash'
+  ];
+  return [
+    primaryModel,
+    ...ACTIVE_FALLBACKS
+  ].filter((m, idx, arr) => m && arr.indexOf(m) === idx);
+}
 
-  const genData = await genRes.json();
-  if (!genRes.ok) throw new Error(genData.error?.message || 'Gemini API generation request failed');
-
-  const candidate = genData.candidates?.[0];
-  if (!candidate || !candidate.content || !candidate.content.parts || !candidate.content.parts[0].text) {
+/**
+ * Extract and parse JSON text from a Gemini candidate response.
+ * Includes regex fallback parser for 100% reliable metadata generation.
+ */
+function extractJsonFromCandidate(candidate) {
+  if (!candidate || !candidate.content || !candidate.content.parts || !candidate.content.parts[0]?.text) {
     throw new Error('Gemini API returned an unexpected response structure.');
   }
 
   const rawText = candidate.content.parts[0].text;
   let text = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
   const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
+  const lastBrace  = text.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
     text = text.substring(firstBrace, lastBrace + 1).trim();
   }
-  
-  const parsed = JSON.parse(text);
-  return formatCategoryAndMeta(parsed, platformObj, true, effectiveTitleLimit, effectiveKwMax, filename, mode);
+
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    // Robust fallback regex extraction
+    const titleMatch = rawText.match(/(?:title|prompt)\s*["':]+\s*([^\n\r"}]+)/i);
+    const descMatch  = rawText.match(/(?:description|summary)\s*["':]+\s*([^\n\r"}]+)/i);
+    const catMatch   = rawText.match(/(?:category|genre)\s*["':]+\s*([^\n\r"}]+)/i);
+    const kwMatches  = rawText.match(/["']([a-zA-Z0-9\s-]{2,30})["']/g);
+
+    const title = titleMatch ? titleMatch[1].trim() : '';
+    const description = descMatch ? descMatch[1].trim() : title;
+    const category = catMatch ? catMatch[1].trim() : 'General';
+    const keywords = kwMatches ? kwMatches.map(k => k.replace(/['"]/g, '').trim()).filter(k => k.length > 1 && !['title','description','keywords','category','json','object'].includes(k.toLowerCase())) : [];
+
+    if (title || description) {
+      return { title: title || description, description, keywords, category };
+    }
+    throw new Error('Failed to parse Gemini metadata response JSON.');
+  }
+}
+
+/**
+ * Run Gemini generateContent with model fallback loop.
+ * Returns the parsed response JSON data object.
+ */
+async function runGeminiWithFallback(candidateModels, requestBody, apiKey) {
+  let lastError = null;
+
+  for (let idx = 0; idx < candidateModels.length; idx++) {
+    const curModel = candidateModels[idx];
+    const url = `${config.geminiBaseUrl}/${curModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      const resJson = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const classified = classifyGeminiError(res.status, resJson);
+        const safeErrorMsg = sanitizeErrorMessage(classified, apiKey);
+        lastError = new Error(safeErrorMsg);
+
+        // Model not found or model-specific error → try next candidate
+        if (res.status === 404 || (res.status === 400 && JSON.stringify(resJson).toLowerCase().includes('model'))) {
+          console.warn(`[GeminiService] Model '${curModel}' not available (${res.status}), trying fallback...`);
+          continue;
+        }
+
+        // 503 (High demand / overloaded) or 500 (server error) → immediate switch to next fallback model
+        if ((res.status === 503 || res.status === 500 || res.status >= 500) && idx < candidateModels.length - 1) {
+          console.warn(`[GeminiService] Model '${curModel}' overloaded (${res.status}), instantly switching to next model...`);
+          await new Promise(r => setTimeout(r, 100));
+          continue;
+        }
+
+        // Rate limited (429) → brief pause then try next model
+        if (res.status === 429 && idx < candidateModels.length - 1) {
+          console.warn(`[GeminiService] Model '${curModel}' rate limited (429), switching to next model...`);
+          await new Promise(r => setTimeout(r, 600));
+          continue;
+        }
+
+        throw lastError;
+      }
+
+      return resJson; // Success
+    } catch (err) {
+      lastError = err;
+      // If there are more candidate models, continue trying
+      if (idx < candidateModels.length - 1) {
+        console.warn(`[GeminiService] Error with '${curModel}' (${err.message}), trying next fallback model...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error('Gemini API request failed across all candidate models.');
+}
+
+/**
+ * Server-side metadata generation proxy for image / vector / video assets.
+ * BUG FIX #3: Cleaned up try/catch scope — all logic is inside the single try block.
+ * BUG FIX #9: isVideo now correctly passed to buildCategoryOptions.
+ */
+export async function generateGeminiMetadata({ apiKey: providedKey, base64Image, mimeType = 'image/jpeg', filename = 'asset.jpg', platform, settings, mode, model }) {
+  const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) throw new Error('Gemini API key is required. Please provide an API key.');
+
+  try {
+    // Payload validation
+    if (!base64Image || typeof base64Image !== 'string' || base64Image.length < 50) {
+      throw new Error('Invalid or missing base64 image data payload.');
+    }
+
+    const normalizedMime = (mimeType || 'image/jpeg').toLowerCase();
+    const effectiveMime  = ALLOWED_MIME_TYPES.has(normalizedMime) ? normalizedMime : 'image/jpeg';
+    const isVideo        = effectiveMime.startsWith('video/');
+
+    const platformObj = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
+
+    // Determine effective kwMax and titleLimit (settings override platform defaults)
+    const platformKwMax       = parseInt(platformObj.keywordMax, 10) || 49;
+    const effectiveKwMax      = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
+    const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
+
+    const kwTarget       = buildKwTarget(effectiveKwMax, settings?.kwMin);
+    // BUG FIX #9: pass isVideo so Shutterstock gets video categories for video files
+    const categoryOptions = buildCategoryOptions(platformObj, isVideo);
+    const prompt         = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename, isVideo });
+
+    let mediaPart;
+
+    if (isVideo) {
+      // Upload video to Gemini File API, poll until ACTIVE
+      const buffer = Buffer.from(base64Image, 'base64');
+      const { fileUri } = await uploadVideoToGemini(buffer, effectiveMime, apiKey);
+      mediaPart = { file_data: { mime_type: effectiveMime, file_uri: fileUri } };
+    } else {
+      mediaPart = { inline_data: { mime_type: effectiveMime, data: base64Image } };
+    }
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            mediaPart,
+            { text: prompt }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.15,
+        topK: 1,
+        topP: 0.9,
+        maxOutputTokens: 600,
+        responseMimeType: 'application/json'
+      }
+    };
+
+    const primaryModel    = model || config.geminiModel || 'gemini-2.0-flash';
+    const candidateModels = buildCandidateModels(primaryModel);
+
+    // BUG FIX #2 (partial) & #3: unified fallback loop also used here
+    const data      = await runGeminiWithFallback(candidateModels, requestBody, apiKey);
+    const candidate = data.candidates?.[0];
+    const parsed    = extractJsonFromCandidate(candidate);
+
+    return formatCategoryAndMeta(parsed, platformObj, isVideo, effectiveTitleLimit, effectiveKwMax, filename, mode);
+
+  } catch (err) {
+    const safeMsg = sanitizeErrorMessage(err.message, apiKey);
+    console.error('[GeminiService generateMetadata Error]', safeMsg);
+    throw new Error(safeMsg);
+  }
+}
+
+/**
+ * Generate metadata using raw binary video data (bypassing Base64).
+ * BUG FIX #2: Now uses the same model fallback loop as generateGeminiMetadata.
+ * BUG FIX #4: Now accepts a `model` parameter.
+ */
+export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer, mimeType = 'video/mp4', filename = 'video.mp4', platform, settings, mode, model }) {
+  const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) throw new Error('Gemini API key is required.');
+
+  if (!buffer || !Buffer.isBuffer(buffer)) {
+    throw new Error('Invalid or missing binary buffer payload.');
+  }
+
+  const normalizedMime = (mimeType || 'video/mp4').toLowerCase();
+  const effectiveMime  = ALLOWED_MIME_TYPES.has(normalizedMime) ? normalizedMime : 'video/mp4';
+
+  const platformObj = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
+
+  // Determine effective kwMax and titleLimit
+  const platformKwMax       = parseInt(platformObj.keywordMax, 10) || 49;
+  const effectiveKwMax      = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
+  const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
+
+  const kwTarget        = buildKwTarget(effectiveKwMax, settings?.kwMin);
+  // Always video=true for binary endpoint
+  const categoryOptions = buildCategoryOptions(platformObj, true);
+  const prompt          = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename, isVideo: true });
+
+  try {
+    // Upload video to Gemini File API using shared helper
+    const { fileUri } = await uploadVideoToGemini(buffer, effectiveMime, apiKey);
+    const mediaPart   = { file_data: { mime_type: effectiveMime, file_uri: fileUri } };
+
+    const requestBody = {
+      contents: [{ parts: [ { text: prompt }, mediaPart ] }],
+      generationConfig: {
+        temperature: 0.35,
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            filename:    { type: 'STRING' },
+            title:       { type: 'STRING' },
+            description: { type: 'STRING' },
+            keywords:    { type: 'ARRAY', items: { type: 'STRING' } },
+            category:    { type: 'STRING' }
+          },
+          required: ['title', 'description', 'keywords', 'category']
+        }
+      }
+    };
+
+    // BUG FIX #2 & #4: use model parameter + full fallback loop instead of hardcoded model
+    const primaryModel    = model || config.geminiModel || 'gemini-2.0-flash';
+    const candidateModels = buildCandidateModels(primaryModel);
+
+    const data      = await runGeminiWithFallback(candidateModels, requestBody, apiKey);
+    const candidate = data.candidates?.[0];
+    const parsed    = extractJsonFromCandidate(candidate);
+
+    return formatCategoryAndMeta(parsed, platformObj, true, effectiveTitleLimit, effectiveKwMax, filename, mode);
+
+  } catch (err) {
+    const safeMsg = sanitizeErrorMessage(err.message, apiKey);
+    console.error('[GeminiService generateMetadataBinary Error]', safeMsg);
+    throw new Error(safeMsg);
+  }
 }

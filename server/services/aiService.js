@@ -11,7 +11,7 @@ export const AI_PROVIDERS = {
     name: 'Google Gemini',
     getKeyUrl: 'https://aistudio.google.com/app/apikey',
     placeholder: 'AIzaSy...',
-    defaultModel: 'gemini-2.5-flash'
+    defaultModel: 'gemini-2.0-flash'
   },
   openai: {
     id: 'openai',
@@ -25,7 +25,7 @@ export const AI_PROVIDERS = {
     name: 'OpenRouter',
     getKeyUrl: 'https://openrouter.ai/keys',
     placeholder: 'sk-or-v1-...',
-    defaultModel: 'google/gemini-2.5-flash'
+    defaultModel: 'openrouter/auto'
   }
 };
 
@@ -73,7 +73,17 @@ export async function testAiKey(provider = 'gemini', apiKey = '') {
 }
 
 /**
- * Universal Metadata Generator supporting Gemini, OpenAI, and OpenRouter
+ * BUG FIX #6: Mirrors geminiService.js buildKwTarget() so kwMin is respected for all providers.
+ */
+function buildKwTarget(effectiveKwMax, kwMin) {
+  if (effectiveKwMax >= 49) return '42 to 47';
+  if (effectiveKwMax >= 40) return `${effectiveKwMax}`;
+  if (kwMin)                return `${kwMin} to ${effectiveKwMax}`;
+  return `5 to ${effectiveKwMax}`;
+}
+
+/**
+ * Universal Metadata Generator supporting Gemini, OpenAI, and OpenRouter.
  */
 export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Image, mimeType = 'image/jpeg', filename = 'asset.jpg', platform, settings, mode, model }) {
   let cleanKey = String(apiKey || '').trim();
@@ -97,18 +107,27 @@ export async function generateAiMetadata({ provider = 'gemini', apiKey, base64Im
     throw new Error('Invalid or missing image payload.');
   }
 
+  // BUG FIX #5: OpenAI and OpenRouter do NOT support video data URIs.
+  // Only Gemini can handle video files (via File API upload).
   const isVideo = (mimeType || '').toLowerCase().startsWith('video/');
+  if (isVideo) {
+    throw new Error(
+      `Video metadata generation is only supported with Google Gemini. ` +
+      `Please switch your AI Engine to Gemini to process video files.`
+    );
+  }
+
   const platformObj_effective = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
   const isShutterstock = (platformObj_effective.id === 'shutterstock' || (platformObj_effective.name && platformObj_effective.name.toLowerCase().includes('shutterstock')));
-  const platformKwMax = parseInt(platformObj_effective.keywordMax, 10) || 49;
-  const effectiveKwMax = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
+  const platformKwMax       = parseInt(platformObj_effective.keywordMax, 10) || 49;
+  const effectiveKwMax      = settings?.kwMax ? parseInt(settings.kwMax, 10) : platformKwMax;
   const effectiveTitleLimit = isShutterstock ? 200 : (settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj_effective.titleMaxLen, 10) || 70));
 
-  const kwTarget = (effectiveKwMax >= 49) ? '42 to 47' : (effectiveKwMax >= 40 ? `${effectiveKwMax}` : `5 to ${effectiveKwMax}`);
+  // BUG FIX #6: use shared buildKwTarget that respects kwMin
+  const kwTarget = buildKwTarget(effectiveKwMax, settings?.kwMin);
+
   const categoryOptions = isShutterstock
-    ? (isVideo
-      ? 'Animals/Wildlife, Arts, Backgrounds/Textures, Buildings/Landmarks, Business/Finance, Education, Food and drink, Healthcare/Medical, Holidays, Industrial, Nature, Objects, People, Religion, Science, Signs/Symbols, Sports/Recreation, Technology, Transportation'
-      : 'Abstract, Animals/Wildlife, Arts, Backgrounds/Textures, Beauty/Fashion, Buildings/Landmarks, Business/Finance, Celebrities, Education, Food and drink, Healthcare/Medical, Holidays, Industrial, Interiors, Miscellaneous, Nature, Objects, Parks/Outdoor, People, Religion, Science, Signs/Symbols, Sports/Recreation, Technology, Transportation, Vintage')
+    ? 'Abstract, Animals/Wildlife, Arts, Backgrounds/Textures, Beauty/Fashion, Buildings/Landmarks, Business/Finance, Celebrities, Education, Food and drink, Healthcare/Medical, Holidays, Industrial, Interiors, Miscellaneous, Nature, Objects, Parks/Outdoor, People, Religion, Science, Signs/Symbols, Sports/Recreation, Technology, Transportation, Vintage'
     : (Array.isArray(platformObj_effective.categories) && platformObj_effective.categories.length > 0
       ? platformObj_effective.categories.join(', ')
       : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources');
@@ -197,6 +216,11 @@ Respond STRICTLY with a valid JSON object matching this schema:
   }
 
   const dataUri = `data:${mimeType || 'image/jpeg'};base64,${base64Image}`;
+
+  // OpenRouter free tier can only afford ~1034 tokens — keep under that limit.
+  // OpenAI has no such restriction, so allow more tokens for richer output.
+  const maxTokens = provider === 'openrouter' ? 900 : 1200;
+
   const requestBody = {
     model: selectedModel,
     messages: [
@@ -209,7 +233,7 @@ Respond STRICTLY with a valid JSON object matching this schema:
       }
     ],
     temperature: 0.3,
-    max_tokens: 1500
+    max_tokens: maxTokens
   };
 
   const res = await fetch(apiUrl, {
@@ -232,7 +256,7 @@ Respond STRICTLY with a valid JSON object matching this schema:
     parsed = JSON.parse(contentText.replace(/^```(?:json)?\s*|\s*```$/gi, '').trim());
   } catch (_) {
     const firstBrace = contentText.indexOf('{');
-    const lastBrace = contentText.lastIndexOf('}');
+    const lastBrace  = contentText.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace > firstBrace) {
       parsed = JSON.parse(contentText.substring(firstBrace, lastBrace + 1));
     } else {
@@ -240,5 +264,5 @@ Respond STRICTLY with a valid JSON object matching this schema:
     }
   }
 
-  return formatCategoryAndMeta(parsed, platformObj_effective, isVideo, effectiveTitleLimit, effectiveKwMax, filename, mode);
+  return formatCategoryAndMeta(parsed, platformObj_effective, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
 }

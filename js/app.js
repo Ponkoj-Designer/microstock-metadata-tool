@@ -5,7 +5,7 @@
 
 import { PLATFORMS } from './platforms.js';
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, optimizeImageForAi, compressImageFile, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
+import { setApiKey, hasApiKey, clearApiKey, clearAllApiKeys, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, optimizeImageForAi, compressImageFile, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
 import { runBatchQueue } from './batchProcessor.js';
 import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
@@ -300,30 +300,56 @@ function updateAuthNav() {
   const creditBadge    = document.getElementById('auth-user-credits-badge');
   const adminBtn       = document.getElementById('btn-admin-panel');
   const sidebarAdminBtn= document.getElementById('btn-sidebar-admin');
+  
+  // Mobile / Sidebar Elements
+  const sidebarLoggedOut = document.getElementById('sidebar-logged-out');
+  const sidebarLoggedIn  = document.getElementById('sidebar-logged-in');
+  const sidebarUserName  = document.getElementById('sidebar-user-name');
+  const sidebarUserCreds = document.getElementById('sidebar-user-credits');
+  const sidebarLogoutBtn = document.getElementById('btn-sidebar-logout');
+  
   const user           = getCurrentUser();
 
-  if (user && loggedOut && loggedIn) {
-    loggedOut.classList.add('hidden');
-    loggedOut.classList.remove('md:flex');
-    loggedOut.style.display = 'none';
+  if (user) {
+    if (loggedOut) {
+      loggedOut.classList.add('hidden');
+      loggedOut.classList.remove('md:flex');
+      loggedOut.style.display = 'none';
+    }
 
-    loggedIn.classList.remove('hidden');
-    loggedIn.classList.add('md:flex');
-    loggedIn.style.display = ''; // Respects md:flex (hidden on mobile, flex on desktop)
+    if (loggedIn) {
+      loggedIn.classList.remove('hidden');
+      loggedIn.classList.add('md:flex');
+      loggedIn.style.display = ''; // Respects md:flex (hidden on mobile, flex on desktop)
+    }
+
+    if (sidebarLoggedOut) sidebarLoggedOut.style.display = 'none';
+    if (sidebarLoggedIn)  sidebarLoggedIn.style.display  = 'flex';
+    if (sidebarUserName)  sidebarUserName.textContent  = user.fullName || user.email;
+    if (sidebarUserCreds) sidebarUserCreds.textContent = `⚡ ${user.credits ?? 0} Credits (${(user.plan || 'free').toUpperCase()})`;
+    if (sidebarLogoutBtn) sidebarLogoutBtn.style.display = 'flex';
 
     if (nameSpan)        nameSpan.textContent = user.fullName || user.email;
     if (planBadge)       planBadge.textContent = (user.plan || 'free').toUpperCase();
     if (creditBadge)     creditBadge.textContent = `⚡ ${user.credits ?? 0} Credits`;
     if (adminBtn)        adminBtn.style.display = user.role === 'admin' ? 'inline-flex' : 'none';
     if (sidebarAdminBtn) sidebarAdminBtn.style.display = user.role === 'admin' ? 'flex' : 'none';
-  } else if (loggedOut && loggedIn) {
-    loggedOut.classList.remove('hidden');
-    loggedOut.classList.add('md:flex');
-    loggedOut.style.display = ''; // Respects md:flex (hidden on mobile, flex on desktop)
+  } else {
+    if (loggedOut) {
+      loggedOut.classList.remove('hidden');
+      loggedOut.classList.add('md:flex');
+      loggedOut.style.display = ''; // Respects md:flex (hidden on mobile, flex on desktop)
+    }
 
-    loggedIn.classList.add('hidden');
-    loggedIn.classList.remove('md:flex');
-    loggedIn.style.display = 'none';
+    if (loggedIn) {
+      loggedIn.classList.add('hidden');
+      loggedIn.classList.remove('md:flex');
+      loggedIn.style.display = 'none';
+    }
+
+    if (sidebarLoggedOut) sidebarLoggedOut.style.display = 'flex';
+    if (sidebarLoggedIn)  sidebarLoggedIn.style.display  = 'none';
+    if (sidebarLogoutBtn) sidebarLogoutBtn.style.display = 'none';
 
     if (adminBtn)        adminBtn.style.display = 'none';
     if (sidebarAdminBtn) sidebarAdminBtn.style.display = 'none';
@@ -917,12 +943,6 @@ async function processFiles(files) {
 async function triggerAiGeneration() {
   if (state.mediaItems.length === 0 || state.isGenerating) return;
 
-  if (!isLoggedIn()) {
-    openAuthModal('login');
-    showToast('Please login or sign up to generate metadata with AI.', 'info');
-    return;
-  }
-
   const provider = getActiveProvider();
   const inputEl = document.getElementById('gemini-api-key-input');
   if (!hasApiKey(provider) && inputEl && inputEl.value.trim()) {
@@ -985,7 +1005,7 @@ async function triggerAiGeneration() {
 
   await runBatchQueue({
     items: toProcess,
-    concurrencyLimit: isVideoBatch ? 1 : 2,
+    concurrencyLimit: isVideoBatch ? 1 : 3,
     shouldStop: () => state.stopBatch,
 
     onItemStart: (item) => {
@@ -1095,11 +1115,6 @@ function retryFailed() {
 }
 
 function regenerateSingleItem(id) {
-  if (!isLoggedIn()) {
-    openAuthModal('login');
-    showToast('Please login or sign up to generate metadata with AI.', 'info');
-    return;
-  }
   const provider = getActiveProvider();
   if (!hasApiKey(provider)) {
     openModal(document.getElementById('modal-ai-settings'));
@@ -2338,11 +2353,11 @@ function setupEventListeners() {
   document.getElementById('nav-btn-sidebar-help')?.addEventListener('click', () => {
     openModal(modal('modal-tutorial'));
   });
-  document.getElementById('btn-sidebar-logout')?.addEventListener('click', async () => {
-    await logout();
-    updateAuthNav();
-    showToast('Logged out successfully', 'info');
+  document.getElementById('sidebar-btn-login')?.addEventListener('click', () => {
+    openAuthModal('login');
   });
+  document.getElementById('sidebar-user-logout-top')?.addEventListener('click', handleLogout);
+  document.getElementById('btn-sidebar-logout')?.addEventListener('click', handleLogout);
   document.getElementById('btn-close-profile-done')?.addEventListener('click', () => {
     closeModal(modal('modal-user-profile'));
   });
@@ -2766,45 +2781,35 @@ function renderStoredKeys(providerId = getActiveProvider()) {
   if (!container) return;
 
   const key = getSessionKey(providerId);
+  const config = AI_PROVIDERS_CONFIG[providerId] || AI_PROVIDERS_CONFIG.gemini;
 
   if (key) {
     const redacted = getRedactedKey(key, providerId);
     container.innerHTML = `
-      <div class="w-full flex items-center justify-between p-3.5 rounded-xl bg-[#161c27] border border-[#262f3d] shadow-sm">
+      <div class="w-full flex items-center justify-between p-3.5 rounded-xl bg-[#161c27] border border-[#00dbe9]/40 shadow-sm">
         <div class="flex items-center gap-3">
           <div class="w-8 h-8 rounded-lg bg-[#00dbe9]/10 border border-[#00dbe9]/30 flex items-center justify-center text-[#00dbe9]">
             <span class="material-symbols-outlined text-[18px]">vpn_key</span>
           </div>
           <div class="flex flex-col text-left">
             <span class="text-xs font-bold text-on-surface font-mono">${escHtml(redacted)}</span>
-            <span class="text-[10px] text-emerald-400 font-medium">● Active in session</span>
+            <span class="text-[10px] text-emerald-400 font-medium">● Connected (${escHtml(config.name)})</span>
           </div>
         </div>
-        <button type="button" id="btn-remove-stored-key" class="text-on-surface-variant hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer" title="Remove key">
+        <button type="button" id="btn-remove-stored-key" class="text-on-surface-variant hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer" title="Disconnect key">
           <span class="material-symbols-outlined text-[18px]">delete</span>
         </button>
       </div>
     `;
 
     document.getElementById('btn-remove-stored-key')?.addEventListener('click', handleClearApiKey);
-  } else if (providerId === 'gemini') {
-    container.innerHTML = `
-      <div class="w-full flex items-center justify-between p-3.5 rounded-xl bg-[#161c27] border border-[#00dbe9]/30 shadow-sm">
-        <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[#00dbe9]/10 border border-[#00dbe9]/30 flex items-center justify-center text-[#00dbe9]">
-            <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
-          </div>
-          <div class="flex flex-col text-left">
-            <span class="text-xs font-bold text-on-surface">Default Server Key</span>
-            <span class="text-[10px] text-emerald-400 font-medium">● Free tier active</span>
-          </div>
-        </div>
-      </div>
-    `;
   } else {
     container.innerHTML = `
-      <span class="material-symbols-outlined text-on-surface-variant/40 text-[36px]">key</span>
-      <span class="text-xs text-on-surface-variant/60 font-medium">No keys found</span>
+      <div class="flex flex-col items-center justify-center py-6 text-center text-on-surface-variant/60">
+        <span class="material-symbols-outlined text-[36px] text-outline mb-1">key_off</span>
+        <span class="text-xs font-semibold text-slate-300">No Key Connected</span>
+        <span class="text-[11px] text-slate-500 mt-0.5">Enter your ${escHtml(config.name)} API key to connect</span>
+      </div>
     `;
   }
 }
@@ -2829,6 +2834,7 @@ async function handleSaveApiKey() {
     const res = await testConnection(key, provider);
 
     if (res.ok) {
+      clearAllApiKeys();
       setApiKey(key, provider);
       input.type = 'password';
       state.geminiConnected = true;
@@ -2985,8 +2991,15 @@ async function handleSignupSubmit(e) {
 
 async function handleLogout() {
   await logout();
+  clearAllApiKeys();
+  state.geminiConnected = false;
+  updateAiStatusBadge();
+  updateConnectionStatus('disconnected');
+  const input = document.getElementById('gemini-api-key-input');
+  if (input) input.value = '';
+  renderStoredKeys(getActiveProvider());
   updateAuthNav();
-  showToast('Logged out successfully.', 'info');
+  showToast('Logged out & API keys disconnected successfully.', 'info');
 }
 
 async function handleProfileSave(e) {
@@ -3406,13 +3419,14 @@ async function processImg2PromptQueue() {
           apiKey: key,
           base64Image,
           mimeType,
-          filename: item.name,
+          filename: item.name || 'image.jpg',
           platform: platformSpec,
-          mode: itemMode
+          mode: itemMode,
+          model: getProviderModel(provider)
         })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ ok: false, message: `Server error (${res.status})` }));
       if (img2promptState.stopBatch || state.stopBatch) {
         item.status = 'waiting';
         item.error = null;
@@ -3436,6 +3450,7 @@ async function processImg2PromptQueue() {
       } else {
         item.status = 'failed';
         item.error = data.message || 'Generation failed';
+        showToast(`✕ Prompt generation failed: ${data.message || 'Error'}`, 'error');
       }
     } catch (err) {
       if (img2promptState.stopBatch || state.stopBatch) {
@@ -3451,8 +3466,8 @@ async function processImg2PromptQueue() {
     }
   };
 
-  // Run 2 parallel concurrent workers simultaneously
-  const CONCURRENCY = 2;
+  // Run 3 parallel concurrent workers simultaneously with safe reservation
+  const CONCURRENCY = 3;
   const worker = async () => {
     while (!img2promptState.stopBatch && !state.stopBatch) {
       // Synchronously reserve next waiting item

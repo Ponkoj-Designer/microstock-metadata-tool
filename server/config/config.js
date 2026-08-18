@@ -3,9 +3,8 @@ export const config = {
   port:         process.env.PORT     || 3000,
   nodeEnv:      process.env.NODE_ENV || 'development',
 
-  // Gemini AI
   geminiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-  geminiModel:   'gemini-2.5-flash',
+  geminiModel:   'gemini-2.0-flash',
 
   // Supabase — set via environment variables, NEVER hardcode keys here
   supabaseUrl:  process.env.SUPABASE_URL                || '',

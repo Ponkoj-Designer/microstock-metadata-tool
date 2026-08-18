@@ -15,10 +15,10 @@ export const AI_PROVIDERS_CONFIG = {
     placeholder: 'AIza...',
     label: 'Add New API Key',
     models: [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recommended - Fastest & High Quality)' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-      { id: 'gemini-1.5-pro',   name: 'Gemini 1.5 Pro (Deep Reasoning)' }
+      { id: 'gemini-3.6-flash',      name: 'Gemini 3.6 Flash (Official Latest & Recommended — Lightning Fast)' },
+      { id: 'gemini-3.6-flash-lite', name: 'Gemini 3.6 Flash-Lite (Ultra Fast, <1s Response)' },
+      { id: 'gemini-3.7-flash',      name: 'Gemini 3.7 Flash (Deep Vision & Reasoning)' },
+      { id: 'gemini-2.5-flash',      name: 'Gemini 2.5 Flash (Fast Fallback)' }
     ]
   },
   openrouter: {
@@ -29,9 +29,11 @@ export const AI_PROVIDERS_CONFIG = {
     placeholder: 'sk-or-v1-...',
     label: 'Add New API Key',
     models: [
-      { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (via OpenRouter)' },
-      { id: 'openai/gpt-4o-mini',       name: 'GPT-4o Mini (via OpenRouter)' },
-      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' }
+      { id: 'openrouter/auto',          name: 'OpenRouter Auto (Smartest Routing for Best Quality)' },
+      { id: 'openrouter/free',          name: 'OpenRouter Free (100% Free Vision & Metadata)' },
+      { id: 'google/gemini-3.7-flash',  name: 'Gemini 3.7 Flash (Best Vision & SEO on OpenRouter)' },
+      { id: 'google/gemini-3.5-flash',  name: 'Gemini 3.5 Flash (High Speed Commercial Metadata)' },
+      { id: 'openai/gpt-4o-mini',       name: 'GPT-4o Mini (Fast & Accurate)' }
     ]
   },
   openai: {
@@ -42,8 +44,8 @@ export const AI_PROVIDERS_CONFIG = {
     placeholder: 'sk-proj-...',
     label: 'Add New API Key',
     models: [
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Fast & Efficient)' },
-      { id: 'gpt-4o',      name: 'GPT-4o (High Precision Vision)' }
+      { id: 'gpt-4o',      name: 'GPT-4o (High Precision Commercial Vision & SEO)' },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Fast, Cheap & Efficient)' }
     ]
   }
 };
@@ -80,8 +82,8 @@ let _providerKeys = {
   openai: _initialData.keys?.openai || null
 };
 let _selectedModels = {
-  gemini: _initialData.models?.gemini || 'gemini-2.5-flash',
-  openrouter: _initialData.models?.openrouter || 'google/gemini-2.5-flash',
+  gemini: _initialData.models?.gemini || 'gemini-2.0-flash',
+  openrouter: _initialData.models?.openrouter || 'google/gemini-2.0-flash-001',
   openai: _initialData.models?.openai || 'gpt-4o-mini'
 };
 
@@ -127,6 +129,15 @@ export function hasApiKey(provider = _activeProvider) {
 export function clearApiKey(provider = _activeProvider) {
   _providerKeys[provider] = null;
   saveStorage();
+}
+
+export function clearAllApiKeys() {
+  _providerKeys = { gemini: null, openrouter: null, openai: null };
+  _activeProvider = 'gemini';
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(STORAGE_KEYS.keys);
+    localStorage.removeItem(STORAGE_KEYS.activeProvider);
+  }
 }
 
 export function getSessionKey(provider = _activeProvider) {
@@ -391,8 +402,8 @@ export async function compressImageFile(file, options = {}) {
     return file;
   }
 
-  const maxDim = options.maxDim || 1600;
-  const quality = options.quality || 0.85;
+  const maxDim = options.maxDim || 1024;
+  const quality = options.quality || 0.80;
 
   try {
     let bitmap;
@@ -400,7 +411,7 @@ export async function compressImageFile(file, options = {}) {
       bitmap = await createImageBitmap(file, {
         resizeWidth: maxDim,
         resizeHeight: maxDim,
-        resizeQuality: 'high'
+        resizeQuality: 'medium'
       });
     } catch (_) {
       bitmap = await createImageBitmap(file);
@@ -421,7 +432,7 @@ export async function compressImageFile(file, options = {}) {
     }
 
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = 'medium';
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(bitmap, 0, 0, w, h);
@@ -440,10 +451,8 @@ export async function compressImageFile(file, options = {}) {
 
 /**
  * Optimizes an image or vector for AI vision consumption.
- * Scales down high-resolution images (DSLR / 4K / 8K / AI gen) to a maximum dimension
- * of ~1600px and compresses as high-fidelity JPEG (0.88 quality).
- * This reduces payload size from 20-50MB down to ~300-600KB without any loss
- * of visual semantic detail for AI vision models (Gemini / OpenAI / Claude).
+ * Scales down to optimal dimension (~1024px) and compresses as lightweight JPEG.
+ * Reduces payload from 20-50MB down to ~120KB for instantaneous processing.
  */
 export async function optimizeImageForAi(input, ext = '') {
   if (!input) throw new Error('No input provided for image optimization.');
@@ -460,10 +469,10 @@ export async function optimizeImageForAi(input, ext = '') {
     } catch (_) {}
   }
 
-  const MAX_DIM = 1600;
+  const MAX_DIM = 1024;
 
   const canvasToJpeg = (canvas) => {
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.80);
     const base64 = dataUrl.split(',')[1];
     return { base64, mimeType: 'image/jpeg' };
   };
@@ -610,7 +619,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
   const key = apiKey || _providerKeys[provider] || getSessionKey(provider) || '';
   const selectedModel = getProviderModel(provider);
 
-  const ext = (item.ext || item.name.split('.').pop()).toLowerCase();
+  const ext = (item.ext || ((item.name || item.file?.name || 'asset.jpg').split('.').pop()) || 'jpg').toLowerCase();
 
   if (!isGeminiAnalyzable(ext)) {
     return {
@@ -631,10 +640,11 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
         'x-ai-provider': provider,
         'x-ai-api-key': key,
         'x-gemini-api-key': key,
-        'x-filename': encodeURIComponent(item.name),
+        'x-filename': encodeURIComponent(item.name || item.file?.name || 'video.mp4'),
         'x-platform': encodeURIComponent(JSON.stringify(platform)),
         'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
-        'x-mode': mode || 'metadata'
+        'x-mode':  mode || 'metadata',
+        'x-model': selectedModel || 'gemini-2.0-flash'
       },
       body: item.file
     }, VIDEO_TIMEOUT_MS);
@@ -662,7 +672,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
       apiKey: key,
       base64Image: base64,
       mimeType,
-      filename: item.name,
+      filename: item.name || item.file?.name || 'asset.jpg',
       platform,
       settings,
       mode,

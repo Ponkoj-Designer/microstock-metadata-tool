@@ -899,8 +899,26 @@ async function processFiles(files) {
   setDropZoneUploadingState(true, 0, accepted.length, 'Optimizing files...');
 
   const BATCH = 5;
+  const THUMB_CONCURRENCY = 3; // max parallel thumbnail creates (createImageBitmap+canvas)
   const newItems = [];
   let processedCount = 0;
+
+  // Semaphore for thumbnail concurrency
+  let _thumbRunning = 0;
+  const _thumbQueue = [];
+  function runWithThumbSemaphore(fn) {
+    return new Promise((resolve, reject) => {
+      const task = () => {
+        _thumbRunning++;
+        fn().then(
+          val => { _thumbRunning--; if (_thumbQueue.length) _thumbQueue.shift()(); resolve(val); },
+          err => { _thumbRunning--; if (_thumbQueue.length) _thumbQueue.shift()(); reject(err); }
+        );
+      };
+      if (_thumbRunning < THUMB_CONCURRENCY) task();
+      else _thumbQueue.push(task);
+    });
+  }
 
   for (let i = 0; i < accepted.length; i += BATCH) {
     // If the user cleared all assets during upload, abort processing immediately
@@ -935,7 +953,9 @@ async function processFiles(files) {
       };
       if (PREVIEWABLE.has(ext)) {
         if (THUMBNAILABLE.has(ext)) {
-          item.url = await createThumbnailUrl(uploadFile) || URL.createObjectURL(uploadFile);
+          // Use semaphore: max 3 simultaneous createImageBitmap+canvas+toBlob ops
+          item.url = await runWithThumbSemaphore(() => createThumbnailUrl(uploadFile)).catch(() => null)
+                     || URL.createObjectURL(uploadFile);
         } else {
           item.url = URL.createObjectURL(uploadFile);
         }
@@ -1089,12 +1109,9 @@ async function triggerAiGeneration() {
     },
 
     onProgress: (completed, total) => {
+      // DOM refs are captured in closure above — no repeated getElementById
       const pct = Math.round((completed / total) * 100);
       const remaining = total - completed;
-      const progressText    = document.getElementById('progress-text');
-      const progressCounter = document.getElementById('progress-stats-counter');
-      const progressPct     = document.getElementById('progress-percent-text');
-      const progressFill    = document.getElementById('progress-fill');
       if (progressText)    progressText.textContent    = `Processing ${completed} of ${total}…`;
       if (progressCounter) progressCounter.textContent = `${completed} / ${total} (${remaining} remaining)`;
       if (progressPct)     progressPct.textContent     = `${pct}%`;
@@ -1182,20 +1199,17 @@ function regenerateSingleItem(id) {
 }
 
 // ─── Render (throttled, RAF-gated, batched) ───────────────────────────────
-// Uses a single queued RAF so multiple synchronous calls in the same tick
-// only trigger ONE render pass. A second rAF frame is used as a read barrier
-// so we never force a synchronous style recalc before the paint.
+// ─── Render (throttled, RAF-gated, batched) ───────────────────────────────
+// Single RAF gate: multiple synchronous calls in the same tick trigger ONE
+// render pass. Using a single rAF is sufficient for non-blocking updates
+// and avoids the extra 16ms latency of the previous double-RAF approach.
 function throttledRender() {
   if (state._renderPending) return;
   state._renderPending = true;
   requestAnimationFrame(() => {
-    // Yield one more frame so any pending layout from the triggering action
-    // is flushed first — prevents forced synchronous layout.
-    requestAnimationFrame(() => {
-      state._renderPending = false;
-      renderMetadata();
-      updateStatsBar();
-    });
+    state._renderPending = false;
+    renderMetadata();
+    updateStatsBar();
   });
 }
 
@@ -1619,13 +1633,19 @@ function setupDetailViewEventDelegation() {
     // Single item CSV download
     const dlSingleBtn = e.target.closest('.btn-download-single-csv');
     if (dlSingleBtn) {
+      if (_isExportingCsv) return;
       const itemId = dlSingleBtn.dataset.id;
       const item = state.mediaItems.find(i => i.id === itemId);
       if (item) {
-        const cleanName = item.name.replace(/\.[^/.]+$/, '');
-        const platformId = state.currentPlatform?.id || 'metadata';
-        downloadCsvFile([item], state.currentPlatform, `${cleanName}_${platformId}.csv`);
-        showToast(`Downloaded CSV for ${item.name}`, 'success');
+        _isExportingCsv = true;
+        try {
+          const cleanName = item.name.replace(/\.[^/.]+$/, '');
+          const platformId = state.currentPlatform?.id || 'metadata';
+          downloadCsvFile([item], state.currentPlatform, `${cleanName}_${platformId}.csv`);
+          showToast(`Downloaded CSV for ${item.name}`, 'success');
+        } finally {
+          setTimeout(() => { _isExportingCsv = false; }, 800);
+        }
       }
       return;
     }
@@ -1695,7 +1715,10 @@ function openCsvPreviewModal() {
   openModal(document.getElementById('modal-csv-preview'));
 }
 
+let _isExportingCsv = false;
+
 function exportCsv() {
+  if (_isExportingCsv) return;
   if (!state.mediaItems.length) { showToast('No assets to export', 'info'); return; }
   const issues = validateBatch(state.mediaItems, state.currentPlatform);
   if (issues.length > 0) {
@@ -1706,9 +1729,15 @@ function exportCsv() {
   }
   const readyItems = state.mediaItems.filter(i => i.status === 'ready');
   if (!readyItems.length) { showToast('No ready assets to export. Generate metadata first.', 'warning'); return; }
-  downloadCsvFile(readyItems, state.currentPlatform);
-  showToast(`Exported CSV for ${state.currentPlatform.name} (${readyItems.length} rows)`, 'success');
-  closeModal(document.getElementById('modal-csv-preview'));
+  
+  _isExportingCsv = true;
+  try {
+    downloadCsvFile(readyItems, state.currentPlatform);
+    showToast(`Exported CSV for ${state.currentPlatform.name} (${readyItems.length} rows)`, 'success');
+    closeModal(document.getElementById('modal-csv-preview'));
+  } finally {
+    setTimeout(() => { _isExportingCsv = false; }, 800);
+  }
 }
 
 // ─── Detail Modal ──────────────────────────────────────────────────────────
@@ -1756,21 +1785,30 @@ function openDetailModal(id) {
   const ti = document.getElementById('detail-title-input');
   const di = document.getElementById('detail-desc-input');
   const ki = document.getElementById('detail-kw-input');
+
+  // State is updated immediately on each keystroke for correctness.
+  // The render is debounced (250ms) to avoid a full DOM re-render per character.
+  let _detailEditRenderTimer = null;
+  const debouncedDetailRender = () => {
+    clearTimeout(_detailEditRenderTimer);
+    _detailEditRenderTimer = setTimeout(() => {
+      _detailCardCache.delete(item.id);
+      throttledRender();
+    }, 250);
+  };
+
   ti.addEventListener('input', () => {
     if (!item.metadata) item.metadata = {};
     item.metadata.title = ti.value;
-    _tableRowCache.delete(item.id); _gridCardCache.delete(item.id); _detailCardCache.delete(item.id);
-    throttledRender();
+    debouncedDetailRender();
   });
   di.addEventListener('input', () => {
     if (item.metadata) item.metadata.description = di.value;
-    _tableRowCache.delete(item.id); _gridCardCache.delete(item.id); _detailCardCache.delete(item.id);
-    throttledRender();
+    debouncedDetailRender();
   });
   ki.addEventListener('input', () => {
     if (item.metadata) item.metadata.keywords = ki.value.split(',').map(k => k.trim()).filter(k => k);
-    _tableRowCache.delete(item.id); _gridCardCache.delete(item.id); _detailCardCache.delete(item.id);
-    throttledRender();
+    debouncedDetailRender();
   });
 
   openModal(document.getElementById('modal-detail'));
@@ -2059,6 +2097,7 @@ function setupEventListeners() {
     document.querySelectorAll('#img2prompt-file-input').forEach(inp => { inp.value = ''; });
     img2promptState.items.forEach(i => { if (i.url && i.url.startsWith('blob:')) URL.revokeObjectURL(i.url); });
     img2promptState.items = [];
+    _img2promptCardCache.clear(); // clear DOM cache to free memory
     renderImg2PromptCards();
     showToast('Cleared all image prompts', 'info');
   });
@@ -2712,9 +2751,16 @@ async function handleManualPaymentSubmit(e) {
 }
 
 // ─── Escape HTML ────────────────────────────────────────────────────────────
+// ─── Fast HTML Escaper (reuses a single shared node — no regex chains) ───────
+const _escNode = (typeof document !== 'undefined') ? document.createElement('div') : null;
 function escHtml(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  if (!str && str !== 0) return '';
+  if (!_escNode) {
+    // SSR/Node fallback
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  }
+  _escNode.textContent = String(str);
+  return _escNode.innerHTML;
 }
 
 // ─── Mode Switcher & Image to Prompt ───────────────────────────────────────
@@ -3058,103 +3104,106 @@ async function processImg2PromptQueue() {
       return;
     }
 
-    try {
-      const fileExt = ((item.name || item.file?.name || '').split('.').pop() || '').toLowerCase();
-      const optimized = await optimizeImageForAi(item.file, fileExt);
+    let attempts = 0;
+    const maxAttempts = 3;
+    let lastErr = null;
 
-      if (isBatchStopped()) {
-        if (item.status === 'processing') {
-          item.status = 'waiting';
+    while (attempts < maxAttempts) {
+      if (isBatchStopped()) break;
+
+      try {
+        const fileExt = ((item.name || item.file?.name || '').split('.').pop() || '').toLowerCase();
+        const optimized = await optimizeImageForAi(item.file, fileExt);
+
+        if (isBatchStopped()) break;
+
+        const base64Image = optimized.base64;
+        const mimeType = optimized.mimeType || 'image/jpeg';
+
+        const platformSpec = PLATFORMS.general || {
+          id: 'general', name: 'General',
+          keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
+        };
+
+        const itemMode = (item.promptType || img2promptState.promptType) === 'video' ? 'img2prompt-video' : 'img2prompt-photo';
+        const key = getSessionKey(provider);
+        const res = await fetch('/api/ai/generate', {
+          method: 'POST',
+          signal: promptSignal,
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-ai-provider': provider,
+            'x-ai-api-key': key,
+            'x-gemini-api-key': key
+          },
+          body: JSON.stringify({
+            provider,
+            apiKey: key,
+            base64Image,
+            mimeType,
+            filename: item.name || 'image.jpg',
+            platform: platformSpec,
+            mode: itemMode,
+            model: getProviderModel(provider)
+          })
+        });
+
+        if (isBatchStopped()) break;
+
+        const data = await res.json().catch(() => ({ ok: false, message: `Server error (${res.status})` }));
+        if (isBatchStopped()) break;
+
+        if (data.ok && data.data) {
+          const d = data.data;
+          const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
+
+          const promptParts = [];
+          if (d.title) promptParts.push(d.title);
+          if (d.description && d.description !== d.title) promptParts.push(d.description);
+          if (d.category && d.category !== 'General') promptParts.push(`Style: ${d.category}`);
+          if (kwStr) promptParts.push(`Visual details: ${kwStr}`);
+
+          item.prompt = promptParts.join('. ') + '.';
+          item.status = 'ready';
           item.error = null;
-          item.prompt = null;
+          lastErr = null;
+          break; // Success!
+        } else {
+          lastErr = new Error(data.message || 'Generation failed');
+          attempts++;
+          if (attempts < maxAttempts && !isBatchStopped()) {
+            await new Promise(r => setTimeout(r, 1200 * attempts));
+          }
         }
-        return;
-      }
-
-      const base64Image = optimized.base64;
-      const mimeType = optimized.mimeType || 'image/jpeg';
-
-      const platformSpec = PLATFORMS.general || {
-        id: 'general', name: 'General',
-        keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
-      };
-
-      const itemMode = (item.promptType || img2promptState.promptType) === 'video' ? 'img2prompt-video' : 'img2prompt-photo';
-      const key = getSessionKey(provider);
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        signal: promptSignal,
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-ai-provider': provider,
-          'x-ai-api-key': key,
-          'x-gemini-api-key': key
-        },
-        body: JSON.stringify({
-          provider,
-          apiKey: key,
-          base64Image,
-          mimeType,
-          filename: item.name || 'image.jpg',
-          platform: platformSpec,
-          mode: itemMode,
-          model: getProviderModel(provider)
-        })
-      });
-
-      if (isBatchStopped()) {
-        if (item.status === 'processing') {
-          item.status = 'waiting';
-          item.error = null;
-          item.prompt = null;
+      } catch (err) {
+        lastErr = err;
+        if (err.name === 'AbortError' || isBatchStopped()) {
+          break;
         }
-        return;
-      }
-
-      const data = await res.json().catch(() => ({ ok: false, message: `Server error (${res.status})` }));
-      if (isBatchStopped()) {
-        if (item.status === 'processing') {
-          item.status = 'waiting';
-          item.error = null;
-          item.prompt = null;
+        attempts++;
+        if (attempts < maxAttempts && !isBatchStopped()) {
+          await new Promise(r => setTimeout(r, 1200 * attempts));
         }
-        return;
       }
+    }
 
-      if (data.ok && data.data) {
-        const d = data.data;
-        const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
-
-        const promptParts = [];
-        if (d.title) promptParts.push(d.title);
-        if (d.description && d.description !== d.title) promptParts.push(d.description);
-        if (d.category && d.category !== 'General') promptParts.push(`Style: ${d.category}`);
-        if (kwStr) promptParts.push(`Visual details: ${kwStr}`);
-
-        item.prompt = promptParts.join('. ') + '.';
-        item.status = 'ready';
+    if (isBatchStopped()) {
+      if (item.status === 'processing') {
+        item.status = 'waiting';
         item.error = null;
-      } else {
-        item.status = 'failed';
-        item.error = data.message || 'Generation failed';
-        showToast(`✕ Prompt generation failed: ${data.message || 'Error'}`, 'error');
+        item.prompt = null;
       }
-    } catch (err) {
-      if (err.name === 'AbortError' || isBatchStopped()) {
-        if (item.status === 'processing') {
-          item.status = 'waiting';
-          item.error = null;
-          item.prompt = null;
-        }
-        return;
-      }
+      return;
+    }
+
+    if (lastErr && item.status !== 'ready') {
       item.status = 'failed';
-      item.error = err.message || 'Image to prompt conversion failed';
-    } finally {
-      if (!isBatchStopped()) {
-        renderImg2PromptCards();
-      }
+      item.error = lastErr.message || 'Image to prompt conversion failed';
+    }
+
+    if (!isBatchStopped()) {
+      renderImg2PromptCards();
     }
   };
 
@@ -3191,6 +3240,70 @@ async function processImg2PromptQueue() {
   }
 }
 
+// ─── Img2Prompt Card Cache — incremental DOM diffing (no full innerHTML rebuild) ─
+const _img2promptCardCache = new Map();
+
+function buildImg2PromptCardHtml(item) {
+  const isProcessing = item.status === 'processing';
+  const isReady = item.status === 'ready';
+  const isFailed = item.status === 'failed';
+  const isWaiting = item.status === 'waiting';
+
+  const isVideo = (item.promptType || 'photo') === 'video';
+  const typeBadge = isVideo
+    ? `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">🎬 Video</span>`
+    : `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">📷 Photo</span>`;
+
+  let statusBadgeHtml;
+  if (isProcessing) {
+    statusBadgeHtml = `<span class="status-tag status-processing">Analyzing…</span>`;
+  } else if (isReady) {
+    statusBadgeHtml = `<span class="status-tag status-ready">✓ Ready</span>`;
+  } else if (isFailed) {
+    statusBadgeHtml = `<span class="status-tag status-failed">✕ Failed</span>`;
+  } else {
+    statusBadgeHtml = `<span class="status-tag status-waiting">In Queue</span>`;
+  }
+
+  let promptContentHtml;
+  if (isProcessing) {
+    promptContentHtml = `<span class="img2prompt-analyzing">Analyzing ${isVideo ? 'video' : 'photo'} visual features &amp; engineering detailed AI prompt <span class="loading-dots"><span></span><span></span><span></span></span></span>`;
+  } else if (isFailed) {
+    promptContentHtml = `<span style="color:var(--accent-rose)">Error: ${escHtml(item.error || 'Failed to generate prompt')}</span>`;
+  } else if (isWaiting) {
+    promptContentHtml = `<span style="color:var(--text-muted);font-style:italic">Waiting in generation queue...</span>`;
+  } else {
+    promptContentHtml = escHtml(item.prompt || 'No prompt generated');
+  }
+
+  const cardStateClass = isProcessing ? ' is-processing' : (isReady ? ' is-ready' : (isFailed ? ' is-failed' : ' is-waiting'));
+
+  return `<div class="img2prompt-card glass-panel${cardStateClass}" data-id="${item.id}" style="padding:16px;background:rgba(21, 32, 54, 0.88)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="img2prompt-thumb-wrap">
+          <img src="${item.url}" alt="${escHtml(item.name)}" loading="lazy" decoding="async" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--glass-border)">
+        </div>
+        <div>
+          <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);word-break:break-all">${escHtml(item.name)}</div>
+          <div style="font-size:0.725rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:2px">
+            <span>${(item.size / 1048576).toFixed(2)} MB</span>
+            <span>•</span>
+            ${typeBadge}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${statusBadgeHtml}
+        ${isReady ? `<button class="btn btn-secondary btn-sm btn-copy-single-prompt" data-id="${item.id}">📋 Copy</button>` : ''}
+        ${isFailed ? `<button class="btn btn-secondary btn-sm btn-retry-single-prompt" data-id="${item.id}">🔄 Retry</button>` : ''}
+        <button class="btn btn-icon-only btn-sm btn-remove-prompt" data-id="${item.id}" title="Remove">🗑️</button>
+      </div>
+    </div>
+    <div class="prompt-text-box" style="font-size:0.85rem;line-height:1.6;color:var(--text-secondary);background:var(--bg-main);padding:12px 14px;border-radius:8px;border:1px solid var(--glass-border);user-select:all;white-space:pre-wrap">${promptContentHtml}</div>
+  </div>`;
+}
+
 function renderImg2PromptCards() {
   const container = document.getElementById('img2prompt-cards-list');
   const wrapper = document.getElementById('img2prompt-results-wrapper');
@@ -3201,6 +3314,7 @@ function renderImg2PromptCards() {
   if (img2promptState.items.length === 0) {
     wrapper.style.display = 'none';
     container.innerHTML = '';
+    _img2promptCardCache.clear();
     return;
   }
 
@@ -3239,66 +3353,49 @@ function renderImg2PromptCards() {
     }
   }
 
-  container.innerHTML = img2promptState.items.map(item => {
-    const isProcessing = item.status === 'processing';
-    const isReady = item.status === 'ready';
-    const isFailed = item.status === 'failed';
-    const isWaiting = item.status === 'waiting';
+  // ── Incremental DOM diffing: only rebuild cards whose fingerprint changed ──
+  const currentIds = new Set(img2promptState.items.map(i => i.id));
 
-    const isVideo = (item.promptType || 'photo') === 'video';
-    const typeBadge = isVideo
-      ? `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">🎬 Video</span>`
-      : `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">📷 Photo</span>`;
-
-    let statusBadgeHtml;
-    if (isProcessing) {
-      statusBadgeHtml = `<span class="status-tag status-processing">Analyzing…</span>`;
-    } else if (isReady) {
-      statusBadgeHtml = `<span class="status-tag status-ready">✓ Ready</span>`;
-    } else if (isFailed) {
-      statusBadgeHtml = `<span class="status-tag status-failed">✕ Failed</span>`;
-    } else {
-      statusBadgeHtml = `<span class="status-tag status-waiting">In Queue</span>`;
+  // Remove cards no longer in the list
+  for (const [id, el] of _img2promptCardCache.entries()) {
+    if (!currentIds.has(id)) {
+      el.remove();
+      _img2promptCardCache.delete(id);
     }
+  }
+  Array.from(container.children).forEach(child => {
+    const id = child.getAttribute('data-id');
+    if (id && !currentIds.has(id)) child.remove();
+  });
 
-    let promptContentHtml;
-    if (isProcessing) {
-      promptContentHtml = `<span class="img2prompt-analyzing">Analyzing ${isVideo ? 'video' : 'photo'} visual features &amp; engineering detailed AI prompt <span class="loading-dots"><span></span><span></span><span></span></span></span>`;
-    } else if (isFailed) {
-      promptContentHtml = `<span style="color:var(--accent-rose)">Error: ${escHtml(item.error || 'Failed to generate prompt')}</span>`;
-    } else if (isWaiting) {
-      promptContentHtml = `<span style="color:var(--text-muted);font-style:italic">Waiting in generation queue...</span>`;
+  // Insert/update cards in correct order
+  let prevEl = null;
+  img2promptState.items.forEach(item => {
+    const fp = `${item.id}::${item.status}::${item.prompt || ''}::${item.error || ''}::${item.promptType || 'photo'}`;
+    let cached = _img2promptCardCache.get(item.id);
+
+    if (!cached || cached._fp !== fp || !container.contains(cached)) {
+      const html = buildImg2PromptCardHtml(item);
+      const temp = document.createElement('div');
+      temp.innerHTML = html.trim();
+      const newEl = temp.firstElementChild;
+      newEl._fp = fp;
+
+      if (cached && cached.parentNode === container) {
+        container.replaceChild(newEl, cached);
+      } else if (prevEl && prevEl.nextSibling) {
+        container.insertBefore(newEl, prevEl.nextSibling);
+      } else if (!prevEl) {
+        container.prepend(newEl);
+      } else {
+        container.appendChild(newEl);
+      }
+      _img2promptCardCache.set(item.id, newEl);
+      prevEl = newEl;
     } else {
-      promptContentHtml = escHtml(item.prompt || 'No prompt generated');
+      prevEl = cached;
     }
-
-    const cardStateClass = isProcessing ? ' is-processing' : (isReady ? ' is-ready' : (isFailed ? ' is-failed' : ' is-waiting'));
-
-    return `<div class="img2prompt-card glass-panel${cardStateClass}" data-id="${item.id}" style="padding:16px;background:rgba(21, 32, 54, 0.88)">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="img2prompt-thumb-wrap">
-            <img src="${item.url}" alt="${escHtml(item.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--glass-border)">
-          </div>
-          <div>
-            <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);word-break:break-all">${escHtml(item.name)}</div>
-            <div style="font-size:0.725rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:2px">
-              <span>${(item.size / 1048576).toFixed(2)} MB</span>
-              <span>•</span>
-              ${typeBadge}
-            </div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          ${statusBadgeHtml}
-          ${isReady ? `<button class="btn btn-secondary btn-sm btn-copy-single-prompt" data-id="${item.id}">📋 Copy</button>` : ''}
-          ${isFailed ? `<button class="btn btn-secondary btn-sm btn-retry-single-prompt" data-id="${item.id}">🔄 Retry</button>` : ''}
-          <button class="btn btn-icon-only btn-sm btn-remove-prompt" data-id="${item.id}" title="Remove">🗑️</button>
-        </div>
-      </div>
-      <div class="prompt-text-box" style="font-size:0.85rem;line-height:1.6;color:var(--text-secondary);background:var(--bg-main);padding:12px 14px;border-radius:8px;border:1px solid var(--glass-border);user-select:all;white-space:pre-wrap">${promptContentHtml}</div>
-    </div>`;
-  }).join('');
+  });
 }
 
 // Drag and Drop listener for Image-to-Prompt drop zone

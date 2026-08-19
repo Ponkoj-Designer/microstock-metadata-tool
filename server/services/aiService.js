@@ -227,7 +227,7 @@ SHUTTERSTOCK OFFICIAL RULES:
 2. DESCRIPTION (STRICT LIMIT: MAXIMUM 200 CHARACTERS IN ENGLISH): A unique, detailed factual description in English. Front-load top commercial keywords in the first 3-5 words. Must be <= 200 chars.
 3. TITLE: Same commercial title matching description (max 200 chars).
 4. KEYWORDS: Exactly ${kwTarget} unique high-traffic English keywords (7 to 50). Top 5-10 carry 80% search algorithm weight. Prioritize precise, specific search terms and avoid spam/trademarks. Put strongest terms first.
-5. CATEGORY: Select ONE or TWO exact categories from this official list: [${categoryOptions}]. If two, separate by comma.
+5. CATEGORY (Strictly ONE valid category by default; add a SECOND category ONLY when genuinely relevant): Select ONE valid category by default from this official list: [${categoryOptions}]. If a second category is genuinely relevant, separate them with a comma in the single 'category' field.
 
 Respond STRICTLY with a valid JSON object matching this schema:
 {

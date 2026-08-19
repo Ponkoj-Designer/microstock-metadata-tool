@@ -187,3 +187,35 @@ img[loading="lazy"] {
   transform: translateZ(0);
 }
 
+/* ── 16. content-visibility: auto on detail cards ──────────────────────────
+   Cards off-screen skip their layout+paint entirely until scrolled into view.
+   contain-intrinsic-size provides an estimated height so scrollbar is stable. */
+#detail-view-container > div {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 480px;
+}
+
+/* ── 17. CSS containment for img2prompt card list ───────────────────────────
+   Isolates layout so card insertions/removals don't cause full-page reflow.  */
+#img2prompt-cards-list {
+  contain: layout;
+}
+
+#img2prompt-cards-list > .img2prompt-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 140px;
+}
+
+/* ── 18. Processing status badges — compositor-only animation ───────────────
+   animate-pulse must only touch opacity (already on GPU). Adding
+   will-change:opacity ensures it stays on its own compositor layer.          */
+.status-tag.status-processing,
+.animate-pulse {
+  will-change: opacity;
+}
+
+/* ── 19. Keyword pills — contain paint so removing/adding a pill doesn't
+   cause the whole card to repaint. ────────────────────────────────────────── */
+#detail-view-container .flex.flex-wrap {
+  contain: layout paint;
+}

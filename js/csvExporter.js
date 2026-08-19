@@ -11,6 +11,9 @@ function csvCell(value) {
   return `"${str}"`;
 }
 
+let _lastCsvDownloadTime = 0;
+let _isDownloadingCsv = false;
+
 // ── Platform-specific CSV row builder ──────────────────────────────────────
 export function formatRowForPlatform(item, platform) {
   const meta = item.metadata || {};
@@ -25,9 +28,40 @@ export function formatRowForPlatform(item, platform) {
       return [csvCell(filename), csvCell(title), csvCell(keywords), csvCell(category)];
 
     case 'shutterstock': {
-      // Shutterstock Official CSV format: Filename, Description, Keywords, Categories
+      // Official Shutterstock CSV Columns: Filename, Description, Keywords, Categories
       const ssDesc = (description || title || '').trim().slice(0, 200);
-      return [csvCell(filename), csvCell(ssDesc), csvCell(keywords), csvCell(category)];
+      
+      // Strict Shutterstock category resolution: 1 by default, max 2 distinct valid categories in the single 'Categories' column
+      const allowedCategories = (Array.isArray(platform.categories) && platform.categories.length > 0)
+        ? platform.categories
+        : [
+            'Abstract', 'Animals/Wildlife', 'Arts', 'Backgrounds/Textures', 'Beauty/Fashion',
+            'Buildings/Landmarks', 'Business/Finance', 'Celebrities', 'Education', 'Food and drink',
+            'Healthcare/Medical', 'Holidays', 'Industrial', 'Interiors', 'Miscellaneous',
+            'Nature', 'Objects', 'Parks/Outdoor', 'People', 'Religion', 'Science',
+            'Signs/Symbols', 'Sports/Recreation', 'Technology', 'Transportation', 'Vintage'
+          ];
+      
+      let ssCat = '';
+      if (typeof category === 'string' && category.trim()) {
+        const parts = category.split(',').map(s => s.trim()).filter(Boolean);
+        const validMatched = [];
+        for (const p of parts) {
+          const found = allowedCategories.find(c => c.toLowerCase() === p.toLowerCase())
+            || allowedCategories.find(c => c.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(c.toLowerCase()));
+          if (found && !validMatched.includes(found)) {
+            validMatched.push(found);
+          }
+        }
+        if (validMatched.length > 0) {
+          ssCat = validMatched.slice(0, 2).join(', ');
+        }
+      }
+      if (!ssCat) {
+        ssCat = allowedCategories[0] || 'Abstract';
+      }
+
+      return [csvCell(filename), csvCell(ssDesc), csvCell(keywords), csvCell(ssCat)];
     }
 
     case 'freepik':
@@ -116,23 +150,39 @@ export function generateCsvContent(mediaItems, platform) {
   return '\uFEFF' + [headers, ...rows].join('\r\n'); // BOM + CRLF
 }
 
-// ── Download CSV ────────────────────────────────────────────────────────────
+// ── Download CSV with duplicate suppression ─────────────────────────────────
 export function downloadCsvFile(mediaItems, platform, customFilename = null) {
-  const csvContent = generateCsvContent(mediaItems, platform);
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const timestamp = new Date().toISOString().slice(0, 10);
-  const platformSlug = platform.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, '');
-  const filename = customFilename || `microstock-metadata-${platformSlug}-${timestamp}.csv`;
+  const now = Date.now();
+  if (now - _lastCsvDownloadTime < 1000 || _isDownloadingCsv) {
+    console.warn('[CSV Exporter] Duplicate download request suppressed.');
+    return;
+  }
+  _isDownloadingCsv = true;
+  _lastCsvDownloadTime = now;
 
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  try {
+    const csvContent = generateCsvContent(mediaItems, platform);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const platformSlug = platform.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, '');
+    const filename = customFilename || `microstock-metadata-${platformSlug}-${timestamp}.csv`;
+
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      if (link.parentNode) document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      _isDownloadingCsv = false;
+    }, 300);
+  } catch (err) {
+    _isDownloadingCsv = false;
+    throw err;
+  }
 }
 
 // ── Generate HTML preview table ─────────────────────────────────────────────

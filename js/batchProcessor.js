@@ -23,7 +23,7 @@ export async function runBatchQueue({
   onItemDone,
   onProgress,
   shouldStop,
-  concurrencyLimit = 4
+  concurrencyLimit = 2
 }) {
   const total = items.length;
   if (total === 0) return;
@@ -44,7 +44,7 @@ export async function runBatchQueue({
       onItemStart && onItemStart(item, i);
 
       let attempts = 0;
-      const maxAttempts = 2;
+      const maxAttempts = 3;
       let lastErr = null;
       let result = null;
 
@@ -63,16 +63,19 @@ export async function runBatchQueue({
           const errMsg = String(err?.message || '');
           const lowerMsg = errMsg.toLowerCase();
 
-          // Fatal errors: Stop retrying this specific item
+          // Fatal errors: Stop retrying this specific item immediately
           const isFatal = (
             lowerMsg.includes('invalid gemini api key') ||
             lowerMsg.includes('invalid api key') ||
             lowerMsg.includes('api key is required') ||
-            lowerMsg.includes('unauthorized (403)') ||
-            lowerMsg.includes('not supported for ai analysis')
+            lowerMsg.includes('unauthorized') ||
+            lowerMsg.includes('403') ||
+            lowerMsg.includes('not supported for ai analysis') ||
+            lowerMsg.includes('insufficient credits') ||
+            err?.name === 'AbortError'
           );
 
-          if (isFatal) {
+          if (isFatal || (shouldStop && shouldStop())) {
             break;
           }
 
@@ -81,20 +84,23 @@ export async function runBatchQueue({
             lowerMsg.includes('rate limit') ||
             lowerMsg.includes('quota') ||
             lowerMsg.includes('429') ||
-            lowerMsg.includes('resource_exhausted')
+            lowerMsg.includes('resource_exhausted') ||
+            lowerMsg.includes('too many requests')
           );
 
           if (isRateLimit) {
             if (!globalPausePromise) {
-              console.warn('[BatchProcessor] Rate limit encountered. Brief 1.5s backoff...');
-              globalPausePromise = new Promise(resolve => setTimeout(resolve, 1500));
+              console.warn('[BatchProcessor] Rate limit encountered. Brief 2.5s backoff for all workers...');
+              globalPausePromise = new Promise(resolve => setTimeout(resolve, 2500));
               globalPausePromise.then(() => { globalPausePromise = null; });
             }
             await globalPausePromise;
           }
 
-          if (attempts < maxAttempts) {
-            await new Promise(r => setTimeout(r, 600));
+          if (attempts < maxAttempts && (!shouldStop || !shouldStop())) {
+            // Progressive jittered delay: attempt 1 -> ~1000ms, attempt 2 -> ~2200ms
+            const delay = Math.round(1000 * Math.pow(1.8, attempts - 1) + Math.random() * 400);
+            await new Promise(r => setTimeout(r, delay));
           }
         }
       }
@@ -110,7 +116,7 @@ export async function runBatchQueue({
     }
   }
 
-  const activeConcurrency = Math.max(1, Math.min(concurrencyLimit || 4, total));
+  const activeConcurrency = Math.max(1, Math.min(concurrencyLimit || 2, total));
   const workers = [];
   for (let w = 0; w < activeConcurrency; w++) {
     workers.push(worker());

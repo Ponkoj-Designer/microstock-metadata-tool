@@ -252,17 +252,11 @@ export async function testConnection(key, provider = _activeProvider) {
     return { ok: false, message: `Please enter your ${AI_PROVIDERS_CONFIG[provider]?.name || provider} API key.` };
   }
 
-  // 1. Direct Browser-to-API check (validates exact model gemini-3.5-flash)
+  // 1. Direct Browser-to-API check (ultra-fast Google Gemini validation)
   if (provider === 'gemini') {
     try {
-      const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${encodeURIComponent(targetKey)}`;
-      const res = await fetchWithTimeout(directUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Hello' }] }]
-        })
-      }, 10000);
+      const directUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(targetKey)}`;
+      const res = await fetchWithTimeout(directUrl, { method: 'GET' }, 25000);
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setProviderVerified(true, 'gemini');
@@ -282,7 +276,7 @@ export async function testConnection(key, provider = _activeProvider) {
       const res = await fetchWithTimeout('https://openrouter.ai/api/v1/auth/key', {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${targetKey}` }
-      }, 10000);
+      }, 25000);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.data) {
         setProviderVerified(true, 'openrouter');
@@ -302,7 +296,7 @@ export async function testConnection(key, provider = _activeProvider) {
       const res = await fetchWithTimeout('https://api.openai.com/v1/models', {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${targetKey}` }
-      }, 10000);
+      }, 25000);
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setProviderVerified(true, 'openai');

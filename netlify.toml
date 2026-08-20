@@ -4,6 +4,7 @@
 
 [functions]
   node_bundler = "esbuild"
+  included_files = ["server/data/**"]
 
 # Preserve the existing /api/* routes by proxying them to the Netlify Function.
 # status = 200 (proxy rewrite) keeps the /api/* URL in the browser while the

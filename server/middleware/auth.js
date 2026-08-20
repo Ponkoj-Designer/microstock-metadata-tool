@@ -33,35 +33,40 @@ export async function authMiddleware(req, res, next) {
     // 1. Verify JWT signature and expiry
     const payload = jwt.verify(token, config.jwtSecret);
 
-    // 2. Confirm the session still exists in the database
-    //    (handles logout — deleted sessions are rejected immediately)
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-    const session = await findSession(tokenHash);
+    // 2. In DB mode, confirm the session is not revoked in the database
+    if (isDbConfigured()) {
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      const session = await findSession(tokenHash);
 
-    if (!session) {
-      // Session was deleted (logged out) or expired — clear the stale cookie
+      if (!session) {
+        // Session was revoked on server
+        res.clearCookie('auth_token', { path: '/' });
+        return next();
+      }
+    }
+
+    // 3. Fetch fresh user data or fallback to verified JWT payload
+    let dbUser = null;
+    try {
+      dbUser = await findUserById(payload.userId);
+    } catch (_) {}
+
+    if (dbUser && !dbUser.is_active) {
       res.clearCookie('auth_token', { path: '/' });
       return next();
     }
 
-    // 3. Fetch fresh user data from database to ensure role/plan/credits are live
-    const dbUser = await findUserById(payload.userId);
-    if (!dbUser || !dbUser.is_active) {
-      res.clearCookie('auth_token', { path: '/' });
-      return next();
-    }
-
-    // Attach user info to the request
+    // Attach user info to request (from DB or verified JWT claims)
     req.user = {
-      userId:   dbUser.id,
-      email:    dbUser.email,
-      role:     dbUser.role,
-      plan:     dbUser.plan,
-      fullName: dbUser.full_name,
-      credits:  dbUser.credits
+      userId:   dbUser ? dbUser.id : payload.userId,
+      email:    dbUser ? dbUser.email : payload.email,
+      role:     dbUser ? dbUser.role : (payload.role || 'user'),
+      plan:     dbUser ? dbUser.plan : (payload.plan || 'free'),
+      fullName: dbUser ? (dbUser.full_name || dbUser.fullName) : (payload.fullName || payload.email),
+      credits:  dbUser ? (dbUser.credits ?? 10) : (payload.credits ?? 10)
     };
   } catch (err) {
-    // Invalid or tampered JWT — clear it
+    // Invalid or expired JWT
     res.clearCookie('auth_token', { path: '/' });
   }
 

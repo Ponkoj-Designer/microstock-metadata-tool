@@ -14,5 +14,21 @@
     "type": "signup_bonus",
     "description": "Welcome credits awarded on account creation",
     "created_at": "2026-08-20T08:05:21.498Z"
+  },
+  {
+    "id": "ctx_1787213680573_f0330593",
+    "user_id": "usr_1787213680571_37fd918f",
+    "amount": 10,
+    "type": "signup_bonus",
+    "description": "Welcome credits awarded on account creation",
+    "created_at": "2026-08-20T08:14:40.573Z"
+  },
+  {
+    "id": "ctx_1787213716832_53160175",
+    "user_id": "usr_1787213716830_eb19d2a4",
+    "amount": 10,
+    "type": "signup_bonus",
+    "description": "Welcome credits awarded on account creation",
+    "created_at": "2026-08-20T08:15:16.833Z"
   }
 ]

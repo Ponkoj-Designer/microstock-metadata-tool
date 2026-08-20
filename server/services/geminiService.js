@@ -485,8 +485,9 @@ export function formatCategoryAndMeta(parsed, platformObj, isVideo, effectiveTit
   const seen = new Set();
   keywords = keywords.filter(k => { if (seen.has(k)) return false; seen.add(k); return true; });
   keywords = keywords.slice(0, effectiveKwMax);
-
-  if (!title) throw new Error('Generated metadata title was empty.');
+  if (!title) {
+    title = description || (keywords.length ? keywords.slice(0, 6).join(' ') : (filename || 'Commercial Media Asset').replace(/\.[^/.]+$/, ''));
+  }
 
   return {
     filename: parsed.filename || filename,

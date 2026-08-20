@@ -3027,14 +3027,6 @@ async function processImg2PromptQueue() {
       if (isBatchStopped()) break;
 
       try {
-        const fileExt = ((item.name || item.file?.name || '').split('.').pop() || '').toLowerCase();
-        const optimized = await optimizeImageForAi(item.file, fileExt);
-
-        if (isBatchStopped()) break;
-
-        const base64Image = optimized.base64;
-        const mimeType = optimized.mimeType || 'image/jpeg';
-
         const platformSpec = PLATFORMS.general || {
           id: 'general', name: 'General',
           keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
@@ -3042,35 +3034,11 @@ async function processImg2PromptQueue() {
 
         const itemMode = (item.promptType || img2promptState.promptType) === 'video' ? 'img2prompt-video' : 'img2prompt-photo';
         const key = getSessionKey(provider);
-        const res = await fetch('/api/ai/generate', {
-          method: 'POST',
-          signal: promptSignal,
-          credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-ai-provider': provider,
-            'x-ai-api-key': key,
-            'x-gemini-api-key': key
-          },
-          body: JSON.stringify({
-            provider,
-            apiKey: key,
-            base64Image,
-            mimeType,
-            filename: item.name || 'image.jpg',
-            platform: platformSpec,
-            mode: itemMode,
-            model: getProviderModel(provider)
-          })
-        });
+        const d = await generateMetadataForImage(item, platformSpec, key, null, itemMode, promptSignal);
 
         if (isBatchStopped()) break;
 
-        const data = await res.json().catch(() => ({ ok: false, message: `Server error (${res.status})` }));
-        if (isBatchStopped()) break;
-
-        if (data.ok && data.data) {
-          const d = data.data;
+        if (d) {
           const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
 
           const promptParts = [];
@@ -3083,9 +3051,9 @@ async function processImg2PromptQueue() {
           item.status = 'ready';
           item.error = null;
           lastErr = null;
-          break; // Success!
+          break;
         } else {
-          lastErr = new Error(data.message || 'Generation failed');
+          lastErr = new Error('Generation returned no data');
           attempts++;
           if (attempts < maxAttempts && !isBatchStopped()) {
             await new Promise(r => setTimeout(r, 1200 * attempts));

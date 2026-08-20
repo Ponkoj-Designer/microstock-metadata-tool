@@ -598,13 +598,14 @@ function extractJsonFromCandidate(candidate) {
 }
 
 /**
- * Run Gemini generateContent using strictly gemini-3.5-flash.
+ * Run Gemini generateContent using config.geminiModel (gemini-3.5-flash-lite).
  */
 async function runGeminiModel(requestBody, apiKey) {
-  const url = `${config.geminiBaseUrl}/gemini-3.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const modelName = config.geminiModel || 'gemini-3.5-flash-lite';
+  const url = `${config.geminiBaseUrl}/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), 28000);
+  const timeoutId = setTimeout(() => abortController.abort(), 8500);
 
   try {
     const res = await fetch(url, {
@@ -623,7 +624,7 @@ async function runGeminiModel(requestBody, apiKey) {
       throw new Error(safeErrorMsg);
     }
 
-    console.log('[GeminiService] ✅ Success with model: gemini-3.5-flash');
+    console.log(`[GeminiService] ✅ Success with model: ${modelName}`);
     return resJson;
   } catch (err) {
     clearTimeout(timeoutId);
@@ -698,7 +699,7 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
       }
     };
 
-    console.log('[GeminiService] Using model: gemini-3.5-flash');
+    console.log('[GeminiService] Using model: gemini-3.5-flash-lite');
     const data      = await runGeminiModel(requestBody, apiKey);
     const candidate = data.candidates?.[0];
     const parsed    = extractJsonFromCandidate(candidate);
@@ -752,7 +753,7 @@ export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer
       }
     };
 
-    console.log('[GeminiService] Using model: gemini-3.5-flash');
+    console.log('[GeminiService] Using model: gemini-3.5-flash-lite');
     const data      = await runGeminiModel(requestBody, apiKey);
     const candidate = data.candidates?.[0];
     const parsed    = extractJsonFromCandidate(candidate);

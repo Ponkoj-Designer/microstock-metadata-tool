@@ -6,7 +6,7 @@ export const config = {
   nodeEnv:      process.env.NODE_ENV || 'development',
 
   geminiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-  geminiModel:   'gemini-3.5-flash',
+  geminiModel:   'gemini-3.5-flash-lite',
 
   // Supabase — set via environment variables, NEVER hardcode keys here
   supabaseUrl:  process.env.SUPABASE_URL                || '',

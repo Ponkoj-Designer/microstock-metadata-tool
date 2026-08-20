@@ -3,7 +3,7 @@
  * Customer API keys are held strictly in memory for this session only.
  */
 
-const REQUEST_TIMEOUT_MS = 45000;
+const REQUEST_TIMEOUT_MS = 15000;
 const VIDEO_TIMEOUT_MS = 240000;
 
 export const AI_PROVIDERS_CONFIG = {
@@ -15,7 +15,7 @@ export const AI_PROVIDERS_CONFIG = {
     placeholder: 'AIza...',
     label: 'Add New API Key',
     models: [
-      { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash' }
+      { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite' }
     ]
   },
   openrouter: {
@@ -82,12 +82,12 @@ let _verifiedProviders = {
   openai: Boolean(_initialData.verified?.openai)
 };
 let _selectedModels = {
-  gemini: 'gemini-3.5-flash',
+  gemini: 'gemini-3.5-flash-lite',
   openrouter: _initialData.models?.openrouter || 'openrouter/auto',
   openai: _initialData.models?.openai || 'gpt-4o-mini'
 };
-// Auto-migrate: ensure default is gemini-3.5-flash
-_selectedModels.gemini = 'gemini-3.5-flash';
+// Auto-migrate: ensure default is gemini-3.5-flash-lite
+_selectedModels.gemini = 'gemini-3.5-flash-lite';
 
 function saveStorage() {
   if (typeof localStorage === 'undefined') return;
@@ -260,7 +260,7 @@ export async function testConnection(key, provider = _activeProvider) {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setProviderVerified(true, 'gemini');
-        return { ok: true, message: 'Successfully connected to Google Gemini API (gemini-3.5-flash)!' };
+        return { ok: true, message: 'Successfully connected to Google Gemini API (gemini-3.5-flash-lite)!' };
       }
       setProviderVerified(false, 'gemini');
       if (data?.error?.message) {
@@ -1622,13 +1622,13 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       }
     };
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${encodeURIComponent(key)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(key)}`;
     const res = await fetchWithTimeout(url, {
       method: 'POST',
       signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody)
-    }, 45000);
+    }, 15000);
 
     const resJson = await res.json().catch(() => ({}));
     const candidate = resJson.candidates?.[0];
@@ -1701,7 +1701,7 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
         temperature: 0.3,
         max_tokens: isOR ? 900 : 1200
       })
-    }, 28000);
+    }, 15000);
 
     const resJson = await res.json().catch(() => ({}));
     if (res.ok && resJson.choices?.[0]?.message?.content) {
@@ -1754,7 +1754,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
             'x-platform': encodeURIComponent(JSON.stringify(platform)),
             'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
             'x-mode':  mode || 'metadata',
-            'x-model': selectedModel || 'gemini-3.5-flash'
+            'x-model': selectedModel || 'gemini-3.5-flash-lite'
           },
           body: item.file
         }, VIDEO_TIMEOUT_MS);
@@ -1775,7 +1775,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
 
   let lastError = null;
 
-  // 1. Direct Browser Client generation (Strictly gemini-3.5-flash directly from browser)
+  // 1. Direct Browser Client generation (Strictly gemini-3.5-flash-lite directly from browser)
   if (key) {
     return await generateDirectClientAi({
       provider,
@@ -1819,7 +1819,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
           mode,
           model: selectedModel
         })
-      }, REQUEST_TIMEOUT_MS);
+      }, 12000);
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {

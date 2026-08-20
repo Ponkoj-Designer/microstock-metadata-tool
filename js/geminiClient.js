@@ -1324,7 +1324,317 @@ async function getImageBase64(item, ext) {
   throw new Error(`Unable to extract base64 image data for ${item.name || 'asset'}`);
 }
 
-// ── Main Metadata Generation (Secure Server Proxy) ─────────────────────────
+
+const SHUTTERSTOCK_IMAGE_CATEGORIES = [
+  'Abstract', 'Animals/Wildlife', 'Arts', 'Backgrounds/Textures', 'Beauty/Fashion',
+  'Buildings/Landmarks', 'Business/Finance', 'Celebrities', 'Education', 'Food and drink',
+  'Healthcare/Medical', 'Holidays', 'Industrial', 'Interiors', 'Miscellaneous',
+  'Nature', 'Objects', 'Parks/Outdoor', 'People', 'Religion', 'Science',
+  'Signs/Symbols', 'Sports/Recreation', 'Technology', 'Transportation', 'Vintage'
+];
+
+const SHUTTERSTOCK_VIDEO_CATEGORIES = [
+  'Animals/Wildlife', 'Arts', 'Backgrounds/Textures', 'Buildings/Landmarks',
+  'Business/Finance', 'Education', 'Food and drink', 'Healthcare/Medical',
+  'Holidays', 'Industrial', 'Nature', 'Objects', 'People', 'Religion',
+  'Science', 'Signs/Symbols', 'Sports/Recreation', 'Technology', 'Transportation'
+];
+
+function buildClientKwTarget(effectiveKwMax, kwMin) {
+  if (effectiveKwMax >= 49) return '42 to 47';
+  if (effectiveKwMax >= 40) return `${effectiveKwMax}`;
+  if (kwMin)                return `${kwMin} to ${effectiveKwMax}`;
+  return `5 to ${effectiveKwMax}`;
+}
+
+function buildClientCategoryOptions(platformObj, isVideo = false) {
+  const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
+  if (isShutterstock) {
+    return (isVideo ? SHUTTERSTOCK_VIDEO_CATEGORIES : SHUTTERSTOCK_IMAGE_CATEGORIES).join(', ');
+  }
+  return Array.isArray(platformObj?.categories) && platformObj.categories.length > 0
+    ? platformObj.categories.join(', ')
+    : 'General, Abstract, Animals, Architecture, Business, Food, Landscapes, Nature, People, Technology, Graphic Resources';
+}
+
+function buildClientPrompt({ platformObj, kwTarget, titleLimit, categoryOptions, settings, mode, filename, isVideo }) {
+  const pId = (platformObj?.id || platformObj?.name || '').toLowerCase();
+  const isAdobe         = pId === 'adobe' || pId.includes('adobestock') || pId.includes('adobe');
+  const isShutterstock  = pId === 'shutterstock' || pId.includes('shutterstock');
+  const isVecteezy      = pId === 'vecteezy' || pId.includes('vecteezy');
+  const isDepositphotos = pId === 'depositphotos' || pId.includes('depositphotos');
+  const is123RF         = pId === 'rf123' || pId === '123rf' || pId.includes('123rf');
+  const isDreamstime    = pId === 'dreamstime' || pId.includes('dreamstime');
+  const isMagnific      = pId === 'magnific' || pId.includes('magnific');
+
+  let prompt = '';
+
+  if (mode === 'img2prompt' || mode === 'img2prompt-photo') {
+    prompt = `You are a world-class AI Image Prompt Engineer specializing in commercial-safe, microstock-friendly, original AI image prompts for Midjourney v6, Flux.1, DALL-E 3, and Stable Diffusion XL.
+CRITICAL RULES:
+1. VISUAL ANALYSIS: Thoroughly analyze subject, composition, lighting, palette, mood, style.
+2. ORIGINAL & UNIQUE CREATION (NON-REPETITIVE): Create a NEW and UNIQUE generation prompt inspired by the visual concept, NOT a copy. Avoid duplication or repetitive elements.
+3. COPYRIGHT & TRADEMARK SAFETY: Never include logos, brand names, or copyrighted artists/characters.
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Master Prompt: subject + composition + lighting + atmosphere + camera angle + style details",
+  "description": "Visual breakdown of elements, colors, lighting, lens characteristics, depth of field",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Photography / Art Genre"
+}`;
+  } else if (mode === 'img2prompt-video') {
+    prompt = `You are a world-class AI Video Prompt Engineer specializing in commercial-safe, microstock-friendly, silent AI video prompts for Sora, Runway Gen-3, Pika Labs, and Kling AI.
+CRITICAL RULES:
+1. ORIGINAL VIDEO CONCEPT: Create dynamic, commercially usable video prompt.
+2. SILENT VIDEO ONLY: Must explicitly specify "silent video, no audio, no voice, no music". Focus purely on visual motion, camera work, lighting, and cinematic optics.
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Master Video Prompt: subject + motion + camera movement + lighting + mood. silent video, no audio, no voice, no music.",
+  "description": "Scene composition and motion progression over time. Strictly silent visual description.",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Cinematic B-Roll / Video Genre"
+}`;
+  } else if (isAdobe) {
+    prompt = `You are a world-renowned Microstock SEO Specialist and Adobe Stock Contributor Metadata Expert.
+Generate OFFICIAL ADOBE STOCK-OPTIMIZED METADATA:
+1. FIRST 10 KEYWORDS: Primary subject, core theme, asset format, primary visual traits.
+2. REMAINING KEYWORDS: High-traffic commercial buyer queries (target ${kwTarget} keywords).
+3. TITLE: Front-load commercial keywords in first 3-5 words (Strictly max ${titleLimit} characters).
+4. DESCRIPTION & CATEGORY: Natural English summary. Select category from: [${categoryOptions}].
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Front-Loaded Commercial Title (max ${titleLimit} chars)",
+  "description": "High-SEO commercial description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category"
+}`;
+  } else if (isShutterstock) {
+    prompt = `You are a world-renowned Microstock SEO Specialist and Shutterstock Contributor Metadata Expert.
+Generate OFFICIAL SHUTTERSTOCK-COMPLIANT METADATA:
+1. FACTUAL TITLE & DESCRIPTION (MAX 200 CHARACTERS): Front-load top commercial search terms in first 3-5 words.
+2. KEYWORDS (7 to 50 keywords): Generate ${kwTarget} unique, high-traffic English keywords.
+3. CATEGORIES: Select 1 or 2 valid categories from official list: [${categoryOptions}].
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Factual Commercial Title (max 200 chars)",
+  "description": "Factual detailed description (strictly max 200 chars)",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "PrimaryCategory, SecondaryCategory"
+}`;
+  } else {
+    prompt = `You are a world-renowned Microstock SEO Specialist.
+Generate TOP-RANKING COMMERCIAL METADATA:
+1. TITLE: Front-load primary subject in first 3-5 words (max ${titleLimit} characters).
+2. KEYWORDS: Exactly ${kwTarget} high-converting keywords ordered from primary subject to visual details.
+3. DESCRIPTION & CATEGORY: Accurate English description. Select category from: [${categoryOptions}].
+STRICT OUTPUT FORMAT (JSON ONLY):
+{
+  "filename": "${filename}",
+  "title": "Front-Loaded Commercial Title",
+  "description": "Accurate commercial description in English",
+  "keywords": ["keyword1", "keyword2", ...],
+  "category": "Selected Category"
+}`;
+  }
+
+  if (settings?.customPrompt) {
+    prompt += `\nUSER CUSTOM OVERRIDE: ${settings.customPrompt}`;
+  }
+
+  return prompt;
+}
+
+function formatClientCategoryAndMeta(parsed, platformObj, isVideo, effectiveTitleLimit, effectiveKwMax, filename, mode) {
+  const isShutterstock = (platformObj?.id === 'shutterstock' || (platformObj?.name && platformObj.name.toLowerCase().includes('shutterstock')));
+  const maxTitleLimit = isShutterstock ? 200 : effectiveTitleLimit;
+  const isImg2Prompt = mode === 'img2prompt' || mode === 'img2prompt-photo' || mode === 'img2prompt-video';
+
+  let title = (isImg2Prompt
+    ? String(parsed.title || '')
+    : String(parsed.title || '').substring(0, maxTitleLimit)
+  ).trim();
+
+  let description = String(parsed.description || title).trim();
+  if (isShutterstock) {
+    if (description.length > 200) description = description.substring(0, 200).trim();
+    if (!title || title.length > 200) title = description.substring(0, 200).trim();
+  }
+
+  let rawCat = String(parsed.category || '').trim();
+  const catList = isShutterstock
+    ? (isVideo ? SHUTTERSTOCK_VIDEO_CATEGORIES : SHUTTERSTOCK_IMAGE_CATEGORIES)
+    : (Array.isArray(platformObj?.categories) && platformObj.categories.length > 0
+      ? platformObj.categories
+      : ['General', 'Abstract', 'Animals', 'Architecture', 'Business', 'Food', 'Landscapes', 'Nature', 'People', 'Technology', 'Graphic Resources']);
+
+  let category;
+  if (isShutterstock) {
+    const parts = rawCat.split(',').map(s => s.trim()).filter(Boolean);
+    const matched = [];
+    for (const p of parts) {
+      const found = catList.find(c => c.toLowerCase() === p.toLowerCase())
+        || catList.find(c => c.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(c.toLowerCase()));
+      if (found && !matched.includes(found)) matched.push(found);
+    }
+    category = matched.slice(0, 2).join(', ') || catList[0];
+  } else {
+    category = catList.find(c => c.toLowerCase() === rawCat.toLowerCase())
+      || catList.find(c => c.toLowerCase().includes(rawCat.toLowerCase()) || rawCat.toLowerCase().includes(c.toLowerCase()))
+      || rawCat || catList[0];
+  }
+
+  let keywords = Array.isArray(parsed.keywords) ? parsed.keywords : String(parsed.keywords || '').split(',');
+  keywords = keywords
+    .map(k => String(k).toLowerCase().trim())
+    .filter(k => k.length > 0);
+
+  const seen = new Set();
+  keywords = keywords.filter(k => { if (seen.has(k)) return false; seen.add(k); return true; });
+  keywords = keywords.slice(0, effectiveKwMax);
+
+  if (!title) {
+    title = description || (keywords.length ? keywords.slice(0, 6).join(' ') : (filename || 'Commercial Media Asset').replace(/\.[^/.]+$/, ''));
+  }
+
+  return {
+    filename: parsed.filename || filename,
+    title,
+    description,
+    keywords,
+    category
+  };
+}
+
+async function generateDirectClientAi({ provider, key, base64, mimeType, filename, platform, settings, mode, model, signal }) {
+  if (!key) throw new Error(`${AI_PROVIDERS_CONFIG[provider]?.name || provider} API key is missing.`);
+
+  const platformObj = platform || { name: 'Adobe Stock', keywordMax: 49, titleMaxLen: 70, categories: [] };
+  const pId = (platformObj?.id || platformObj?.name || '').toLowerCase();
+  const isShutterstock = pId === 'shutterstock' || pId.includes('shutterstock');
+  const effectiveKwMax = settings?.kwMax ? parseInt(settings.kwMax, 10) : (parseInt(platformObj.keywordMax, 10) || 49);
+  const effectiveTitleLimit = isShutterstock ? 200 : (settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70));
+  const kwTarget = buildClientKwTarget(effectiveKwMax, settings?.kwMin);
+  const categoryOptions = buildClientCategoryOptions(platformObj, false);
+
+  const prompt = buildClientPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename, isVideo: false });
+
+  let cleanBase64 = String(base64 || '').trim();
+  if (cleanBase64.includes('base64,')) {
+    cleanBase64 = cleanBase64.split('base64,')[1].trim();
+  }
+  cleanBase64 = cleanBase64.replace(/[\r\n\s]/g, '');
+
+  if (provider === 'gemini') {
+    const candidateModels = (model === 'gemini-3.6-flash')
+      ? ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.5-flash-lite']
+      : ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.6-flash'];
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            { inline_data: { mime_type: mimeType || 'image/jpeg', data: cleanBase64 } },
+            { text: prompt }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            filename:    { type: 'STRING' },
+            title:       { type: 'STRING' },
+            description: { type: 'STRING' },
+            keywords:    { type: 'ARRAY', items: { type: 'STRING' } },
+            category:    { type: 'STRING' }
+          },
+          required: ['title', 'description', 'keywords', 'category']
+        }
+      }
+    };
+
+    let lastError = null;
+    for (const curModel of candidateModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${curModel}:generateContent?key=${encodeURIComponent(key)}`;
+        const res = await fetchWithTimeout(url, {
+          method: 'POST',
+          signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        }, 28000);
+
+        const resJson = await res.json().catch(() => ({}));
+        if (res.ok && resJson.candidates?.[0]?.content?.parts?.[0]?.text) {
+          const text = resJson.candidates[0].content.parts[0].text;
+          const parsed = JSON.parse(text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim());
+          return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
+        }
+        if (resJson?.error?.message) {
+          lastError = new Error(resJson.error.message);
+        }
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError || new Error('Direct Gemini generation failed.');
+  }
+
+  if (provider === 'openrouter' || provider === 'openai') {
+    const isOR = provider === 'openrouter';
+    const apiUrl = isOR ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+    const dataUri = `data:${mimeType || 'image/jpeg'};base64,${cleanBase64}`;
+    const selectedModel = model || (isOR ? 'openrouter/auto' : 'gpt-4o-mini');
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    };
+    if (isOR) {
+      headers['HTTP-Referer'] = 'https://microstock-metadata-tool.com';
+      headers['X-Title'] = 'Microstock Tool';
+    }
+
+    const res = await fetchWithTimeout(apiUrl, {
+      method: 'POST',
+      signal,
+      headers,
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: dataUri, detail: 'low' } }
+            ]
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: isOR ? 900 : 1200
+      })
+    }, 28000);
+
+    const resJson = await res.json().catch(() => ({}));
+    if (res.ok && resJson.choices?.[0]?.message?.content) {
+      const text = resJson.choices[0].message.content;
+      const parsed = JSON.parse(text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim());
+      return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
+    }
+    throw new Error(resJson?.error?.message || `${AI_PROVIDERS_CONFIG[provider]?.name} direct call failed.`);
+  }
+
+  throw new Error(`Unsupported provider: ${provider}`);
+}
+
+// ── Main Metadata Generation (Direct Client + Secure Server Proxy Fallback) ──
 export async function generateMetadataForImage(item, platform, apiKey, settings, mode, signal) {
   const provider = _activeProvider || 'gemini';
   const key = apiKey || _providerKeys[provider] || getSessionKey(provider) || '';
@@ -1382,6 +1692,27 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
 
   const { base64, mimeType } = await getImageBase64(item, ext);
 
+  // 1. Direct Browser Client generation (Fastest, zero Netlify timeout, works everywhere)
+  if (key) {
+    try {
+      return await generateDirectClientAi({
+        provider,
+        key,
+        base64,
+        mimeType,
+        filename: item.name || item.file?.name || 'asset.jpg',
+        platform,
+        settings,
+        mode,
+        model: selectedModel,
+        signal
+      });
+    } catch (directErr) {
+      console.warn('[DirectAI Client Warning]', directErr.message, 'Falling back to backend proxy...');
+    }
+  }
+
+  // 2. Dual-Route Backend Proxy Fallback
   const endpoints = [
     `${getApiBase()}/api/ai/generate`,
     '/.netlify/functions/api/ai/generate'

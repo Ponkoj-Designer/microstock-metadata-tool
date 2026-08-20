@@ -1711,6 +1711,8 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
 
   const { base64, mimeType } = await getImageBase64(item, ext);
 
+  let lastError = null;
+
   // 1. Direct Browser Client generation (Fastest, zero Netlify timeout, works everywhere)
   if (key) {
     try {
@@ -1727,7 +1729,8 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
         signal
       });
     } catch (directErr) {
-      console.warn('[DirectAI Client Warning]', directErr.message, 'Falling back to backend proxy...');
+      lastError = directErr;
+      console.warn('[DirectAI Client Notice]', directErr.message, 'Trying backend proxy fallback...');
     }
   }
 
@@ -1737,7 +1740,6 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
     '/.netlify/functions/api/ai/generate'
   ];
 
-  let lastError = null;
   for (const ep of endpoints) {
     try {
       const res = await fetchWithTimeout(ep, {
@@ -1768,7 +1770,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
       }
       if (data.message) lastError = new Error(data.message);
     } catch (e) {
-      lastError = e;
+      if (!lastError) lastError = e;
     }
   }
 

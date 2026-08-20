@@ -256,15 +256,6 @@ export async function initApp() {
   renderTutorialStep();
   updateUploadZoneForTab();
   updateAiStatusBadge();
-
-  // Check for existing session (restores login state after page refresh).
-  // Auth is optional — this resolves quickly and never blocks the tool.
-  try {
-    await checkAuthState();
-  } catch (_) {
-    // Server may not be running locally — continue without auth
-  }
-  updateAuthNav();
 }
 
 // ─── Platform Selector ─────────────────────────────────────────────────────
@@ -1006,15 +997,6 @@ async function triggerAiGeneration() {
     return;
   }
 
-  // Check credit balance for logged-in users before starting
-  const user = getCurrentUser();
-  if (user && (user.credits ?? 0) <= 0) {
-    showToast(`Insufficient credits balance (0 credits available). Please switch plans or request credits.`, 'error');
-    openModal(document.getElementById('modal-pricing'));
-    updatePricingModalUI();
-    return;
-  }
-
   state.isGenerating = true;
   state.stopBatch = false;
   state.activeBatchAbortController = new AbortController();
@@ -1093,21 +1075,6 @@ async function triggerAiGeneration() {
         };
         stateItem._error = null;
         successCount++;
-
-        // Deduct 1 credit for logged-in user upon successful metadata generation
-        const curUser = getCurrentUser();
-        if (curUser) {
-          const deductRes = await deductCredit(1, `Metadata generation: ${item.name}`);
-          if (deductRes.ok) {
-            updateAuthNav();
-          } else {
-            showToast(deductRes.message || 'Credit deduction failed', 'warning');
-            if ((curUser.credits ?? 0) <= 0) {
-              state.stopBatch = true;
-              showToast('Batch stopped — out of credits!', 'error');
-            }
-          }
-        }
       }
       throttledRender();
     },
@@ -1160,13 +1127,6 @@ function regenerateSingleItem(id) {
   if (!hasApiKey(provider)) {
     openModal(document.getElementById('modal-ai-settings'));
     showToast(`Add ${provider} API key first`, 'warning');
-    return;
-  }
-  const curUser = getCurrentUser();
-  if (curUser && (curUser.credits ?? 0) <= 0) {
-    showToast('Insufficient credits to regenerate metadata (0 credits available).', 'error');
-    openModal(document.getElementById('modal-pricing'));
-    updatePricingModalUI();
     return;
   }
   const item = state.mediaItems.find(i => i.id === id);
@@ -1942,38 +1902,12 @@ function setupEventListeners() {
     e.preventDefault();
     window.open('https://wa.me/8801741783521', '_blank', 'noopener,noreferrer');
   });
-  document.getElementById('nav-btn-pricing')?.addEventListener('click',  () => { openModal(modal('modal-pricing')); updatePricingModalUI(); });
-  document.getElementById('btn-close-pricing')?.addEventListener('click',() => closeModal(modal('modal-pricing')));
-  document.getElementById('nav-btn-login')?.addEventListener('click',    () => openAuthModal('login'));
-  document.getElementById('nav-btn-signup')?.addEventListener('click',   () => openAuthModal('signup'));
-  document.getElementById('btn-user-profile')?.addEventListener('click', () => openAuthModal('profile'));
 
-  // Pricing plan buttons
-  document.getElementById('btn-plan-free')?.addEventListener('click', () => {
-    const user = getCurrentUser();
-    const currentPlan = user ? (user.plan || 'free').toLowerCase() : 'free';
-    if (currentPlan === 'free') {
-      showToast('You are currently on the Free Plan', 'info');
-    } else {
-      showToast('Free plan active.', 'info');
-    }
-  });
-  document.getElementById('btn-plan-pro')?.addEventListener('click', () => {
-    openManualPaymentModal('pro');
-  });
-  document.getElementById('btn-plan-business')?.addEventListener('click', () => {
-    openManualPaymentModal('business');
-  });
-
-  // AI Settings button in header/nav & sidebar (Requires Auth)
+  // AI Settings button in header/nav, sidebar, and status badge
   const openAiSettingsHandler = () => {
-    if (!isLoggedIn()) {
-      openAuthModal('login');
-      showToast('Please login or sign up to access API settings.', 'info');
-      return;
-    }
     openModal(modal('modal-ai-settings'));
   };
+  document.getElementById('ai-status-badge')?.addEventListener('click', openAiSettingsHandler);
   document.getElementById('nav-btn-ai-settings')?.addEventListener('click', openAiSettingsHandler);
   document.getElementById('sidebar-btn-add-api')?.addEventListener('click', openAiSettingsHandler);
 
@@ -1986,72 +1920,10 @@ function setupEventListeners() {
     modal('mobile-nav-drawer')?.classList.remove('active');
     window.open('https://wa.me/8801741783521', '_blank', 'noopener,noreferrer');
   });
-  document.getElementById('mobile-nav-pricing')?.addEventListener('click', () => {
-    modal('mobile-nav-drawer')?.classList.remove('active');
-    openModal(modal('modal-pricing'));
-    updatePricingModalUI();
-  });
-  document.getElementById('mobile-nav-login')?.addEventListener('click', () => {
-    modal('mobile-nav-drawer')?.classList.remove('active');
-    openAuthModal('login');
-  });
 
-  // Profile & Plan event listeners
-  document.getElementById('profile-update-form')?.addEventListener('submit', handleProfileSave);
-  document.getElementById('btn-manage-plan-from-profile')?.addEventListener('click', () => {
-    closeModal(modal('modal-auth'));
-    openModal(modal('modal-pricing'));
-    updatePricingModalUI();
-  });
-
-  // Sidebar buttons
-  document.getElementById('btn-sidebar-admin')?.addEventListener('click', () => {
-    openModal(modal('modal-admin-drawer'));
-    renderAdminDashboard();
-  });
-  document.getElementById('btn-sidebar-upgrade')?.addEventListener('click', () => {
-    openModal(modal('modal-pricing'));
-  });
+  // Sidebar help & tutorial button
   document.getElementById('nav-btn-sidebar-help')?.addEventListener('click', () => {
     openModal(modal('modal-tutorial'));
-  });
-  document.getElementById('sidebar-btn-login')?.addEventListener('click', () => {
-    openAuthModal('login');
-  });
-  document.getElementById('sidebar-user-logout-top')?.addEventListener('click', handleLogout);
-  document.getElementById('btn-sidebar-logout')?.addEventListener('click', handleLogout);
-  document.getElementById('btn-close-profile-done')?.addEventListener('click', () => {
-    closeModal(modal('modal-user-profile'));
-  });
-
-  // Admin Panel listeners
-  document.getElementById('btn-admin-panel')?.addEventListener('click', () => {
-    openModal(modal('modal-admin-drawer'));
-    renderAdminDashboard();
-  });
-  document.getElementById('btn-close-admin')?.addEventListener('click', () => closeModal(document.getElementById('modal-admin-drawer')));
-  document.getElementById('btn-admin-refresh')?.addEventListener('click', () => {
-    const searchVal = document.getElementById('admin-user-search')?.value || '';
-    renderAdminDashboard(searchVal);
-  });
-  document.getElementById('btn-admin-refresh-payments')?.addEventListener('click', () => {
-    renderAdminPaymentsList();
-  });
-  document.getElementById('admin-user-search')?.addEventListener('input', e => {
-    renderAdminDashboard(e.target.value);
-  });
-  document.getElementById('admin-tab-users')?.addEventListener('click', () => {
-    document.getElementById('admin-tab-users')?.classList.add('active');
-    document.getElementById('admin-tab-payments')?.classList.remove('active');
-    document.getElementById('admin-section-users').style.display = 'block';
-    document.getElementById('admin-section-payments').style.display = 'none';
-  });
-  document.getElementById('admin-tab-payments')?.addEventListener('click', () => {
-    document.getElementById('admin-tab-payments')?.classList.add('active');
-    document.getElementById('admin-tab-users')?.classList.remove('active');
-    document.getElementById('admin-section-payments').style.display = 'block';
-    document.getElementById('admin-section-users').style.display = 'none';
-    renderAdminPaymentsList();
   });
 
   // Mode selection listeners (Metadata vs Image to Prompt)

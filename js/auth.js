@@ -245,22 +245,10 @@ export async function selectUserPlan(plan) {
 }
 
 /**
- * Deduct credits for logged-in user via POST /api/user/credits/deduct.
+ * Deduct credits — Unlimited access mode.
  */
-export async function deductCredit(amount = 1, description = 'Metadata generation') {
-  try {
-    const { res, data } = await apiFetch('/api/user/credits/deduct', {
-      method: 'POST',
-      body:   JSON.stringify({ amount, description })
-    });
-    if (res && res.ok && data && data.ok && data.user) {
-      _currentUser = data.user;
-      return { ok: true, user: data.user, credits: data.credits };
-    }
-    return { ok: false, message: data?.message || 'Credit deduction failed.' };
-  } catch (_) {
-    return { ok: false, message: 'Network error during credit deduction.' };
-  }
+export async function deductCredit() {
+  return { ok: true, credits: 999999 };
 }
 
 // ── Admin Client Functions ───────────────────────────────────────────────────

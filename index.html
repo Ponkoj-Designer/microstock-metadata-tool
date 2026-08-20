@@ -178,63 +178,21 @@
     </div>
 
 
-    <!-- Right Controls / Auth Group -->
+    <!-- Right Controls Group -->
     <div class="flex items-center gap-4">
       <!-- Desktop Navigation Links -->
       <div class="hidden md:flex items-center gap-3 mr-2">
-        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all" id="nav-btn-tutorial">
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all cursor-pointer" id="nav-btn-tutorial">
           Tutorial
         </button>
-        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all" id="nav-btn-contact">
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all cursor-pointer" id="nav-btn-contact">
           Contact
         </button>
-        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all" id="nav-btn-pricing">
-          Pricing
-        </button>
       </div>
 
-      <!-- AI Status Badge (from existing app) -->
-      <div id="ai-status-badge" class="ai-status-badge disconnected hidden md:inline-flex">
+      <!-- AI Status Badge -->
+      <div id="ai-status-badge" class="ai-status-badge disconnected hidden md:inline-flex cursor-pointer" title="Click to configure AI Engine">
         <span class="ai-dot ai-dot-disconnected"></span> AI OFF
-      </div>
-
-      <!-- Logged-out state -->
-      <div id="auth-logged-out" class="hidden md:flex items-center gap-2">
-        <button class="text-on-surface hover:text-primary-fixed-dim font-label-md text-label-md px-3 py-2 rounded-lg transition-colors" id="nav-btn-login">
-          Login
-        </button>
-        <button class="bg-primary-fixed-dim text-background px-4 py-2 rounded-lg font-label-md text-label-md hover:bg-primary-container transition-colors glow-cyan" id="nav-btn-signup">
-          Sign Up
-        </button>
-      </div>
-
-      <!-- Logged-in state -->
-      <div id="auth-logged-in" class="hidden md:flex items-center gap-4">
-        <!-- Admin Panel -->
-        <button class="hidden md:flex bg-amber-500/20 border border-amber-500/40 text-amber-300 font-label-sm text-label-sm px-3 py-2 rounded-lg hover:bg-amber-500/30 transition-all items-center gap-1" id="btn-admin-panel" style="display:none">
-          <span class="material-symbols-outlined text-[16px]">shield</span> Admin
-        </button>
-        <!-- Credits -->
-        <div id="auth-user-credits-badge" class="hidden md:flex px-3 py-1.5 rounded-full font-label-sm text-label-sm bg-[#00dbe9]/10 border border-[#00dbe9]/30 text-[#00dbe9] items-center gap-1" title="Available Credits">
-          <span>⚡</span> <span>10 Credits</span>
-        </div>
-        <!-- Profile / Avatar -->
-        <button class="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer" id="btn-user-profile" title="User Profile">
-          <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-[#00dbe9] to-[#db50ff] p-[1.5px] shrink-0 shadow-[0_0_10px_rgba(0,219,233,0.35)] flex items-center justify-center">
-            <div class="w-full h-full rounded-full bg-[#161c24] flex items-center justify-center text-[#00dbe9]">
-              <svg class="w-4 h-4 text-[#00dbe9]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
-            </div>
-          </div>
-          <span id="auth-user-plan-badge" class="hidden">FREE</span>
-          <span id="auth-user-name" class="hidden">User</span>
-        </button>
-        <!-- Logout -->
-        <button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors" id="btn-logout" title="Logout">
-          <span class="material-symbols-outlined">logout</span>
-        </button>
       </div>
 
       <!-- Mobile Hamburger Toggle (3-line Menu) -->
@@ -255,12 +213,6 @@
     <button class="flex items-center gap-3 text-on-surface py-2 px-3 rounded-lg hover:bg-surface-container-highest" id="mobile-nav-contact">
       <span class="material-symbols-outlined text-primary-fixed-dim">mail</span> 💬 Contact Support
     </button>
-    <button class="flex items-center gap-3 text-on-surface py-2 px-3 rounded-lg hover:bg-surface-container-highest" id="mobile-nav-pricing">
-      <span class="material-symbols-outlined text-primary-fixed-dim">workspace_premium</span> 💎 Pricing Plans
-    </button>
-    <button class="flex items-center gap-3 text-primary-fixed-dim font-bold py-2.5 px-3 rounded-lg bg-primary-fixed-dim/10 border border-primary-fixed-dim/30" id="mobile-nav-login">
-      <span class="material-symbols-outlined">login</span> 🔑 Login / Sign Up
-    </button>
   </div>
 
   <!-- App Layout Wrapper -->
@@ -268,39 +220,8 @@
     <!-- SideNavBar -->
     <aside class="fixed left-0 top-[68px] w-[280px] md:w-[375px] h-[calc(100vh-68px)] bg-[#191c1f] border-r border-[#3b494b] overflow-y-auto flex flex-col z-40 transition-transform duration-300 transform -translate-x-full md:translate-x-0" id="sidebar">
       
-      <!-- Mobile-Only Sidebar User Account & Auth Section (Hidden on Tablet & PC) -->
-      <div id="sidebar-auth-section" class="block md:hidden px-4 pt-3 pb-2 border-b border-[#3b494b]/60 mb-2">
-        <!-- Logged-Out State -->
-        <div id="sidebar-logged-out" class="flex flex-col gap-2">
-          <button type="button" id="sidebar-btn-login" class="w-full flex items-center justify-center gap-2 py-2 px-3.5 rounded-lg bg-[#00dbe9]/10 border border-[#00dbe9]/40 hover:bg-[#00dbe9]/20 text-[#00dbe9] text-xs font-bold transition-all cursor-pointer">
-            <span class="material-symbols-outlined text-[18px]">login</span>
-            <span>Login / Sign Up</span>
-          </button>
-        </div>
-
-        <!-- Logged-In State -->
-        <div id="sidebar-logged-in" class="hidden flex-col gap-2">
-          <div class="flex items-center justify-between bg-[#161c24] border border-[#2d3748] rounded-xl p-2.5">
-            <div class="flex items-center gap-2.5 overflow-hidden">
-              <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-[#00dbe9] to-[#db50ff] p-[1px] shrink-0">
-                <div class="w-full h-full rounded-full bg-[#191c1f] flex items-center justify-center text-xs font-bold text-[#00dbe9]">
-                  <span class="material-symbols-outlined text-[16px]">person</span>
-                </div>
-              </div>
-              <div class="flex flex-col min-w-0">
-                <span id="sidebar-user-name" class="text-xs font-bold text-white truncate max-w-[140px]">User</span>
-                <span id="sidebar-user-credits" class="text-[10px] text-[#00dbe9] font-mono font-semibold">⚡ 10 Credits</span>
-              </div>
-            </div>
-            <button type="button" id="sidebar-user-logout-top" class="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer" title="Logout">
-              <span class="material-symbols-outlined text-[18px]">logout</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- Minimal Theme-Colored API Key Button -->
-      <div class="px-4 mt-1 mb-3">
+      <div class="px-4 mt-3 mb-3">
         <button type="button" id="sidebar-btn-add-api" class="w-full flex items-center justify-between py-2 px-3.5 rounded-lg bg-[#161c24] border border-[#00dbe9]/35 hover:border-[#00dbe9] hover:bg-[#00dbe9]/10 text-cyan-400 text-xs font-semibold shadow-sm hover:shadow-[0_0_14px_rgba(0,219,233,0.18)] transition-all cursor-pointer group">
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-[17px] text-[#00dbe9] group-hover:rotate-12 transition-transform">vpn_key</span>
@@ -384,27 +305,14 @@
             <textarea id="setting-custom-prompt" class="w-full bg-[#191c1f] border border-[#3b494b] rounded-md p-2 text-xs text-on-surface focus:outline-none focus:border-primary-fixed-dim transition-colors !min-h-[60px]" placeholder="e.g. Focus on commercial minimalism..."></textarea>
           </div>
         </div>
-
-        <!-- Admin drawer trigger if admin -->
-        <button id="btn-sidebar-admin" class="mx-4 mt-4 hidden bg-amber-500/10 border border-amber-500/30 text-amber-300 py-2.5 rounded-xl text-xs font-bold hover:bg-amber-500/20 transition-all flex justify-center items-center gap-2">
-          <span class="material-symbols-outlined text-[18px]">admin_panel_settings</span> Open Admin Control Drawer
-        </button>
       </nav>
 
       <!-- Sticky Footer Area -->
       <div class="px-6 py-4 mt-auto border-t border-[#3b494b] bg-[#191c1f]">
-        <button id="btn-sidebar-upgrade" class="w-full bg-surface-container-high border border-outline-variant text-on-surface py-3 rounded-lg hover:border-secondary-container transition-colors font-label-md text-label-md mb-4 flex justify-center items-center gap-2 group">
-            Upgrade to Pro
-            <span class="material-symbols-outlined text-[18px] group-hover:text-secondary-container transition-colors">rocket_launch</span>
-        </button>
-        <div class="flex items-center justify-between">
-          <a id="nav-btn-sidebar-help" class="flex items-center gap-2 text-on-surface-variant py-2 px-2 hover:bg-surface-container-highest hover:text-on-surface transition-all rounded-md cursor-pointer flex-1">
+        <div class="flex items-center justify-center">
+          <a id="nav-btn-sidebar-help" class="flex items-center justify-center gap-2 text-on-surface-variant py-2 px-3 hover:bg-surface-container-highest hover:text-on-surface transition-all rounded-md cursor-pointer w-full text-center">
             <span class="material-symbols-outlined text-[18px]">help</span>
-            <span class="text-[10px] font-bold uppercase tracking-wider">Help</span>
-          </a>
-          <a id="btn-sidebar-logout" class="flex items-center gap-2 text-on-surface-variant py-2 px-2 hover:bg-surface-container-highest hover:text-error transition-all rounded-md cursor-pointer flex-1 justify-end">
-            <span class="text-[10px] font-bold uppercase tracking-wider">Logout</span>
-            <span class="material-symbols-outlined text-[18px]">logout</span>
+            <span class="text-[10px] font-bold uppercase tracking-wider">Help &amp; Tutorial</span>
           </a>
         </div>
       </div>
@@ -735,158 +643,7 @@
     </div>
   </div>
 
-  <!-- 2. Auth Modal (Login / Signup) -->
-  <div class="modal-overlay" id="modal-auth">
-    <div class="modal-box !max-w-[440px]">
-      <div class="modal-header">
-        <h3 class="modal-title">
-          <span class="material-symbols-outlined text-primary-fixed-dim">account_circle</span> Account Portal
-        </h3>
-        <button class="modal-close-btn" id="btn-close-auth">✕</button>
-      </div>
-      <div class="modal-body !pt-2">
-        <!-- Rounded Box-style Tabs -->
-        <div class="flex p-1 bg-[#15171a] border border-[#3b494b] rounded-xl mb-6" id="auth-tabs-container">
-          <button class="flex-1 py-2.5 text-center text-xs font-bold text-background bg-[#00dbe9] rounded-lg shadow-[0_0_15px_rgba(0,219,233,0.3)] transition-all" id="auth-tab-login">Login</button>
-          <button class="flex-1 py-2.5 text-center text-xs font-medium text-on-surface-variant hover:text-on-surface rounded-lg transition-all" id="auth-tab-signup">Sign Up</button>
-        </div>
 
-        <!-- Login Form -->
-        <form id="auth-login-form" class="flex flex-col gap-4">
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold text-on-surface-variant tracking-wide">EMAIL ADDRESS</label>
-            <input type="email" id="login-email" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="name@example.com" required>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold text-on-surface-variant tracking-wide">PASSWORD</label>
-            <input type="password" id="login-password" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="••••••••" required>
-          </div>
-          <div id="login-error" class="text-[#ff5c5c] text-xs font-semibold py-1.5 px-3 rounded-lg bg-[#ff5c5c]/10 border border-[#ff5c5c]/30 mt-1" style="display:none"></div>
-          <button type="submit" id="btn-login-submit" class="w-full bg-gradient-to-r from-[#00dbe9] to-[#db50ff] text-white py-3.5 rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(219,80,255,0.4)] hover:-translate-y-0.5 transition-all mt-4">
-            Login to Account
-          </button>
-        </form>
-
-        <!-- Signup Form -->
-        <form id="auth-signup-form" class="flex flex-col gap-4" style="display:none">
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold text-on-surface-variant tracking-wide">FULL NAME</label>
-            <input type="text" id="signup-name" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="John Doe" required>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold text-on-surface-variant tracking-wide">EMAIL ADDRESS</label>
-            <input type="email" id="signup-email" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="name@example.com" required>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold text-on-surface-variant tracking-wide">PASSWORD</label>
-            <input type="password" id="signup-password" class="cyber-input bg-[#15171a] border-[#3b494b] focus:border-[#00dbe9] rounded-lg px-4 py-3" placeholder="••••••••" required>
-          </div>
-          <div id="signup-error" class="text-[#ff5c5c] text-xs font-semibold py-1.5 px-3 rounded-lg bg-[#ff5c5c]/10 border border-[#ff5c5c]/30 mt-1" style="display:none"></div>
-          <button type="submit" id="btn-signup-submit" class="w-full bg-gradient-to-r from-[#00dbe9] to-[#db50ff] text-white py-3.5 rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(219,80,255,0.4)] hover:-translate-y-0.5 transition-all mt-4">
-            Create Free Account
-          </button>
-        </form>
-        
-        <!-- Authenticated View -->
-        <div id="auth-profile-view" style="display:none" class="flex-col gap-4 text-center">
-            <h4 class="text-on-surface font-bold text-sm">You are logged in</h4>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 3. User Profile Modal -->
-  <div class="modal-overlay" id="modal-user-profile">
-    <div class="modal-box !max-w-[480px]">
-      <div class="modal-header">
-        <h3 class="modal-title">
-          <span class="material-symbols-outlined text-primary-fixed-dim">badge</span> User Profile &amp; Credits
-        </h3>
-        <button class="modal-close-btn" id="btn-close-profile">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="p-4 rounded-xl bg-[#191c1f] border border-[#3b494b] flex flex-col gap-3 text-xs">
-          <div class="flex justify-between items-center">
-            <span class="text-on-surface-variant">User:</span>
-            <strong id="profile-display-name" class="text-on-surface"></strong>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-on-surface-variant">Current Plan:</span>
-            <span id="profile-plan-tag" class="px-2 py-0.5 rounded bg-primary-fixed-dim/20 text-primary-fixed-dim font-bold uppercase text-[10px]">FREE</span>
-            <span id="profile-plan-text" class="hidden"></span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-on-surface-variant">Remaining Credits:</span>
-            <strong id="profile-credits-text" class="text-emerald-400 font-bold text-sm">⚡ 10</strong>
-          </div>
-          <button id="btn-manage-plan-from-profile" class="mt-2 w-full bg-surface-container border border-outline-variant text-on-surface py-2 rounded-lg text-xs font-semibold hover:border-primary-fixed-dim transition-all">
-            Manage Subscription
-          </button>
-        </div>
-
-        <form id="profile-update-form" class="flex flex-col gap-3 mt-2">
-          <div>
-            <label class="text-xs font-medium text-on-surface-variant block mb-1">Full Name</label>
-            <input type="text" id="profile-fullname-input" class="cyber-input" required>
-          </div>
-          <div>
-            <label class="text-xs font-medium text-on-surface-variant block mb-1">Email Address (Read Only)</label>
-            <input type="email" id="profile-email-input" class="cyber-input opacity-50" readonly>
-          </div>
-          <div id="profile-error" class="text-error text-xs hidden"></div>
-          <button type="submit" id="btn-save-profile" class="w-full bg-[#00dbe9] text-background py-2.5 rounded-lg text-xs font-bold hover:bg-[#00f0ff] transition-all glow-cyan mt-2">
-            Save Changes
-          </button>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold" id="btn-close-profile-done">Done</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 4. Admin Drawer Modal -->
-  <div class="modal-overlay" id="modal-admin-drawer">
-    <div class="modal-box !max-w-[700px]">
-      <div class="modal-header">
-        <h3 class="modal-title text-amber-300">
-          <span class="material-symbols-outlined">admin_panel_settings</span> System Admin Panel
-        </h3>
-        <button class="modal-close-btn" id="btn-close-admin">✕</button>
-      </div>
-      <div class="modal-body">
-        
-        <div class="flex gap-2 border-b border-outline-variant pb-2 mb-2">
-          <button id="admin-tab-users" class="px-4 py-2 text-xs font-bold text-primary-fixed-dim border-b-2 border-primary-fixed-dim">Users</button>
-          <button id="admin-tab-payments" class="px-4 py-2 text-xs font-medium text-on-surface-variant flex items-center gap-1">Payments <span id="admin-pending-badge" class="bg-error text-white text-[9px] px-1.5 rounded-full hidden">0</span></button>
-        </div>
-
-        <div id="admin-section-users">
-          <div class="flex items-center justify-between mb-3">
-            <div class="relative flex-1 max-w-[200px]">
-              <input type="text" id="admin-user-search" class="cyber-input !py-1 text-xs" placeholder="Search users...">
-              <input type="hidden" id="admin-search">
-            </div>
-            <button id="btn-admin-refresh" class="text-xs text-on-surface-variant hover:text-primary-fixed-dim flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">refresh</span> Refresh</button>
-          </div>
-          <div id="admin-users-list" class="max-h-[300px] overflow-y-auto space-y-2">
-            <!-- Rendered via JS -->
-          </div>
-        </div>
-        
-        <div id="admin-section-payments" class="hidden">
-           <div class="flex items-center justify-between mb-3">
-            <span class="text-xs font-medium text-on-surface-variant">Manual Payments</span>
-            <button id="btn-admin-refresh-payments" class="text-xs text-on-surface-variant hover:text-primary-fixed-dim flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">refresh</span> Refresh</button>
-          </div>
-          <div id="admin-payments-list" class="max-h-[300px] overflow-y-auto space-y-2">
-             <!-- Rendered via JS -->
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
 
   <!-- 5. CSV Preview Modal -->
   <div class="modal-overlay" id="modal-csv-preview">
@@ -954,71 +711,6 @@
     </div>
   </div>
 
-  <!-- 8. Pricing Modal -->
-  <div class="modal-overlay" id="modal-pricing">
-    <div class="modal-box !max-w-[780px]">
-      <div class="modal-header">
-        <h3 class="modal-title text-[#00dbe9] flex items-center gap-2">
-          <span class="material-symbols-outlined text-[20px]">workspace_premium</span> Choose Subscription Plan
-        </h3>
-        <button class="modal-close-btn" id="btn-close-pricing">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          
-          <!-- Free Plan -->
-          <div class="bg-[#191c1f] border border-[#3b494b] rounded-xl p-5 flex flex-col justify-between gap-4">
-            <div>
-              <h4 class="text-sm font-bold text-on-surface">FREE PLAN</h4>
-              <p class="text-xs text-on-surface-variant mt-1">For casual contributors</p>
-              <div class="text-2xl font-bold text-on-surface mt-3">৳0 <span class="text-xs font-normal text-on-surface-variant">/ month</span></div>
-            </div>
-            <ul class="text-xs text-on-surface-variant space-y-2">
-              <li>✓ BYOK Gemini / OpenAI</li>
-              <li>✓ Unlimited batch processing</li>
-              <li>✓ Basic &amp; Advanced CSV export</li>
-            </ul>
-            <button id="btn-plan-free" type="button" class="w-full bg-[#15171a] border border-[#3b494b] text-on-surface-variant py-2.5 rounded-lg text-xs font-semibold cursor-pointer hover:border-[#00dbe9]">Active Free Plan</button>
-          </div>
-          
-          <!-- Pro Plan -->
-          <div class="bg-[#1d2023] border-2 border-[#00dbe9] rounded-xl p-5 flex flex-col justify-between gap-4 relative glow-cyan">
-            <div class="absolute -top-3 right-4 bg-[#00dbe9] text-background text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">POPULAR</div>
-            <div>
-              <h4 class="text-sm font-bold text-[#00dbe9]">PRO PLAN</h4>
-              <p class="text-xs text-on-surface-variant mt-1">For active stock uploaders</p>
-              <div class="text-2xl font-bold text-on-surface mt-3">৳150 <span class="text-xs font-normal text-on-surface-variant">/ month</span></div>
-            </div>
-            <ul class="text-xs text-on-surface-variant space-y-2">
-              <li>✓ 6,000 Credits / month</li>
-              <li>✓ All 8 stock platforms</li>
-              <li>✓ Advanced commercial keyword ordering</li>
-              <li>✓ Priority AI Vision Processing</li>
-            </ul>
-            <button id="btn-plan-pro" type="button" class="w-full bg-[#00dbe9] text-background py-2.5 rounded-lg text-xs font-bold glow-cyan cursor-pointer hover:bg-[#00f0ff] transition-all">Upgrade to Pro (৳150)</button>
-          </div>
-
-          <!-- Business Plan -->
-          <div class="bg-[#191c1f] border border-[#3b494b] rounded-xl p-5 flex flex-col justify-between gap-4 hover:border-[#00dbe9]/50 transition-all">
-            <div>
-              <h4 class="text-sm font-bold text-on-surface">BUSINESS PLAN</h4>
-              <p class="text-xs text-on-surface-variant mt-1">For stock studios &amp; agencies</p>
-              <div class="text-2xl font-bold text-on-surface mt-3">৳300 <span class="text-xs font-normal text-on-surface-variant">/ month</span></div>
-            </div>
-            <ul class="text-xs text-on-surface-variant space-y-2">
-              <li>✓ 18,000 Credits / month</li>
-              <li>✓ Custom CSV schema generator</li>
-              <li>✓ Priority 24/7 AI server node</li>
-              <li>✓ VIP Studio Support</li>
-            </ul>
-            <button id="btn-plan-business" type="button" class="w-full bg-gradient-to-r from-[#00dbe9] to-[#db50ff] text-white py-2.5 rounded-lg text-xs font-bold cursor-pointer hover:opacity-90 transition-all">Upgrade to Business (৳300)</button>
-          </div>
-
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- 9. Settings Modal -->
   <div class="modal-overlay" id="modal-settings">
     <div class="modal-box !max-w-[480px]">
@@ -1034,50 +726,6 @@
       </div>
       <div class="modal-footer">
         <button class="bg-[#00dbe9] text-background px-4 py-2 rounded-lg text-xs font-bold" id="btn-save-settings">Save Settings</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 10. Manual Payment Modal -->
-  <div class="modal-overlay" id="modal-manual-payment">
-    <div class="modal-box !max-w-[480px]">
-      <div class="modal-header">
-        <h3 class="modal-title">Submit Manual Payment</h3>
-        <button class="modal-close-btn" id="btn-close-manual-payment">✕</button>
-      </div>
-      <div class="modal-body">
-        <form id="manual-payment-form" class="flex flex-col gap-3">
-          <div>
-            <label class="text-xs font-medium text-on-surface-variant block mb-1">Plan Selected</label>
-            <input type="text" id="manual-plan-display" class="cyber-input opacity-50" readonly>
-            <input type="hidden" id="manual-plan-input">
-          </div>
-          <div>
-            <label class="text-xs font-medium text-on-surface-variant block mb-1">Amount (BDT/USD)</label>
-            <input type="text" id="manual-amount-input" class="cyber-input opacity-50" readonly>
-          </div>
-          <div>
-            <label class="text-xs font-medium text-on-surface-variant block mb-1">Payment Method</label>
-            <select id="manual-method-select" class="cyber-input" required>
-              <option value="bkash">bKash (Personal: +8801700000000)</option>
-              <option value="nagad">Nagad (Personal: +8801700000000)</option>
-              <option value="rocket">Rocket</option>
-              <option value="bank">Bank Transfer</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs font-medium text-on-surface-variant block mb-1">Your Sender Account No. / Email</label>
-            <input type="text" id="manual-sender-input" class="cyber-input" placeholder="e.g. 017XXXXXXXX" required>
-          </div>
-          <div>
-            <label class="text-xs font-medium text-on-surface-variant block mb-1">Transaction ID</label>
-            <input type="text" id="manual-trx-input" class="cyber-input" placeholder="TRX..." required>
-          </div>
-          <div id="manual-payment-error" class="text-error text-xs hidden"></div>
-          <button type="submit" id="btn-submit-manual-payment" class="w-full bg-[#00dbe9] text-background py-2.5 rounded-lg text-xs font-bold glow-cyan mt-2">
-            Submit for Review
-          </button>
-        </form>
       </div>
     </div>
   </div>

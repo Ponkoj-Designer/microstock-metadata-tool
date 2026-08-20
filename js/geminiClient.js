@@ -1657,10 +1657,16 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
         return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
       }
     }
+    if (!res.ok) {
+      if (resJson?.error?.message) {
+        throw new Error(resJson.error.message);
+      }
+      throw new Error(`Google Gemini API HTTP ${res.status}: ${res.statusText || 'Generation request failed'}`);
+    }
     if (resJson?.error?.message) {
       throw new Error(resJson.error.message);
     }
-    throw new Error('Direct Gemini generation with gemini-3.5-flash failed.');
+    throw new Error('Google Gemini API returned an empty or unparseable response.');
   }
 
   if (provider === 'openrouter' || provider === 'openai') {

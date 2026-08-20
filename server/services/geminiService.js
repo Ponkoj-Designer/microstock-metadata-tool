@@ -742,15 +742,21 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
     const categoryOptions = buildCategoryOptions(platformObj, isVideo);
     const prompt         = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename, isVideo });
 
+    let cleanBase64 = String(base64Image || '').trim();
+    if (cleanBase64.includes('base64,')) {
+      cleanBase64 = cleanBase64.split('base64,')[1].trim();
+    }
+    cleanBase64 = cleanBase64.replace(/[\r\n\s]/g, '');
+
     let mediaPart;
 
     if (isVideo) {
       // Upload video to Gemini File API, poll until ACTIVE
-      const buffer = Buffer.from(base64Image, 'base64');
+      const buffer = Buffer.from(cleanBase64, 'base64');
       const { fileUri } = await uploadVideoToGemini(buffer, effectiveMime, apiKey);
       mediaPart = { file_data: { mime_type: effectiveMime, file_uri: fileUri } };
     } else {
-      mediaPart = { inline_data: { mime_type: effectiveMime, data: base64Image } };
+      mediaPart = { inline_data: { mime_type: effectiveMime, data: cleanBase64 } };
     }
 
     const requestBody = {

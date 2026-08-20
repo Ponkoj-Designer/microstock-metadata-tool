@@ -138,7 +138,26 @@ export function clearAllApiKeys() {
 }
 
 export function getSessionKey(provider = _activeProvider) {
-  return _providerKeys[provider];
+  if (_providerKeys[provider]) return _providerKeys[provider];
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const keysStr = localStorage.getItem(STORAGE_KEYS.keys);
+      if (keysStr) {
+        const stored = JSON.parse(keysStr);
+        if (stored && stored[provider]) {
+          _providerKeys[provider] = stored[provider];
+          return stored[provider];
+        }
+      }
+    } catch (_) {}
+  }
+  if (typeof document !== 'undefined') {
+    const input = document.getElementById('gemini-api-key-input');
+    if (input && input.value.trim()) {
+      return input.value.trim();
+    }
+  }
+  return null;
 }
 
 export function getRedactedKey(key, provider = _activeProvider) {

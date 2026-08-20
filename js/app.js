@@ -2356,34 +2356,28 @@ async function handleSaveApiKey() {
     return;
   }
 
-  setBtnLoading(btn, true);
+  // 1. Immediately store the key so user can proceed without blocks
+  setApiKey(key, provider);
+  input.type = 'password';
+  state.geminiConnected = true;
+  updateAiStatusBadge();
+  renderStoredKeys(provider);
   updateConnectionStatus('testing');
 
-  try {
-    // Strictly verify key against official API server before saving
-    const res = await testConnection(key, provider);
+  setBtnLoading(btn, true);
 
+  try {
+    const res = await testConnection(key, provider);
     if (res.ok) {
-      clearAllApiKeys();
-      setApiKey(key, provider);
-      input.type = 'password';
-      state.geminiConnected = true;
-      updateAiStatusBadge();
-      renderStoredKeys(provider);
       updateConnectionStatus('connected');
       showToast(`✓ Connected to ${config.name} API!`, 'success');
     } else {
-      // Rejects fake/invalid keys and displays exact error
-      clearApiKey(provider);
-      state.geminiConnected = false;
-      updateAiStatusBadge();
-      renderStoredKeys(provider);
       updateConnectionStatus('failed', res.message);
-      showToast(`✕ Invalid API Key: ${res.message}`, 'error');
+      showToast(`✕ API notice: ${res.message}`, 'warning');
     }
   } catch (err) {
     updateConnectionStatus('failed', err.message);
-    showToast(`✕ ${config.name} API Key verification failed.`, 'error');
+    showToast(`✕ ${config.name} verification notice: ${err.message}`, 'warning');
   } finally {
     setBtnLoading(btn, false);
   }

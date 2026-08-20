@@ -15,8 +15,7 @@ export const AI_PROVIDERS_CONFIG = {
     placeholder: 'AIza...',
     label: 'Add New API Key',
     models: [
-      { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite (Primary — Ultra Fast)' },
-      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash (Backup)' }
+      { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash' }
     ]
   },
   openrouter: {
@@ -75,14 +74,12 @@ let _providerKeys = {
   openai: _initialData.keys?.openai || null
 };
 let _selectedModels = {
-  gemini: (_initialData.models?.gemini === 'gemini-3.6-flash' ? 'gemini-3.6-flash' : 'gemini-3.5-flash-lite'),
+  gemini: 'gemini-3.5-flash',
   openrouter: _initialData.models?.openrouter || 'openrouter/auto',
   openai: _initialData.models?.openai || 'gpt-4o-mini'
 };
-// Auto-migrate: ensure default is gemini-3.5-flash-lite
-if (!['gemini-3.5-flash-lite', 'gemini-3.6-flash'].includes(_selectedModels.gemini)) {
-  _selectedModels.gemini = 'gemini-3.5-flash-lite';
-}
+// Auto-migrate: ensure default is gemini-3.5-flash
+_selectedModels.gemini = 'gemini-3.5-flash';
 
 function saveStorage() {
   if (typeof localStorage === 'undefined') return;
@@ -1532,10 +1529,6 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
   const effectiveMime = validMimes.has((mimeType || '').toLowerCase()) ? mimeType.toLowerCase() : 'image/jpeg';
 
   if (provider === 'gemini') {
-    const candidateModels = (model === 'gemini-3.6-flash')
-      ? ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite']
-      : ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro'];
-
     const requestBody = {
       contents: [
         {
@@ -1552,61 +1545,44 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       }
     };
 
-    let lastError = null;
-    for (const curModel of candidateModels) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${encodeURIComponent(key)}`;
+    const res = await fetchWithTimeout(url, {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    }, 28000);
+
+    const resJson = await res.json().catch(() => ({}));
+    const candidate = resJson.candidates?.[0];
+    const rawText = candidate?.content?.parts?.map(p => p.text || '').join('\n') || '';
+
+    if (res.ok && rawText.trim().length > 0) {
+      let parsed;
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${curModel}:generateContent?key=${encodeURIComponent(key)}`;
-        const res = await fetchWithTimeout(url, {
-          method: 'POST',
-          signal,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
-        }, 12000);
-
-        const resJson = await res.json().catch(() => ({}));
-        const candidate = resJson.candidates?.[0];
-        const rawText = candidate?.content?.parts?.map(p => p.text || '').join('\n') || '';
-
-        if (res.ok && rawText.trim().length > 0) {
-          let parsed;
-          try {
-            parsed = JSON.parse(rawText.replace(/^```(?:json)?\s*|\s*```$/gi, '').replace(/```/g, '').trim());
-          } catch (_) {
-            const titleMatch = rawText.match(/"title"\s*:\s*"([^"]+)"/i);
-            const descMatch  = rawText.match(/"description"\s*:\s*"([^"]+)"/i);
-            const catMatch   = rawText.match(/"category"\s*:\s*"([^"]+)"/i);
-            const kwMatches  = [...rawText.matchAll(/"([a-zA-Z][a-zA-Z0-9\s-]{1,29})"/g)]
-              .map(m => m[1].trim())
-              .filter(k => k.length > 1 && !['title','description','keywords','category','filename','json'].includes(k.toLowerCase()));
-            parsed = {
-              title: titleMatch ? titleMatch[1].trim() : '',
-              description: descMatch ? descMatch[1].trim() : '',
-              category: catMatch ? catMatch[1].trim() : 'General',
-              keywords: kwMatches.length ? kwMatches : []
-            };
-          }
-          if (parsed && (parsed.title || parsed.description || (parsed.keywords && parsed.keywords.length > 0))) {
-            return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
-          }
-        }
-        if (resJson?.error?.message) {
-          const errMsg = resJson.error.message;
-          lastError = new Error(errMsg);
-          const lower = errMsg.toLowerCase();
-          // If fatal auth or quota error, throw immediately
-          if (res.status === 401 || res.status === 403 || res.status === 429 || (res.status === 400 && (lower.includes('api_key') || lower.includes('key') || lower.includes('quota')))) {
-            throw lastError;
-          }
-        }
-      } catch (e) {
-        lastError = e;
-        const msg = (e.message || '').toLowerCase();
-        if (msg.includes('api key') || msg.includes('api_key') || msg.includes('unauthorized') || msg.includes('permission') || msg.includes('quota')) {
-          throw e;
-        }
+        parsed = JSON.parse(rawText.replace(/^```(?:json)?\s*|\s*```$/gi, '').replace(/```/g, '').trim());
+      } catch (_) {
+        const titleMatch = rawText.match(/"title"\s*:\s*"([^"]+)"/i);
+        const descMatch  = rawText.match(/"description"\s*:\s*"([^"]+)"/i);
+        const catMatch   = rawText.match(/"category"\s*:\s*"([^"]+)"/i);
+        const kwMatches  = [...rawText.matchAll(/"([a-zA-Z][a-zA-Z0-9\s-]{1,29})"/g)]
+          .map(m => m[1].trim())
+          .filter(k => k.length > 1 && !['title','description','keywords','category','filename','json'].includes(k.toLowerCase()));
+        parsed = {
+          title: titleMatch ? titleMatch[1].trim() : '',
+          description: descMatch ? descMatch[1].trim() : '',
+          category: catMatch ? catMatch[1].trim() : 'General',
+          keywords: kwMatches.length ? kwMatches : []
+        };
+      }
+      if (parsed && (parsed.title || parsed.description || (parsed.keywords && parsed.keywords.length > 0))) {
+        return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
       }
     }
-    throw lastError || new Error('Direct Gemini generation failed.');
+    if (resJson?.error?.message) {
+      throw new Error(resJson.error.message);
+    }
+    throw new Error('Direct Gemini generation with gemini-3.5-flash failed.');
   }
 
   if (provider === 'openrouter' || provider === 'openai') {
@@ -1695,7 +1671,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
             'x-platform': encodeURIComponent(JSON.stringify(platform)),
             'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
             'x-mode':  mode || 'metadata',
-            'x-model': selectedModel || 'gemini-3.5-flash-lite'
+            'x-model': selectedModel || 'gemini-3.5-flash'
           },
           body: item.file
         }, VIDEO_TIMEOUT_MS);

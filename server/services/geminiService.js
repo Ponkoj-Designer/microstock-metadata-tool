@@ -548,33 +548,6 @@ async function uploadVideoToGemini(buffer, effectiveMime, apiKey) {
 }
 
 /**
- * Build candidate model list for fallback loop.
- * Primary: Gemini 3.5 Flash-Lite (Ultra Fast)
- * Backup:  Gemini 3.6 Flash
- */
-function buildCandidateModels(primaryModel = 'gemini-3.5-flash-lite') {
-  if (primaryModel === 'gemini-3.6-flash') {
-    return [
-      'gemini-1.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-pro',
-      'gemini-2.5-flash',
-      'gemini-3.6-flash',
-      'gemini-3.5-flash-lite'
-    ];
-  }
-  return [
-    'gemini-1.5-flash',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-pro',
-    'gemini-2.5-flash-lite',
-    'gemini-3.5-flash-lite',
-    'gemini-3.6-flash'
-  ];
-}
-
-/**
  * Extract and parse JSON text from a Gemini candidate response.
  */
 function extractJsonFromCandidate(candidate) {
@@ -625,90 +598,38 @@ function extractJsonFromCandidate(candidate) {
 }
 
 /**
- * Run Gemini generateContent with model fallback and lightning-fast failover.
+ * Run Gemini generateContent using strictly gemini-3.5-flash.
  */
-async function runGeminiWithFallback(candidateModels, requestBody, apiKey) {
-  let lastError = null;
-  const maxPasses = 2; // Allow up to 2 passes across candidate models with progressive backoff
+async function runGeminiModel(requestBody, apiKey) {
+  const url = `${config.geminiBaseUrl}/gemini-3.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-  for (let pass = 0; pass < maxPasses; pass++) {
-    for (let idx = 0; idx < candidateModels.length; idx++) {
-      const curModel = candidateModels[idx];
-      const url = `${config.geminiBaseUrl}/${curModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), 28000);
 
-      try {
-        const abortController = new AbortController();
-        const timeoutId = setTimeout(() => abortController.abort(), 28000); // 28s timeout per attempt for dense media
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: abortController.signal
+    });
 
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody),
-          signal: abortController.signal
-        });
+    clearTimeout(timeoutId);
+    const resJson = await res.json().catch(() => ({}));
 
-        clearTimeout(timeoutId);
-        const resJson = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          const classified   = classifyGeminiError(res.status, resJson);
-          const safeErrorMsg = sanitizeErrorMessage(classified, apiKey);
-          lastError = new Error(safeErrorMsg);
-
-          // Model not found (404) or model-related 400 — immediately try next candidate model
-          if (res.status === 404 || (res.status === 400 && (safeErrorMsg.toLowerCase().includes('model') || safeErrorMsg.toLowerCase().includes('not found') || safeErrorMsg.toLowerCase().includes('not supported')))) {
-            console.warn(`[GeminiService] '${curModel}' model unavailable (${res.status}), switching to next candidate model...`);
-            continue;
-          }
-
-          // FATAL: bad API key — stop everything immediately
-          if (res.status === 401 || res.status === 403 ||
-              (res.status === 400 && safeErrorMsg.toLowerCase().includes('invalid gemini api key'))) {
-            throw lastError;
-          }
-
-          // 503 / 500 Overloaded / 429 Rate limited — back off and try next
-          if (res.status >= 500 || res.status === 429) {
-            const delay = (res.status === 429 ? 1200 : 800) * (pass + 1);
-            await new Promise(r => setTimeout(r, delay));
-            console.warn(`[GeminiService] '${curModel}' returned ${res.status}, retrying with backoff (${delay}ms)...`);
-            continue;
-          }
-
-          // If there's a backup model or next pass available, try it
-          if (idx < candidateModels.length - 1 || pass < maxPasses - 1) {
-            console.warn(`[GeminiService] '${curModel}' failed (${res.status}), trying next candidate...`);
-            continue;
-          }
-
-          throw lastError;
-        }
-
-        console.log(`[GeminiService] ✅ Success with model: ${curModel}`);
-        return resJson;
-
-      } catch (err) {
-        lastError = err;
-        const msg = (err.message || '').toLowerCase();
-        // Fatal auth errors — stop immediately
-        if (msg.includes('invalid gemini api key') || msg.includes('unauthorized') || msg.includes('403')) {
-          throw err;
-        }
-        if (err.name === 'AbortError') {
-          console.warn(`[GeminiService] '${curModel}' timed out (>28s), switching to backup model...`);
-        } else {
-          console.warn(`[GeminiService] Error with '${curModel}' (${err.message}), switching...`);
-        }
-        if (idx < candidateModels.length - 1 || pass < maxPasses - 1) {
-          const waitTime = (pass + 1) * 800;
-          await new Promise(r => setTimeout(r, waitTime));
-          continue;
-        }
-      }
+    if (!res.ok) {
+      const classified   = classifyGeminiError(res.status, resJson);
+      const safeErrorMsg = sanitizeErrorMessage(classified, apiKey);
+      throw new Error(safeErrorMsg);
     }
-  }
 
-  throw lastError || new Error('All configured Gemini models are currently busy. Please try again in a moment.');
+    console.log('[GeminiService] ✅ Success with model: gemini-3.5-flash');
+    return resJson;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    const msg = sanitizeErrorMessage(err.message || 'Gemini request failed', apiKey);
+    throw new Error(msg);
+  }
 }
 
 
@@ -777,12 +698,8 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
       }
     };
 
-    const requestedModel  = (model === 'gemini-3.6-flash') ? 'gemini-3.6-flash' : (config.geminiModel || 'gemini-3.5-flash-lite');
-    const candidateModels = buildCandidateModels(requestedModel);
-    console.log(`[GeminiService] Using models: ${candidateModels.join(' → ')}`);
-
-    // BUG FIX #2 (partial) & #3: unified fallback loop also used here
-    const data      = await runGeminiWithFallback(candidateModels, requestBody, apiKey);
+    console.log('[GeminiService] Using model: gemini-3.5-flash');
+    const data      = await runGeminiModel(requestBody, apiKey);
     const candidate = data.candidates?.[0];
     const parsed    = extractJsonFromCandidate(candidate);
 
@@ -797,10 +714,8 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
 
 /**
  * Generate metadata using raw binary video data (bypassing Base64).
- * BUG FIX #2: Now uses the same model fallback loop as generateGeminiMetadata.
- * BUG FIX #4: Now accepts a `model` parameter.
  */
-export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer, mimeType = 'video/mp4', filename = 'video.mp4', platform, settings, mode, model }) {
+export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer, mimeType = 'video/mp4', filename = 'video.mp4', platform, settings, mode }) {
   const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) throw new Error('Gemini API key is required.');
 
@@ -833,26 +748,12 @@ export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer
       generationConfig: {
         temperature: 0.35,
         maxOutputTokens: 2048,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            filename:    { type: 'STRING' },
-            title:       { type: 'STRING' },
-            description: { type: 'STRING' },
-            keywords:    { type: 'ARRAY', items: { type: 'STRING' } },
-            category:    { type: 'STRING' }
-          },
-          required: ['title', 'description', 'keywords', 'category']
-        }
+        responseMimeType: 'application/json'
       }
     };
 
-    // BUG FIX #2 & #4: use model parameter + full fallback loop instead of hardcoded model
-    const requestedModel  = (model === 'gemini-3.6-flash') ? 'gemini-3.6-flash' : (config.geminiModel || 'gemini-3.5-flash-lite');
-    const candidateModels = buildCandidateModels(requestedModel);
-
-    const data      = await runGeminiWithFallback(candidateModels, requestBody, apiKey);
+    console.log('[GeminiService] Using model: gemini-3.5-flash');
+    const data      = await runGeminiModel(requestBody, apiKey);
     const candidate = data.candidates?.[0];
     const parsed    = extractJsonFromCandidate(candidate);
 

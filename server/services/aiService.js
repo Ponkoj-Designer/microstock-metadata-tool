@@ -11,7 +11,7 @@ export const AI_PROVIDERS = {
     name: 'Google Gemini',
     getKeyUrl: 'https://aistudio.google.com/app/apikey',
     placeholder: 'AIzaSy...',
-    defaultModel: 'gemini-3.5-flash-lite'
+    defaultModel: 'gemini-3.5-flash'
   },
   openai: {
     id: 'openai',

@@ -773,18 +773,7 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
       generationConfig: {
         temperature: 0.3,
         maxOutputTokens: 2048,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            filename:    { type: 'STRING' },
-            title:       { type: 'STRING' },
-            description: { type: 'STRING' },
-            keywords:    { type: 'ARRAY', items: { type: 'STRING' } },
-            category:    { type: 'STRING' }
-          },
-          required: ['title', 'description', 'keywords', 'category']
-        }
+        responseMimeType: 'application/json'
       }
     };
 

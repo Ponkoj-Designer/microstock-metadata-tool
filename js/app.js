@@ -2229,6 +2229,8 @@ function setupEventListeners() {
   document.getElementById('auth-tab-signup')?.addEventListener('click',   () => switchAuthTab('signup'));
   document.getElementById('auth-login-form')?.addEventListener('submit',  handleLoginSubmit);
   document.getElementById('auth-signup-form')?.addEventListener('submit', handleSignupSubmit);
+  document.getElementById('btn-login-submit')?.addEventListener('click',  handleLoginSubmit);
+  document.getElementById('btn-signup-submit')?.addEventListener('click', handleSignupSubmit);
 
   // AI Settings Modal
   document.getElementById('btn-close-ai-settings')?.addEventListener('click', () => closeModal(modal('modal-ai-settings')));
@@ -2575,10 +2577,12 @@ function updateConnectionStatus(state_str, message) {
   }
 }
 
-// ─── Auth Handlers (real API calls) ────────────────────────────────────────
+let _authIsSubmitting = false;
 
 async function handleLoginSubmit(e) {
   if (e && e.preventDefault) e.preventDefault();
+  if (_authIsSubmitting) return;
+
   const emailEl    = document.getElementById('login-email');
   const passEl     = document.getElementById('login-password');
   const errorEl    = document.getElementById('login-error');
@@ -2596,12 +2600,13 @@ async function handleLoginSubmit(e) {
   }
 
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  _authIsSubmitting = true;
   setBtnLoading(submitBtn, true);
 
   try {
     const result = await login({ email: emailVal, password: passVal });
-    console.log('[handleLoginSubmit] login result:', result);
     setBtnLoading(submitBtn, false);
+    _authIsSubmitting = false;
 
     if (result.ok) {
       closeModal(document.getElementById('modal-auth'));
@@ -2614,14 +2619,16 @@ async function handleLoginSubmit(e) {
       showToast(result.message, 'error');
     }
   } catch (err) {
-    console.error('[handleLoginSubmit] caught error:', err);
     setBtnLoading(submitBtn, false);
+    _authIsSubmitting = false;
     if (errorEl) { errorEl.textContent = err.message || 'Login failed.'; errorEl.style.display = 'block'; }
   }
 }
 
 async function handleSignupSubmit(e) {
   if (e && e.preventDefault) e.preventDefault();
+  if (_authIsSubmitting) return;
+
   const nameEl    = document.getElementById('signup-name') || document.getElementById('signup-fullname');
   const emailEl   = document.getElementById('signup-email');
   const passEl    = document.getElementById('signup-password');
@@ -2641,22 +2648,29 @@ async function handleSignupSubmit(e) {
   }
 
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  _authIsSubmitting = true;
   setBtnLoading(submitBtn, true);
 
-  const result = await signup({ fullName: nameVal, email: emailVal, password: passVal });
+  try {
+    const result = await signup({ fullName: nameVal, email: emailVal, password: passVal });
+    setBtnLoading(submitBtn, false);
+    _authIsSubmitting = false;
 
-  setBtnLoading(submitBtn, false);
-
-  if (result.ok) {
-    closeModal(document.getElementById('modal-auth'));
-    updateAuthNav();
-    showToast(`Account created! Welcome, ${result.user.fullName || result.user.email}! 🎉`, 'success');
-    if (nameEl)  nameEl.value  = '';
-    if (emailEl) emailEl.value = '';
-    if (passEl)  passEl.value  = '';
-  } else {
-    if (errorEl) { errorEl.textContent = result.message; errorEl.style.display = 'block'; }
-    showToast(result.message, 'error');
+    if (result.ok) {
+      closeModal(document.getElementById('modal-auth'));
+      updateAuthNav();
+      showToast(`Account created! Welcome, ${result.user.fullName || result.user.email}! 🎉`, 'success');
+      if (nameEl)  nameEl.value  = '';
+      if (emailEl) emailEl.value = '';
+      if (passEl)  passEl.value  = '';
+    } else {
+      if (errorEl) { errorEl.textContent = result.message; errorEl.style.display = 'block'; }
+      showToast(result.message, 'error');
+    }
+  } catch (err) {
+    setBtnLoading(submitBtn, false);
+    _authIsSubmitting = false;
+    if (errorEl) { errorEl.textContent = err.message || 'Signup failed.'; errorEl.style.display = 'block'; }
   }
 }
 

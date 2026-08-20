@@ -9,6 +9,15 @@
  * This file never touches the token directly — it just calls the API.
  */
 
+function getApiBase() {
+  if (typeof window === 'undefined') return '';
+  const port = window.location.port;
+  if (port && port !== '3000' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return `http://${window.location.hostname}:3000`;
+  }
+  return '';
+}
+
 // ── Persistent (localStorage) + In-memory session state ──────────────────────
 function getSavedUser() {
   if (typeof localStorage === 'undefined') return null;
@@ -44,9 +53,9 @@ export function isLoggedIn()     { return !!_currentUser; }
 export async function checkAuthState() {
   _currentUser = getSavedUser();
   try {
-    const res = await fetch('/api/auth/me', {
+    const res = await fetch(`${getApiBase()}/api/auth/me`, {
       method:      'GET',
-      credentials: 'same-origin',
+      credentials: 'include',
       headers:     { 'Content-Type': 'application/json' }
     });
     if (res.ok) {
@@ -74,9 +83,9 @@ export async function checkAuthState() {
  */
 export async function signup({ fullName, email, password }) {
   try {
-    const res = await fetch('/api/auth/signup', {
+    const res = await fetch(`${getApiBase()}/api/auth/signup`, {
       method:      'POST',
-      credentials: 'same-origin',
+      credentials: 'include',
       headers:     { 'Content-Type': 'application/json' },
       body:        JSON.stringify({ fullName, email, password })
     });
@@ -99,9 +108,9 @@ export async function signup({ fullName, email, password }) {
  */
 export async function login({ email, password }) {
   try {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(`${getApiBase()}/api/auth/login`, {
       method:      'POST',
-      credentials: 'same-origin',
+      credentials: 'include',
       headers:     { 'Content-Type': 'application/json' },
       body:        JSON.stringify({ email, password })
     });
@@ -125,9 +134,9 @@ export async function logout() {
   _currentUser = null;
   saveUser(null);
   try {
-    await fetch('/api/auth/logout', {
+    await fetch(`${getApiBase()}/api/auth/logout`, {
       method:      'POST',
-      credentials: 'same-origin',
+      credentials: 'include',
       headers:     { 'Content-Type': 'application/json' }
     });
   } catch (_) {

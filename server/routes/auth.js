@@ -32,7 +32,7 @@ const COOKIE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 const COOKIE_OPTIONS = {
   httpOnly: true,                               // JS cannot read this cookie
   secure:   config.nodeEnv === 'production',    // HTTPS only in production
-  sameSite: 'strict',                           // CSRF protection
+  sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
   maxAge:   COOKIE_TTL_MS,
   path:     '/'
 };

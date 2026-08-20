@@ -1611,8 +1611,7 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       ],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 2048,
-        responseMimeType: 'application/json'
+        maxOutputTokens: 2048
       }
     };
 

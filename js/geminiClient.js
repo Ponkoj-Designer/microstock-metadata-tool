@@ -1248,10 +1248,10 @@ export async function optimizeImageForAi(input, ext = '') {
     }
   }
 
-  const MAX_DIM = 768;
+  const MAX_DIM = 640;
 
   const canvasToJpeg = (canvas) => {
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.70);
     const base64 = dataUrl.split(',')[1];
     return { base64, mimeType: 'image/jpeg' };
   };
@@ -1316,7 +1316,7 @@ export async function optimizeImageForAi(input, ext = '') {
             reject(new Error('Image decoding timed out.'));
           }
         }
-      }, 10000);
+      }, 8000);
 
       img.onload = () => {
         if (isDone) return;
@@ -1325,8 +1325,8 @@ export async function optimizeImageForAi(input, ext = '') {
         if (objectUrl) URL.revokeObjectURL(objectUrl);
 
         try {
-          const naturalW = img.naturalWidth || img.width || 1000;
-          const naturalH = img.naturalHeight || img.height || 1000;
+          const naturalW = img.naturalWidth || img.width || 800;
+          const naturalH = img.naturalHeight || img.height || 800;
           const scale = Math.min(1, MAX_DIM / naturalW, MAX_DIM / naturalH);
           const w = Math.max(1, Math.round(naturalW * scale));
           const h = Math.max(1, Math.round(naturalH * scale));
@@ -1336,7 +1336,7 @@ export async function optimizeImageForAi(input, ext = '') {
           canvas.height = h;
           const ctx = canvas.getContext('2d');
           ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
+          ctx.imageSmoothingQuality = 'medium';
           ctx.fillStyle = '#FFFFFF';
           ctx.fillRect(0, 0, w, h);
           ctx.drawImage(img, 0, 0, w, h);
@@ -1377,19 +1377,26 @@ export async function optimizeImageForAi(input, ext = '') {
 }
 
 async function getImageBase64(item, ext) {
+  if (item._cachedBase64 && item._cachedMimeType) {
+    return { base64: item._cachedBase64, mimeType: item._cachedMimeType };
+  }
+
+  let result;
   if (item.file) {
-    return await optimizeImageForAi(item.file, ext);
+    result = await optimizeImageForAi(item.file, ext);
+  } else if (item.url && item.url.startsWith('data:image/')) {
+    result = await optimizeImageForAi(item.url, ext);
+  } else if (item.url) {
+    result = await optimizeImageForAi(item.url, ext);
+  } else {
+    throw new Error(`Unable to extract base64 image data for ${item.name || 'asset'}`);
   }
 
-  if (item.url && item.url.startsWith('data:image/')) {
-    return await optimizeImageForAi(item.url, ext);
+  if (result?.base64) {
+    item._cachedBase64 = result.base64;
+    item._cachedMimeType = result.mimeType;
   }
-
-  if (item.url) {
-    return await optimizeImageForAi(item.url, ext);
-  }
-
-  throw new Error(`Unable to extract base64 image data for ${item.name || 'asset'}`);
+  return result;
 }
 
 
@@ -1611,7 +1618,7 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       ],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 2048
+        maxOutputTokens: 1024
       }
     };
 

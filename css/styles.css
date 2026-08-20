@@ -531,3 +531,68 @@
 #mobile-nav-drawer.active {
   display: flex !important;
 }
+
+/* Mobile Responsive Overrides (320px, 360px, 375px, 390px, 414px) */
+@media (max-width: 767px) {
+  html, body {
+    overflow-x: hidden;
+  }
+
+  /* Prevent text and container horizontal overflow */
+  .modal-box {
+    max-width: calc(100vw - 24px) !important;
+    margin: 12px auto !important;
+    max-height: 85vh !important;
+  }
+
+  .modal-header,
+  .modal-footer {
+    padding: 14px 16px !important;
+  }
+
+  .modal-body {
+    padding: 16px !important;
+  }
+
+  #platform-grid button {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 130px;
+    justify-content: center;
+    padding: 8px 10px !important;
+    font-size: 0.72rem !important;
+  }
+
+  #stats-bar,
+  #toolbar-section {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  #stats-bar > div,
+  #toolbar-section > div {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  #search-input {
+    width: 100% !important;
+  }
+
+  #status-filter-select {
+    width: 100% !important;
+  }
+
+  .grid-card {
+    width: 100% !important;
+  }
+
+  #toast-container {
+    top: 76px !important;
+    width: calc(100vw - 24px) !important;
+  }
+
+  .toast-item {
+    font-size: 0.78rem !important;
+    padding: 10px 16px !important;
+  }
+}

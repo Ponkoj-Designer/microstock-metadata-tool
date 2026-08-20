@@ -185,33 +185,36 @@
         <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all cursor-pointer" id="nav-btn-tutorial">
           Tutorial
         </button>
-        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all cursor-pointer" id="nav-btn-contact">
-          Contact
-        </button>
-      </div>
-
-      <!-- AI Status Badge -->
-      <div id="ai-status-badge" class="ai-status-badge disconnected hidden md:inline-flex cursor-pointer" title="Click to configure AI Engine">
+    <!-- Right Header Actions (AI Status, Auth & Hamburger) -->
+    <div class="flex items-center gap-3">
+      <!-- AI Engine Status Badge -->
+      <div class="ai-status-badge cursor-pointer transition-all hover:border-[#00dbe9]" id="ai-status-badge" title="Click to configure AI Provider & API Keys">
         <span class="ai-dot ai-dot-disconnected"></span> AI OFF
       </div>
 
       <!-- Mobile Hamburger Toggle (3-line Menu) -->
-      <button class="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-white bg-[#191c1f] border border-[#3b494b] hover:border-[#00dbe9] transition-all md:hidden cursor-pointer" id="hamburger-btn" onclick="document.getElementById('mobile-nav-drawer').classList.toggle('active');" aria-label="Open Navigation Menu">
+      <button class="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-white bg-[#191c1f] border border-[#3b494b] hover:border-[#00dbe9] transition-all md:hidden cursor-pointer" id="hamburger-btn" onclick="const drawer = document.getElementById('mobile-nav-drawer'); const overlay = document.getElementById('mobile-overlay'); drawer.classList.toggle('active'); overlay.classList.toggle('hidden', !drawer.classList.contains('active'));" aria-label="Open Navigation Menu">
         <span class="material-symbols-outlined text-[22px]">menu</span>
       </button>
     </div>
   </nav>
 
   <!-- Mobile Overlay -->
-  <div id="mobile-overlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 hidden md:hidden transition-opacity" onclick="document.getElementById('mobile-nav-drawer').classList.remove('active'); this.classList.add('hidden');"></div>
+  <div id="mobile-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 hidden md:hidden transition-opacity" onclick="document.getElementById('mobile-nav-drawer').classList.remove('active'); const sb = document.getElementById('sidebar'); sb.classList.add('-translate-x-full'); sb.classList.remove('translate-x-0'); this.classList.add('hidden');"></div>
 
   <!-- Mobile Nav Drawer -->
-  <div class="fixed top-[68px] left-0 w-full bg-[#1d2023] border-b border-outline-variant p-4 flex flex-col gap-3 z-40 md:hidden shadow-2xl transition-all duration-200" id="mobile-nav-drawer">
-    <button class="flex items-center gap-3 text-on-surface py-2 px-3 rounded-lg hover:bg-surface-container-highest" id="mobile-nav-tutorial">
-      <span class="material-symbols-outlined text-primary-fixed-dim">help</span> 📖 Tutorial &amp; Guide
+  <div class="fixed top-[68px] left-0 w-full bg-[#1d2023] border-b border-outline-variant p-4 flex flex-col gap-2.5 z-40 md:hidden shadow-2xl transition-all duration-200" id="mobile-nav-drawer">
+    <button class="flex items-center gap-3 text-on-surface py-2.5 px-3 rounded-lg hover:bg-surface-container-highest text-xs font-semibold cursor-pointer" id="mobile-nav-ai-settings">
+      <span class="material-symbols-outlined text-primary-fixed-dim text-[20px]">vpn_key</span> ⚙️ AI Settings &amp; API Keys
     </button>
-    <button class="flex items-center gap-3 text-on-surface py-2 px-3 rounded-lg hover:bg-surface-container-highest" id="mobile-nav-contact">
-      <span class="material-symbols-outlined text-primary-fixed-dim">mail</span> 💬 Contact Support
+    <button class="flex items-center gap-3 text-on-surface py-2.5 px-3 rounded-lg hover:bg-surface-container-highest text-xs font-semibold cursor-pointer" id="mobile-nav-sidebar">
+      <span class="material-symbols-outlined text-primary-fixed-dim text-[20px]">tune</span> 🛠️ Sidebar Settings &amp; Rules
+    </button>
+    <button class="flex items-center gap-3 text-on-surface py-2.5 px-3 rounded-lg hover:bg-surface-container-highest text-xs font-semibold cursor-pointer" id="mobile-nav-tutorial">
+      <span class="material-symbols-outlined text-primary-fixed-dim text-[20px]">help</span> 📖 Tutorial &amp; Guide
+    </button>
+    <button class="flex items-center gap-3 text-on-surface py-2.5 px-3 rounded-lg hover:bg-surface-container-highest text-xs font-semibold cursor-pointer" id="mobile-nav-contact">
+      <span class="material-symbols-outlined text-primary-fixed-dim text-[20px]">mail</span> 💬 Contact Support
     </button>
   </div>
 

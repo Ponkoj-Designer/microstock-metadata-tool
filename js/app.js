@@ -1568,12 +1568,28 @@ function setupEventListeners() {
   document.getElementById('sidebar-btn-add-api')?.addEventListener('click', openAiSettingsHandler);
 
   // Mobile drawer
+  document.getElementById('mobile-nav-ai-settings')?.addEventListener('click', () => {
+    modal('mobile-nav-drawer')?.classList.remove('active');
+    document.getElementById('mobile-overlay')?.classList.add('hidden');
+    openModal(modal('modal-ai-settings'));
+  });
+  document.getElementById('mobile-nav-sidebar')?.addEventListener('click', () => {
+    modal('mobile-nav-drawer')?.classList.remove('active');
+    const sb = document.getElementById('sidebar');
+    if (sb) {
+      sb.classList.remove('-translate-x-full');
+      sb.classList.add('translate-x-0');
+    }
+    document.getElementById('mobile-overlay')?.classList.remove('hidden');
+  });
   document.getElementById('mobile-nav-tutorial')?.addEventListener('click', () => {
     modal('mobile-nav-drawer')?.classList.remove('active');
+    document.getElementById('mobile-overlay')?.classList.add('hidden');
     openModal(modal('modal-tutorial'));
   });
   document.getElementById('mobile-nav-contact')?.addEventListener('click', () => {
     modal('mobile-nav-drawer')?.classList.remove('active');
+    document.getElementById('mobile-overlay')?.classList.add('hidden');
     window.open('https://wa.me/8801741783521', '_blank', 'noopener,noreferrer');
   });
 

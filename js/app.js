@@ -2374,28 +2374,34 @@ async function handleSaveApiKey() {
     return;
   }
 
-  // 1. Immediately store the key so user can proceed without blocks
-  setApiKey(key, provider);
-  input.type = 'password';
-  state.geminiConnected = true;
-  updateAiStatusBadge();
-  renderStoredKeys(provider);
-  updateConnectionStatus('testing');
-
   setBtnLoading(btn, true);
+  updateConnectionStatus('testing');
 
   try {
     const res = await testConnection(key, provider);
     if (res.ok) {
+      setApiKey(key, provider);
+      input.type = 'password';
+      state.geminiConnected = true;
       updateConnectionStatus('connected');
+      updateAiStatusBadge();
+      renderStoredKeys(provider);
       showToast(`✓ Connected to ${config.name} API!`, 'success');
     } else {
+      clearApiKey(provider);
+      state.geminiConnected = false;
       updateConnectionStatus('failed', res.message);
-      showToast(`✕ API notice: ${res.message}`, 'warning');
+      updateAiStatusBadge();
+      renderStoredKeys(provider);
+      showToast(`✕ API validation failed: ${res.message}`, 'error');
     }
   } catch (err) {
+    clearApiKey(provider);
+    state.geminiConnected = false;
     updateConnectionStatus('failed', err.message);
-    showToast(`✕ ${config.name} verification notice: ${err.message}`, 'warning');
+    updateAiStatusBadge();
+    renderStoredKeys(provider);
+    showToast(`✕ ${config.name} verification failed: ${err.message}`, 'error');
   } finally {
     setBtnLoading(btn, false);
   }
@@ -2413,7 +2419,7 @@ function handleClearApiKey() {
   updateAiStatusBadge();
   renderStoredKeys(provider);
   updateConnectionStatus('disconnected');
-  showToast(`${config.name} API key cleared`, 'info');
+  showToast(`${config.name} API key disconnected`, 'info');
 }
 
 async function handleTestConnection() {
@@ -2434,18 +2440,22 @@ async function handleTestConnection() {
   try {
     const res = await testConnection(key, provider);
     if (res.ok) {
-      if (key) setApiKey(key, provider);
+      setApiKey(key, provider);
       state.geminiConnected = true;
       updateAiStatusBadge();
       renderStoredKeys(provider);
       updateConnectionStatus('connected');
       showToast(`✓ ${res.message || `Connected to ${config.name} API!`}`, 'success');
     } else {
+      state.geminiConnected = false;
       updateConnectionStatus('failed', res.message);
+      updateAiStatusBadge();
       showToast(`✕ Test Failed: ${res.message}`, 'error');
     }
   } catch (err) {
+    state.geminiConnected = false;
     updateConnectionStatus('failed', err.message);
+    updateAiStatusBadge();
     showToast(`✕ Connection Error: ${err.message}`, 'error');
   } finally {
     setBtnLoading(btn, false);

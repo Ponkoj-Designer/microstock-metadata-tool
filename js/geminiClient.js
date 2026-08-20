@@ -166,18 +166,50 @@ export function getRedactedKey(key, provider = _activeProvider) {
 // ── Fetch with timeout & signal support ─────────────────────────────────────
 async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => {
+    try {
+      controller.abort(new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`));
+    } catch (_) {
+      controller.abort();
+    }
+  }, timeoutMs);
+
   if (options && options.signal) {
     if (options.signal.aborted) {
       clearTimeout(timer);
-      controller.abort();
+      try {
+        controller.abort(options.signal.reason || new Error('Request was cancelled'));
+      } catch (_) {
+        controller.abort();
+      }
     } else {
-      options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+      options.signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        try {
+          controller.abort(options.signal.reason || new Error('Request was cancelled'));
+        } catch (_) {
+          controller.abort();
+        }
+      }, { once: true });
     }
   }
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
+    const fetchOptions = { ...options, signal: controller.signal };
+    const res = await fetch(url, fetchOptions);
     return res;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const abortReason = controller.signal?.reason?.message || (typeof controller.signal?.reason === 'string' ? controller.signal.reason : null);
+      if (abortReason) {
+        throw new Error(abortReason);
+      }
+      if (options?.signal?.aborted) {
+        const parentReason = options.signal?.reason?.message || (typeof options.signal?.reason === 'string' ? options.signal.reason : null);
+        throw new Error(parentReason || 'Operation was cancelled');
+      }
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -195,29 +227,38 @@ function getApiBase() {
 // ── Connection Test ─────────────────────────────────────────────────────────
 export async function testConnection(key, provider = _activeProvider) {
   const targetKey = String(key || _providerKeys[provider] || '').trim();
-  if (!targetKey && provider !== 'gemini') {
-    return { ok: false, message: `${AI_PROVIDERS_CONFIG[provider]?.name || provider} API key is missing.` };
+  if (!targetKey) {
+    return { ok: false, message: `Please enter your ${AI_PROVIDERS_CONFIG[provider]?.name || provider} API key.` };
   }
 
-  // 1. Direct Browser-to-API check (ultra-fast, zero-dependency, works everywhere)
+  // 1. Direct Browser-to-API check (validates exact model gemini-3.5-flash)
   if (provider === 'gemini') {
     try {
-      const directUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(targetKey)}`;
-      const res = await fetchWithTimeout(directUrl, { method: 'GET' }, 8000);
+      const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${encodeURIComponent(targetKey)}`;
+      const res = await fetchWithTimeout(directUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Hello' }] }]
+        })
+      }, 10000);
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        return { ok: true, message: 'Successfully connected to Google Gemini API!' };
+        return { ok: true, message: 'Successfully connected to Google Gemini API (gemini-3.5-flash)!' };
       }
       if (data?.error?.message) {
         return { ok: false, message: data.error.message };
       }
-    } catch (_) {}
+      return { ok: false, message: `Gemini API returned status ${res.status}` };
+    } catch (e) {
+      return { ok: false, message: e.message || 'Unable to reach Google Gemini API' };
+    }
   } else if (provider === 'openrouter') {
     try {
       const res = await fetchWithTimeout('https://openrouter.ai/api/v1/auth/key', {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${targetKey}` }
-      }, 8000);
+      }, 10000);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.data) {
         return { ok: true, message: 'Successfully connected to OpenRouter API!' };
@@ -225,13 +266,15 @@ export async function testConnection(key, provider = _activeProvider) {
       if (data?.error?.message) {
         return { ok: false, message: data.error.message };
       }
-    } catch (_) {}
+    } catch (e) {
+      return { ok: false, message: e.message || 'Unable to reach OpenRouter API' };
+    }
   } else if (provider === 'openai') {
     try {
       const res = await fetchWithTimeout('https://api.openai.com/v1/models', {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${targetKey}` }
-      }, 8000);
+      }, 10000);
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         return { ok: true, message: 'Successfully connected to OpenAI API!' };
@@ -239,7 +282,9 @@ export async function testConnection(key, provider = _activeProvider) {
       if (data?.error?.message) {
         return { ok: false, message: data.error.message };
       }
-    } catch (_) {}
+    } catch (e) {
+      return { ok: false, message: e.message || 'Unable to reach OpenAI API' };
+    }
   }
 
   // 2. Dual-Route Backend Proxy Verification
@@ -1552,7 +1597,7 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
       keepalive: true
-    }, 18000);
+    }, 45000);
 
     const resJson = await res.json().catch(() => ({}));
     const candidate = resJson.candidates?.[0];

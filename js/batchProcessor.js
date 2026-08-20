@@ -44,7 +44,7 @@ export async function runBatchQueue({
       onItemStart && onItemStart(item, i);
 
       let attempts = 0;
-      const maxAttempts = 4; // Up to 4 attempts with exponential backoff for bulk 100-200+ files
+      const maxAttempts = 6; // Up to 6 attempts so rate-limit windows always recover safely
       let lastErr = null;
       let result = null;
 
@@ -82,8 +82,11 @@ export async function runBatchQueue({
             break;
           }
 
+          // Parse Google's exact retry time if provided (e.g. "Please retry in 22.87599564s")
+          const retryMatch = errMsg.match(/retry in\s*([0-9.]+)\s*s/i) || errMsg.match(/retry after\s*([0-9.]+)\s*s/i);
+
           // Rate limit & temporary server recovery (429, 503, Resource Exhausted)
-          const isRateLimit = (
+          const isRateLimit = retryMatch || (
             lowerMsg.includes('rate limit') ||
             lowerMsg.includes('quota') ||
             lowerMsg.includes('429') ||
@@ -93,19 +96,22 @@ export async function runBatchQueue({
             lowerMsg.includes('too many requests')
           );
 
-          if (isRateLimit) {
+          let backoffMs = 0;
+          if (retryMatch) {
+            backoffMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 1200; // Exact required seconds + 1.2s safety buffer
+          } else if (isRateLimit) {
+            backoffMs = Math.min(25000, 3500 * Math.pow(1.5, attempts - 1) + Math.random() * 500);
+          }
+
+          if (backoffMs > 0) {
             if (!globalPausePromise) {
-              const backoffMs = Math.min(10000, 3000 * Math.pow(1.4, attempts - 1) + Math.random() * 500);
-              console.warn(`[BatchProcessor] Rate limit / 503 encountered. Pausing queue for ${Math.round(backoffMs)}ms...`);
+              console.warn(`[BatchProcessor] API rate limit cooldown (${Math.round(backoffMs / 1000)}s). Pausing workers...`);
               globalPausePromise = new Promise(resolve => setTimeout(resolve, backoffMs));
               globalPausePromise.then(() => { globalPausePromise = null; });
             }
             await globalPausePromise;
-          }
-
-          if (attempts < maxAttempts && (!shouldStop || !shouldStop())) {
-            // Progressive jittered delay: attempt 1 -> ~1500ms, attempt 2 -> ~3000ms, attempt 3 -> ~6000ms
-            const delay = Math.round(1500 * Math.pow(2, attempts - 1) + Math.random() * 500);
+          } else if (attempts < maxAttempts && (!shouldStop || !shouldStop())) {
+            const delay = Math.round(1000 * Math.pow(1.8, attempts - 1) + Math.random() * 400);
             await new Promise(r => setTimeout(r, delay));
           }
         }

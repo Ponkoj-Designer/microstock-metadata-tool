@@ -1135,28 +1135,50 @@ function regenerateSingleItem(id) {
   item._error = null;
   throttledRender();
 
-  // Run single item through the batch system
+  // Run single item through the retry-aware generation flow
   (async () => {
     item.status = 'processing';
     throttledRender();
-    try {
-      const settings = state.settingsEnabled ? getActiveSettings() : null;
-      const result = await generateMetadataForImage(item, state.currentPlatform, null, settings, state.activeAppMode);
-      if (result && result._geminiUnsupported) {
-        item.status = 'failed'; item._error = result.reason;
-      } else if (result) {
-        item.status = 'ready';
-        item.metadata = { title: result.title, description: result.description, keywords: result.keywords, category: result.category };
-        item._error = null;
-        if (curUser) {
-          const deductRes = await deductCredit(1, `Single regen: ${item.name}`);
-          if (deductRes.ok) updateAuthNav();
+    let attempts = 0;
+    const maxAttempts = 3;
+    let finalResult = null;
+    let lastErr = null;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        const settings = state.settingsEnabled ? getActiveSettings() : null;
+        finalResult = await generateMetadataForImage(item, state.currentPlatform, null, settings, state.activeAppMode);
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const errMsg = String(err?.message || '');
+        const retryMatch = errMsg.match(/retry in\s*([0-9.]+)\s*s/i) || errMsg.match(/retry after\s*([0-9.]+)\s*s/i);
+        if (retryMatch && attempts < maxAttempts) {
+          const waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 1200;
+          showToast(`Rate limit cooldown: retrying in ${Math.round(waitMs / 1000)}s...`, 'info');
+          await new Promise(r => setTimeout(r, waitMs));
+        } else {
+          break;
         }
-        showToast(`Regenerated: ${item.name}`, 'success');
       }
-    } catch (err) {
-      item.status = 'failed'; item._error = err.message;
-      showToast(`Failed: ${err.message}`, 'error');
+    }
+
+    if (finalResult && finalResult._geminiUnsupported) {
+      item.status = 'failed'; item._error = finalResult.reason;
+    } else if (finalResult) {
+      item.status = 'ready';
+      item.metadata = { title: finalResult.title, description: finalResult.description, keywords: finalResult.keywords, category: finalResult.category };
+      item._error = null;
+      if (curUser) {
+        const deductRes = await deductCredit(1, `Single regen: ${item.name}`);
+        if (deductRes.ok) updateAuthNav();
+      }
+      showToast(`Regenerated: ${item.name}`, 'success');
+    } else if (lastErr) {
+      item.status = 'failed'; item._error = lastErr.message;
+      showToast(`Failed: ${lastErr.message}`, 'error');
     }
     throttledRender();
   })();

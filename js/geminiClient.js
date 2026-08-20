@@ -1177,10 +1177,10 @@ export async function optimizeImageForAi(input, ext = '') {
     }
   }
 
-  const MAX_DIM = 1024;
+  const MAX_DIM = 768;
 
   const canvasToJpeg = (canvas) => {
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.80);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
     const base64 = dataUrl.split(',')[1];
     return { base64, mimeType: 'image/jpeg' };
   };
@@ -1201,7 +1201,7 @@ export async function optimizeImageForAi(input, ext = '') {
         const ctx = canvas.getContext('2d', { alpha: false });
         if (ctx) {
           ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
+          ctx.imageSmoothingQuality = 'medium';
           ctx.fillStyle = '#FFFFFF';
           ctx.fillRect(0, 0, w, h);
           ctx.drawImage(bitmap, 0, 0, w, h);
@@ -1550,8 +1550,9 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       method: 'POST',
       signal,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    }, 28000);
+      body: JSON.stringify(requestBody),
+      keepalive: true
+    }, 18000);
 
     const resJson = await res.json().catch(() => ({}));
     const candidate = resJson.candidates?.[0];

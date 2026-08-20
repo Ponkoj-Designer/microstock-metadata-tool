@@ -1031,7 +1031,7 @@ async function triggerAiGeneration() {
 
   await runBatchQueue({
     items: toProcess,
-    concurrencyLimit: isVideoBatch ? 1 : 2,
+    concurrencyLimit: isVideoBatch ? 1 : 3,
     shouldStop: () => state.stopBatch,
 
     onItemStart: (item) => {
@@ -3115,8 +3115,8 @@ async function processImg2PromptQueue() {
     }
   };
 
-  // Run 2 parallel concurrent workers for optimal throughput within API limits
-  const CONCURRENCY = 2;
+  // Run 3 parallel concurrent workers for optimal throughput within API limits
+  const CONCURRENCY = 3;
   const worker = async () => {
     while (!isBatchStopped()) {
       // Synchronously reserve next waiting item

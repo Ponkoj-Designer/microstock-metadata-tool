@@ -328,7 +328,7 @@ function updateAuthNav() {
     if (loggedIn) {
       loggedIn.classList.remove('hidden');
       loggedIn.classList.add('md:flex');
-      loggedIn.style.display = ''; // Respects md:flex (hidden on mobile, flex on desktop)
+      loggedIn.style.display = window.innerWidth >= 768 ? 'flex' : 'none';
     }
 
     if (sidebarLoggedOut) sidebarLoggedOut.style.display = 'none';

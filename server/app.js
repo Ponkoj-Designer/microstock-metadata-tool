@@ -24,8 +24,15 @@ app.use(express.json({ limit: '100mb' }));
 // ── Cookie parser — MUST come before authMiddleware ───────────────────────────
 app.use(cookieParser());
 
-// ── Serve static frontend files ───────────────────────────────────────────────
-app.use(express.static('.'));
+import path          from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+const rootDir    = path.resolve(__dirname, '..');
+
+// ── Serve static frontend files (absolute path to workspace root) ─────────────
+app.use(express.static(rootDir));
 
 // ── Auth middleware — populates req.user on every request ─────────────────────
 // Non-blocking: sets req.user = null if no valid session exists.

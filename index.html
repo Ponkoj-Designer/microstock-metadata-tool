@@ -10,89 +10,95 @@
   <link rel="alternate icon" type="image/jpeg" href="mt_favicon.jpg">
   <link rel="apple-touch-icon" href="favicon.svg">
   
-  <!-- Tailwind CSS with Forms and Container Queries -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <!-- Self-contained Standalone Tailwind CSS & Theme Engine -->
+  <link rel="stylesheet" href="css/tailwind.css">
   
-  <!-- Material Symbols & Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Geist:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+  <!-- Material Symbols & Google Fonts (Non-blocking async load for instant desktop rendering) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" media="print" onload="this.media='all'"/>
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/></noscript>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Geist:wght@500;600;700&amp;display=swap" rel="stylesheet" media="print" onload="this.media='all'"/>
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Geist:wght@500;600;700&amp;display=swap" rel="stylesheet"/></noscript>
   
-  <!-- Tailwind Theme Configuration -->
+  <!-- Tailwind Theme Configuration (safe guard when CDN is blocked) -->
   <script id="tailwind-config">
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            "background": "#111417",
-            "secondary-container": "#db50ff",
-            "primary-fixed": "#7df4ff",
-            "on-surface": "#e1e2e7",
-            "secondary-fixed": "#fdd6ff",
-            "on-error-container": "#ffdad6",
-            "tertiary": "#fff3f2",
-            "on-primary-fixed": "#002022",
-            "surface-dim": "#111417",
-            "secondary": "#f4aeff",
-            "surface-variant": "#323539",
-            "primary-fixed-dim": "#00dbe9",
-            "surface-container-low": "#191c1f",
-            "surface": "#111417",
-            "on-error": "#690005",
-            "surface-container-lowest": "#0c0e12",
-            "error-container": "#93000a",
-            "inverse-primary": "#006970",
-            "primary-container": "#00f0ff",
-            "surface-container": "#1d2023",
-            "on-tertiary-container": "#c10018",
-            "on-tertiary-fixed-variant": "#930010",
-            "error": "#ffb4ab",
-            "on-background": "#e1e2e7",
-            "surface-bright": "#37393d",
-            "primary": "#dbfcff",
-            "on-surface-variant": "#b9cacb",
-            "on-primary-fixed-variant": "#004f54",
-            "surface-container-highest": "#323539",
-            "on-secondary-fixed-variant": "#790095",
-            "on-tertiary": "#680008",
-            "on-secondary-fixed": "#340042",
-            "secondary-fixed-dim": "#f4aeff",
-            "surface-tint": "#00dbe9",
-            "tertiary-container": "#ffcec9",
-            "tertiary-fixed-dim": "#ffb3ac",
-            "on-primary-container": "#006970",
-            "on-secondary": "#55006a",
-            "on-secondary-container": "#4b005d",
-            "surface-container-high": "#282a2e",
-            "on-primary": "#00363a",
-            "outline-variant": "#3b494b",
-            "on-tertiary-fixed": "#410003",
-            "inverse-surface": "#e1e2e7",
-            "outline": "#849495",
-            "inverse-on-surface": "#2e3134",
-            "tertiary-fixed": "#ffdad6"
-          },
-          spacing: {
-            "stack_lg": "32px",
-            "margin_desktop": "40px",
-            "topbar_height": "68px",
-            "gutter": "24px",
-            "sidebar_width": "375px",
-            "container_max": "1440px",
-            "stack_sm": "8px",
-            "stack_md": "16px"
-          },
-          fontFamily: {
-            "headline-md": ["Inter"],
-            "label-md": ["Geist"],
-            "label-sm": ["Geist"],
-            "headline-lg": ["Inter"],
-            "body-md": ["Inter"],
-            "body-lg": ["Inter"],
-            "display-lg": ["Inter"]
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "background": "#111417",
+              "secondary-container": "#db50ff",
+              "primary-fixed": "#7df4ff",
+              "on-surface": "#e1e2e7",
+              "secondary-fixed": "#fdd6ff",
+              "on-error-container": "#ffdad6",
+              "tertiary": "#fff3f2",
+              "on-primary-fixed": "#002022",
+              "surface-dim": "#111417",
+              "secondary": "#f4aeff",
+              "surface-variant": "#323539",
+              "primary-fixed-dim": "#00dbe9",
+              "surface-container-low": "#191c1f",
+              "surface": "#111417",
+              "on-error": "#690005",
+              "surface-container-lowest": "#0c0e12",
+              "error-container": "#93000a",
+              "inverse-primary": "#006970",
+              "primary-container": "#00f0ff",
+              "surface-container": "#1d2023",
+              "on-tertiary-container": "#c10018",
+              "on-tertiary-fixed-variant": "#930010",
+              "error": "#ffb4ab",
+              "on-background": "#e1e2e7",
+              "surface-bright": "#37393d",
+              "primary": "#dbfcff",
+              "on-surface-variant": "#b9cacb",
+              "on-primary-fixed-variant": "#004f54",
+              "surface-container-highest": "#323539",
+              "on-secondary-fixed-variant": "#790095",
+              "on-tertiary": "#680008",
+              "on-secondary-fixed": "#340042",
+              "secondary-fixed-dim": "#f4aeff",
+              "surface-tint": "#00dbe9",
+              "tertiary-container": "#ffcec9",
+              "tertiary-fixed-dim": "#ffb3ac",
+              "on-primary-container": "#006970",
+              "on-secondary": "#55006a",
+              "on-secondary-container": "#4b005d",
+              "surface-container-high": "#282a2e",
+              "on-primary": "#00363a",
+              "outline-variant": "#3b494b",
+              "on-tertiary-fixed": "#410003",
+              "inverse-surface": "#e1e2e7",
+              "outline": "#849495",
+              "inverse-on-surface": "#2e3134",
+              "tertiary-fixed": "#ffdad6"
+            },
+            spacing: {
+              "stack_lg": "32px",
+              "margin_desktop": "40px",
+              "topbar_height": "68px",
+              "gutter": "24px",
+              "sidebar_width": "375px",
+              "container_max": "1440px",
+              "stack_sm": "8px",
+              "stack_md": "16px"
+            },
+            fontFamily: {
+              "headline-md": ["Inter"],
+              "label-md": ["Geist"],
+              "label-sm": ["Geist"],
+              "headline-lg": ["Inter"],
+              "body-md": ["Inter"],
+              "body-lg": ["Inter"],
+              "display-lg": ["Inter"]
+            }
           }
         }
-      }
+      };
     }
   </script>
   
@@ -213,8 +219,15 @@
           <span>⚡</span> <span>10 Credits</span>
         </div>
         <!-- Profile / Avatar -->
-        <button class="flex items-center gap-2 hover:opacity-80 transition-opacity" id="btn-user-profile">
-          <img alt="User Avatar" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeqxT1Cn2qy7Z2yjIWSF-H0_iswr9L4s39j1Eb1osy7XwiHAL_VeoP0BE5YizU61Jic4kRa4X3h6mRlV9-BCU9wqZPhgD9eG_dqQNwgzg4IOuwnySOe7JBz9bU63GEgb_0SBLKTZx4iiTEJ7UdwxnFNNXov65R7qH7wGDsEjlatA2iht6h-Rbl4Dp96WxnII_GZSF_r267z19XxFCAvS-PgRHi1DHo9z8n_odbjKwRWJpr3bpfMcEFgQ" />
+        <button class="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer" id="btn-user-profile" title="User Profile">
+          <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-[#00dbe9] to-[#db50ff] p-[1.5px] shrink-0 shadow-[0_0_10px_rgba(0,219,233,0.35)] flex items-center justify-center">
+            <div class="w-full h-full rounded-full bg-[#161c24] flex items-center justify-center text-[#00dbe9]">
+              <svg class="w-4 h-4 text-[#00dbe9]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            </div>
+          </div>
           <span id="auth-user-plan-badge" class="hidden">FREE</span>
           <span id="auth-user-name" class="hidden">User</span>
         </button>

@@ -107,11 +107,11 @@ body::before {
   contain: layout paint;
 }
 
-/* ── 6. GPU-accelerate modal open animation ─────────────────────────────────
-   Use translateZ(0) to promote to its own compositor layer WITHOUT overriding
-   the scale(0.95) → scale(1) open transition defined in styles.css. */
+/* ── 6. GPU-accelerate scrolling on overflow containers ───────────────────── */
+.platform-grid-horizontal,
 .modal-box {
-  transform: translateZ(0);
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 /* ── 7. Platform icon boxes: no transform recalc needed when not hovered ── */
@@ -120,44 +120,27 @@ body::before {
   will-change: transform;
 }
 
-/* ── 8. Smooth scrollbar rendering ──────────────────────────────────────────
-   Hint browser to use GPU-accelerated scrolling on overflow containers. */
-.platform-grid-horizontal,
-#table-view-container,
-#grid-view-container,
-.modal-box {
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
-}
-
-/* ── 9. image-rendering: smooth for thumbnails ──────────────────────────── */
+/* ── 8. image-rendering: smooth for thumbnails ──────────────────────────── */
 .card-thumb-img,
 img[loading="lazy"] {
   image-rendering: auto;
-  content-visibility: auto;
 }
 
-/* ── 10. Remove all CSS animations on non-interactive open state of
+/* ── 9. Remove all CSS animations on non-interactive open state of
    accordion arrows — only animate on user interaction ────────────────────── */
 .sidebar-section-accordion .accordion-arrow {
   transition: transform 0.2s ease !important;
   will-change: transform;
 }
 
-/* ── 11. Reduce paint area for status tags (no blur, no shadow) ────────────
-   contain: paint scopes repaints without collapsing element size like strict. */
-.status-tag {
-  contain: paint;
-}
-
-/* ── 12. Prevent layout thrashing from textarea auto-resize ─────────────── */
+/* ── 10. Prevent layout thrashing from textarea auto-resize ─────────────── */
 .inline-textarea,
 .desc-textarea {
   resize: vertical;
   overflow: auto;
 }
 
-/* ── 13. Toast animation: use transform (compositor) not margin/top ──────── */
+/* ── 11. Toast animation: use transform (compositor) not margin/top ──────── */
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(12px) translateZ(0); }
   to   { opacity: 1; transform: translateY(0) translateZ(0); }
@@ -167,12 +150,7 @@ img[loading="lazy"] {
   will-change: transform, opacity;
 }
 
-/* ── 14. Sidebar slider thumb: compositor-layer transform only ───────────── */
-.sidebar-slider:hover::-webkit-slider-thumb {
-  will-change: transform;
-}
-
-/* ── 15. Upload Animation Smoothness & Hardware Acceleration ─────────────── */
+/* ── 12. Upload Animation Smoothness & Hardware Acceleration ─────────────── */
 .animate-upload-spin-ring,
 .animate-upload-pulse,
 .animate-success-check {
@@ -187,35 +165,8 @@ img[loading="lazy"] {
   transform: translateZ(0);
 }
 
-/* ── 16. content-visibility: auto on detail cards ──────────────────────────
-   Cards off-screen skip their layout+paint entirely until scrolled into view.
-   contain-intrinsic-size provides an estimated height so scrollbar is stable. */
-#detail-view-container > div {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 480px;
-}
-
-/* ── 17. CSS containment for img2prompt card list ───────────────────────────
-   Isolates layout so card insertions/removals don't cause full-page reflow.  */
-#img2prompt-cards-list {
-  contain: layout;
-}
-
-#img2prompt-cards-list > .img2prompt-card {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 140px;
-}
-
-/* ── 18. Processing status badges — compositor-only animation ───────────────
-   animate-pulse must only touch opacity (already on GPU). Adding
-   will-change:opacity ensures it stays on its own compositor layer.          */
+/* ── 13. Processing status badges — compositor-only animation ─────────────── */
 .status-tag.status-processing,
 .animate-pulse {
   will-change: opacity;
-}
-
-/* ── 19. Keyword pills — contain paint so removing/adding a pill doesn't
-   cause the whole card to repaint. ────────────────────────────────────────── */
-#detail-view-container .flex.flex-wrap {
-  contain: layout paint;
 }

@@ -1029,80 +1029,93 @@ async function triggerAiGeneration() {
   let successCount = 0, failCount = 0;
   const isVideoBatch = state.activeAssetTab === 'videos';
 
-  await runBatchQueue({
-    items: toProcess,
-    concurrencyLimit: isVideoBatch ? 1 : 3,
-    shouldStop: () => state.stopBatch,
+  try {
+    await runBatchQueue({
+      items: toProcess,
+      concurrencyLimit: isVideoBatch ? 1 : 2,
+      shouldStop: () => state.stopBatch,
 
-    onItemStart: (item) => {
-      const stateItem = state.mediaItems.find(i => i.id === item.id);
-      if (stateItem) { stateItem.status = 'processing'; stateItem._error = null; }
-      updateAiWorkspaceOverlay(successCount + failCount, toProcess.length, `Generating metadata for ${item.name}`);
-      throttledRender();
-    },
+      onItemStart: (item) => {
+        const stateItem = state.mediaItems.find(i => i.id === item.id);
+        if (stateItem) { stateItem.status = 'processing'; stateItem._error = null; }
+        updateAiWorkspaceOverlay(successCount + failCount, toProcess.length, `Generating metadata for ${item.name}`);
+        throttledRender();
+      },
 
-    processFn: async (item) => {
-      const settings = state.settingsEnabled ? getActiveSettings() : null;
-      return await generateMetadataForImage(item, state.currentPlatform, null, settings, state.activeAppMode, batchSignal);
-    },
+      processFn: async (item) => {
+        const settings = state.settingsEnabled ? getActiveSettings() : null;
+        return await generateMetadataForImage(item, state.currentPlatform, null, settings, state.activeAppMode, batchSignal);
+      },
 
-    onItemDone: async (item, idx, result, err) => {
-      const stateItem = state.mediaItems.find(i => i.id === item.id);
-      if (!stateItem) return;
+      onCooldown: (item, seconds, msg) => {
+        const stateItem = state.mediaItems.find(i => i.id === item.id);
+        if (stateItem) {
+          stateItem._error = msg || `Rate limit reached. Waiting ${seconds}s...`;
+          throttledRender();
+        }
+        if (progressText) progressText.textContent = `API rate limit: cooling down (${seconds}s remaining)...`;
+      },
 
-      if (state.stopBatch || img2promptState.stopBatch) {
-        stateItem.status = 'waiting';
-        stateItem._error = null;
-        stateItem.metadata = null;
-        return;
+      onItemDone: async (item, idx, result, err) => {
+        const stateItem = state.mediaItems.find(i => i.id === item.id);
+        if (!stateItem) return;
+
+        if (state.stopBatch || img2promptState.stopBatch) {
+          stateItem.status = 'waiting';
+          stateItem._error = null;
+          stateItem.metadata = null;
+          return;
+        }
+
+        if (err) {
+          stateItem.status = 'failed';
+          stateItem._error = err.message || 'Generation failed';
+          failCount++;
+        } else if (result && result._geminiUnsupported) {
+          stateItem.status = 'failed';
+          stateItem._error = result.reason;
+          failCount++;
+        } else if (result) {
+          stateItem.status = 'ready';
+          stateItem.metadata = {
+            title:       result.title,
+            description: result.description,
+            keywords:    result.keywords,
+            category:    result.category
+          };
+          stateItem._error = null;
+          successCount++;
+        }
+        throttledRender();
+      },
+
+      onProgress: (completed, total) => {
+        const pct = Math.round((completed / total) * 100);
+        const remaining = total - completed;
+        if (progressText)    progressText.textContent    = `Processing ${completed} of ${total}…`;
+        if (progressCounter) progressCounter.textContent = `${completed} / ${total} (${remaining} remaining)`;
+        if (progressPct)     progressPct.textContent     = `${pct}%`;
+        if (progressFill)    progressFill.style.width    = `${pct}%`;
+        updateAiWorkspaceOverlay(completed, total, remaining ? `${remaining} remaining...` : 'Finishing up...');
       }
+    });
+  } catch (err) {
+    console.error('Batch generation queue error:', err);
+  } finally {
+    state.isGenerating = false;
+    state.stopBatch = false;
 
-      if (err) {
-        stateItem.status = 'failed';
-        stateItem._error = err.message || 'Generation failed';
-        failCount++;
-      } else if (result && result._geminiUnsupported) {
-        stateItem.status = 'failed';
-        stateItem._error = result.reason;
-        failCount++;
-      } else if (result) {
-        stateItem.status = 'ready';
-        stateItem.metadata = {
-          title:       result.title,
-          description: result.description,
-          keywords:    result.keywords,
-          category:    result.category
-        };
-        stateItem._error = null;
-        successCount++;
-      }
-      throttledRender();
-    },
+    setBtnLoading(genBtn, false);
+    genBtn?.classList.remove('ai-action-running');
+    mainArea?.classList.remove('ai-batch-running');
+    hideAiWorkspaceOverlay();
+    if (stopBtn) stopBtn.style.display = 'none';
+    if (retryBtn && failCount > 0) retryBtn.style.display = 'inline-flex';
 
-    onProgress: (completed, total) => {
-      // DOM refs are captured in closure above — no repeated getElementById
-      const pct = Math.round((completed / total) * 100);
-      const remaining = total - completed;
-      if (progressText)    progressText.textContent    = `Processing ${completed} of ${total}…`;
-      if (progressCounter) progressCounter.textContent = `${completed} / ${total} (${remaining} remaining)`;
-      if (progressPct)     progressPct.textContent     = `${pct}%`;
-      if (progressFill)    progressFill.style.width    = `${pct}%`;
-      updateAiWorkspaceOverlay(completed, total, remaining ? `${remaining} remaining...` : 'Finishing up...');
-    }
-  });
-
-  state.isGenerating = false;
-  state.stopBatch = false;
-
-  setBtnLoading(genBtn, false);
-  genBtn?.classList.remove('ai-action-running');
-  mainArea?.classList.remove('ai-batch-running');
-  hideAiWorkspaceOverlay();
-  if (stopBtn) stopBtn.style.display = 'none';
-  if (retryBtn && failCount > 0) retryBtn.style.display = 'inline-flex';
-
-  const summary = `Done: ${successCount} generated${failCount ? `, ${failCount} failed` : ''}`;
-  showToast(summary, failCount > 0 ? 'warning' : 'success');
+    const summary = `Done: ${successCount} generated${failCount ? `, ${failCount} failed` : ''}`;
+    showToast(summary, failCount > 0 ? 'warning' : 'success');
+    throttledRender();
+  }
 
   setTimeout(() => {
     if (progressBar) {

@@ -22,6 +22,7 @@ export async function runBatchQueue({
   onItemStart,
   onItemDone,
   onProgress,
+  onCooldown,
   shouldStop,
   concurrencyLimit = 2
 }) {
@@ -44,7 +45,7 @@ export async function runBatchQueue({
       onItemStart && onItemStart(item, i);
 
       let attempts = 0;
-      const maxAttempts = 6; // Up to 6 attempts so rate-limit windows always recover safely
+      const maxAttempts = 2; // Immediate retry with exact server cooldown
       let lastErr = null;
       let result = null;
 
@@ -100,10 +101,11 @@ export async function runBatchQueue({
           if (retryMatch) {
             backoffMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 1200; // Exact required seconds + 1.2s safety buffer
           } else if (isRateLimit) {
-            backoffMs = Math.min(25000, 3500 * Math.pow(1.5, attempts - 1) + Math.random() * 500);
+            backoffMs = Math.min(15000, 3000 * Math.pow(1.4, attempts - 1) + Math.random() * 400);
           }
 
           if (backoffMs > 0) {
+            onCooldown && onCooldown(item, Math.round(backoffMs / 1000), errMsg);
             if (!globalPausePromise) {
               console.warn(`[BatchProcessor] API rate limit cooldown (${Math.round(backoffMs / 1000)}s). Pausing workers...`);
               globalPausePromise = new Promise(resolve => setTimeout(resolve, backoffMs));
@@ -111,7 +113,7 @@ export async function runBatchQueue({
             }
             await globalPausePromise;
           } else if (attempts < maxAttempts && (!shouldStop || !shouldStop())) {
-            const delay = Math.round(1000 * Math.pow(1.8, attempts - 1) + Math.random() * 400);
+            const delay = Math.round(1000 * Math.pow(1.5, attempts - 1) + Math.random() * 400);
             await new Promise(r => setTimeout(r, delay));
           }
         }

@@ -167,33 +167,98 @@ async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT_MS) {
   }
 }
 
+function getApiBase() {
+  if (typeof window === 'undefined') return '';
+  const port = window.location.port;
+  if (port && port !== '3000' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return `http://${window.location.hostname}:3000`;
+  }
+  return '';
+}
+
 // ── Connection Test ─────────────────────────────────────────────────────────
 export async function testConnection(key, provider = _activeProvider) {
-  const targetKey = key || _providerKeys[provider];
+  const targetKey = String(key || _providerKeys[provider] || '').trim();
   if (!targetKey && provider !== 'gemini') {
     return { ok: false, message: `${AI_PROVIDERS_CONFIG[provider]?.name || provider} API key is missing.` };
   }
 
-  try {
-    const res = await fetchWithTimeout('/api/ai/test', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-ai-provider': provider,
-        'x-ai-api-key': targetKey || '',
-        'x-gemini-api-key': targetKey || ''
-      },
-      body: JSON.stringify({ provider, apiKey: targetKey || '' })
-    }, 15000);
-
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.ok) {
-      return { ok: true, message: data.message || `Connected to ${AI_PROVIDERS_CONFIG[provider]?.name}!` };
-    }
-    return { ok: false, message: data.message || `${AI_PROVIDERS_CONFIG[provider]?.name} connection test failed.` };
-  } catch (err) {
-    return { ok: false, message: `Network error reaching ${AI_PROVIDERS_CONFIG[provider]?.name} servers.` };
+  // 1. Direct Browser-to-API check (ultra-fast, zero-dependency, works everywhere)
+  if (provider === 'gemini') {
+    try {
+      const directUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(targetKey)}`;
+      const res = await fetchWithTimeout(directUrl, { method: 'GET' }, 8000);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        return { ok: true, message: 'Successfully connected to Google Gemini API!' };
+      }
+      if (data?.error?.message) {
+        return { ok: false, message: data.error.message };
+      }
+    } catch (_) {}
+  } else if (provider === 'openrouter') {
+    try {
+      const res = await fetchWithTimeout('https://openrouter.ai/api/v1/auth/key', {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${targetKey}` }
+      }, 8000);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.data) {
+        return { ok: true, message: 'Successfully connected to OpenRouter API!' };
+      }
+      if (data?.error?.message) {
+        return { ok: false, message: data.error.message };
+      }
+    } catch (_) {}
+  } else if (provider === 'openai') {
+    try {
+      const res = await fetchWithTimeout('https://api.openai.com/v1/models', {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${targetKey}` }
+      }, 8000);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        return { ok: true, message: 'Successfully connected to OpenAI API!' };
+      }
+      if (data?.error?.message) {
+        return { ok: false, message: data.error.message };
+      }
+    } catch (_) {}
   }
+
+  // 2. Dual-Route Backend Proxy Verification
+  const endpoints = [
+    `${getApiBase()}/api/ai/test`,
+    '/.netlify/functions/api/ai/test'
+  ];
+
+  for (const ep of endpoints) {
+    try {
+      const res = await fetchWithTimeout(ep, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ai-provider': provider,
+          'x-ai-api-key': targetKey,
+          'x-gemini-api-key': targetKey
+        },
+        body: JSON.stringify({ provider, apiKey: targetKey })
+      }, 10000);
+
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          return { ok: true, message: data.message || `Connected to ${AI_PROVIDERS_CONFIG[provider]?.name}!` };
+        }
+        if (data?.message) {
+          return { ok: false, message: data.message };
+        }
+      }
+    } catch (_) {}
+  }
+
+  return { ok: false, message: `Could not connect to ${AI_PROVIDERS_CONFIG[provider]?.name || provider}. Please check your API key.` };
 }
 
 // ── File / Blob to base64 helper ───────────────────────────────────────────
@@ -1259,60 +1324,84 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
     const mimeType = getGeminiMimeType(item, ext);
     if (!item.file) throw new Error('Video file object is missing.');
 
-    const res = await fetchWithTimeout('/api/gemini/generate-video', {
-      method: 'POST',
-      signal,
-      headers: {
-        'Content-Type': mimeType,
-        'x-ai-provider': provider,
-        'x-ai-api-key': key,
-        'x-gemini-api-key': key,
-        'x-filename': encodeURIComponent(item.name || item.file?.name || 'video.mp4'),
-        'x-platform': encodeURIComponent(JSON.stringify(platform)),
-        'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
-        'x-mode':  mode || 'metadata',
-        'x-model': selectedModel || 'gemini-3.5-flash-lite'
-      },
-      body: item.file
-    }, VIDEO_TIMEOUT_MS);
+    const endpoints = [
+      `${getApiBase()}/api/gemini/generate-video`,
+      '/.netlify/functions/api/gemini/generate-video'
+    ];
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) {
-      throw new Error(data.message || 'Video metadata generation failed.');
+    let lastError = null;
+    for (const ep of endpoints) {
+      try {
+        const res = await fetchWithTimeout(ep, {
+          method: 'POST',
+          signal,
+          headers: {
+            'Content-Type': mimeType,
+            'x-ai-provider': provider,
+            'x-ai-api-key': key,
+            'x-gemini-api-key': key,
+            'x-filename': encodeURIComponent(item.name || item.file?.name || 'video.mp4'),
+            'x-platform': encodeURIComponent(JSON.stringify(platform)),
+            'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
+            'x-mode':  mode || 'metadata',
+            'x-model': selectedModel || 'gemini-3.5-flash-lite'
+          },
+          body: item.file
+        }, VIDEO_TIMEOUT_MS);
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          return data.data;
+        }
+        if (data.message) lastError = new Error(data.message);
+      } catch (e) {
+        lastError = e;
+      }
     }
-    return data.data;
+    throw lastError || new Error('Video metadata generation failed.');
   }
 
   const { base64, mimeType } = await getImageBase64(item, ext);
 
-  const res = await fetchWithTimeout('/api/ai/generate', {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-ai-provider': provider,
-      'x-ai-api-key': key,
-      'x-gemini-api-key': key
-    },
-    body: JSON.stringify({
-      provider,
-      apiKey: key,
-      base64Image: base64,
-      mimeType,
-      filename: item.name || item.file?.name || 'asset.jpg',
-      platform,
-      settings,
-      mode,
-      model: selectedModel
-    })
-  }, REQUEST_TIMEOUT_MS);
+  const endpoints = [
+    `${getApiBase()}/api/ai/generate`,
+    '/.netlify/functions/api/ai/generate'
+  ];
 
-  const data = await res.json().catch(() => ({}));
+  let lastError = null;
+  for (const ep of endpoints) {
+    try {
+      const res = await fetchWithTimeout(ep, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ai-provider': provider,
+          'x-ai-api-key': key,
+          'x-gemini-api-key': key
+        },
+        body: JSON.stringify({
+          provider,
+          apiKey: key,
+          base64Image: base64,
+          mimeType,
+          filename: item.name || item.file?.name || 'asset.jpg',
+          platform,
+          settings,
+          mode,
+          model: selectedModel
+        })
+      }, REQUEST_TIMEOUT_MS);
 
-  if (!res.ok || !data.ok) {
-    const errMsg = data.message || `${AI_PROVIDERS_CONFIG[provider]?.name || provider} metadata generation failed.`;
-    throw new Error(errMsg);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        return data.data;
+      }
+      if (data.message) lastError = new Error(data.message);
+    } catch (e) {
+      lastError = e;
+    }
   }
 
-  return data.data;
+  throw lastError || new Error(`${AI_PROVIDERS_CONFIG[provider]?.name || provider} metadata generation failed.`);
 }

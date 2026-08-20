@@ -1693,29 +1693,20 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
 
   let lastError = null;
 
-  // 1. Direct Browser Client generation (Fastest, zero Netlify timeout, works everywhere)
+  // 1. Direct Browser Client generation (Strictly gemini-3.5-flash directly from browser)
   if (key) {
-    try {
-      return await generateDirectClientAi({
-        provider,
-        key,
-        base64,
-        mimeType,
-        filename: item.name || item.file?.name || 'asset.jpg',
-        platform,
-        settings,
-        mode,
-        model: selectedModel,
-        signal
-      });
-    } catch (directErr) {
-      lastError = directErr;
-      const msg = (directErr.message || '').toLowerCase();
-      if (msg.includes('api key') || msg.includes('api_key') || msg.includes('unauthorized') || msg.includes('permission') || msg.includes('quota') || msg.includes('resource_exhausted') || msg.includes('429')) {
-        throw directErr;
-      }
-      console.warn('[DirectAI Client Notice]', directErr.message, 'Trying backend proxy fallback...');
-    }
+    return await generateDirectClientAi({
+      provider,
+      key,
+      base64,
+      mimeType,
+      filename: item.name || item.file?.name || 'asset.jpg',
+      platform,
+      settings,
+      mode,
+      model: selectedModel,
+      signal
+    });
   }
 
   // 2. Dual-Route Backend Proxy Fallback

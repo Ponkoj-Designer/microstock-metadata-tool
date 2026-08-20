@@ -1621,8 +1621,7 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       method: 'POST',
       signal,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      keepalive: true
+      body: JSON.stringify(requestBody)
     }, 45000);
 
     const resJson = await res.json().catch(() => ({}));

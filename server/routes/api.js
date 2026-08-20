@@ -31,11 +31,13 @@ apiRouter.post('/gemini/test', handleTestKey);
 apiRouter.post('/gemini/generate-video', async (req, res) => {
   const apiKey = req.headers['x-gemini-api-key'] || req.headers['x-ai-api-key'] || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
   const mimeType = req.headers['content-type'];
-  const filename = req.headers['x-filename'] ? decodeURIComponent(req.headers['x-filename']) : 'video.mp4';
-  const platformStr = req.headers['x-platform'] ? decodeURIComponent(req.headers['x-platform']) : '{}';
-  const settingsStr = req.headers['x-settings'] ? decodeURIComponent(req.headers['x-settings']) : 'null';
+  let filename = 'video.mp4';
+  try { filename = req.headers['x-filename'] ? decodeURIComponent(req.headers['x-filename']) : 'video.mp4'; } catch(e){ filename = req.headers['x-filename'] || 'video.mp4'; }
+  let platformStr = '{}';
+  try { platformStr = req.headers['x-platform'] ? decodeURIComponent(req.headers['x-platform']) : '{}'; } catch(e){}
+  let settingsStr = 'null';
+  try { settingsStr = req.headers['x-settings'] ? decodeURIComponent(req.headers['x-settings']) : 'null'; } catch(e){}
   const mode  = req.headers['x-mode']  || 'metadata';
-  // BUG FIX #4: read model header so user-selected model is passed through
   const model = req.headers['x-model'] || null;
 
   let platform = {};

@@ -855,7 +855,11 @@ function getFilteredItems() {
   const formatFilter = state.formatFilter || 'all';
   return state.mediaItems.filter(item => {
     const matchStatus = state.statusFilter === 'all' || item.status === state.statusFilter;
-    const matchFormat = formatFilter === 'all' || (item.format && item.format.toUpperCase() === formatFilter.toUpperCase());
+    const matchFormat = formatFilter === 'all' || (item.format && (
+      item.format.toUpperCase() === formatFilter.toUpperCase() ||
+      (formatFilter.toUpperCase() === 'JPG' && item.format.toUpperCase() === 'JPEG') ||
+      (formatFilter.toUpperCase() === 'JPEG' && item.format.toUpperCase() === 'JPG')
+    ));
     const meta = item.metadata || {};
     const q    = state.searchQuery;
     const matchSearch = !q
@@ -1788,7 +1792,15 @@ function setupEventListeners() {
   document.getElementById('btn-select-all')?.addEventListener('click',       selectAll);
   document.getElementById('btn-deselect-all')?.addEventListener('click',     deselectAll);
   document.getElementById('btn-remove-selected')?.addEventListener('click',  removeSelected);
-  document.getElementById('btn-batch-edit')?.addEventListener('click',       () => openModal(modal('modal-batch-edit')));
+  document.getElementById('btn-batch-edit')?.addEventListener('click',       () => {
+    const batchCatSelect = document.getElementById('batch-set-category');
+    if (batchCatSelect) {
+      const cats = state.currentPlatform?.categories || [];
+      batchCatSelect.innerHTML = `<option value="">-- Don't change category --</option>` +
+        cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    }
+    openModal(modal('modal-batch-edit'));
+  });
 
   // Header Export & Format filter
   document.getElementById('btn-export-csv-header')?.addEventListener('click', exportCsv);
@@ -1817,6 +1829,24 @@ function setupEventListeners() {
   document.getElementById('btn-export-csv')?.addEventListener('click',        exportCsv);
   document.getElementById('btn-download-csv-modal')?.addEventListener('click', exportCsv);
   document.getElementById('btn-close-csv-modal')?.addEventListener('click',   () => closeModal(modal('modal-csv-preview')));
+  document.getElementById('btn-close-csv-cancel')?.addEventListener('click',  () => closeModal(modal('modal-csv-preview')));
+
+  // Tutorial Modal Navigation & Close
+  document.getElementById('btn-close-tutorial')?.addEventListener('click', () => closeModal(modal('modal-tutorial')));
+  document.getElementById('btn-tutorial-prev')?.addEventListener('click', () => {
+    if (state.tutorialStep > 1) {
+      state.tutorialStep--;
+      renderTutorialStep();
+    }
+  });
+  document.getElementById('btn-tutorial-next')?.addEventListener('click', () => {
+    if (state.tutorialStep < 4) {
+      state.tutorialStep++;
+      renderTutorialStep();
+    } else {
+      closeModal(modal('modal-tutorial'));
+    }
+  });
 
   // Settings
   document.getElementById('btn-save-settings')?.addEventListener('click', saveSettings);

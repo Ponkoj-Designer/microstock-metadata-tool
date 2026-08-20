@@ -196,17 +196,17 @@
       </div>
 
       <!-- Mobile Hamburger Toggle (3-line Menu) -->
-      <button class="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-white bg-[#191c1f] border border-[#3b494b] hover:border-[#00dbe9] transition-all md:hidden cursor-pointer" id="hamburger-btn" onclick="document.getElementById('sidebar').classList.toggle('-translate-x-full'); document.getElementById('mobile-overlay').classList.toggle('hidden');" aria-label="Open Navigation Menu">
+      <button class="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-white bg-[#191c1f] border border-[#3b494b] hover:border-[#00dbe9] transition-all md:hidden cursor-pointer" id="hamburger-btn" onclick="document.getElementById('mobile-nav-drawer').classList.toggle('active');" aria-label="Open Navigation Menu">
         <span class="material-symbols-outlined text-[22px]">menu</span>
       </button>
     </div>
   </nav>
 
   <!-- Mobile Overlay -->
-  <div id="mobile-overlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 hidden md:hidden transition-opacity" onclick="document.getElementById('sidebar').classList.add('-translate-x-full'); this.classList.add('hidden');"></div>
+  <div id="mobile-overlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 hidden md:hidden transition-opacity" onclick="document.getElementById('mobile-nav-drawer').classList.remove('active'); this.classList.add('hidden');"></div>
 
   <!-- Mobile Nav Drawer -->
-  <div class="fixed top-[68px] left-0 w-full bg-[#1d2023] border-b border-outline-variant p-4 flex flex-col gap-3 z-40 md:hidden shadow-2xl transition-all duration-200" id="mobile-nav-drawer" style="display:none">
+  <div class="fixed top-[68px] left-0 w-full bg-[#1d2023] border-b border-outline-variant p-4 flex flex-col gap-3 z-40 md:hidden shadow-2xl transition-all duration-200" id="mobile-nav-drawer">
     <button class="flex items-center gap-3 text-on-surface py-2 px-3 rounded-lg hover:bg-surface-container-highest" id="mobile-nav-tutorial">
       <span class="material-symbols-outlined text-primary-fixed-dim">help</span> 📖 Tutorial &amp; Guide
     </button>

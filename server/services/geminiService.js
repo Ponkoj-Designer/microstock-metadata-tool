@@ -146,11 +146,14 @@ CRITICAL PHOTO PROMPT INSTRUCTIONS (DEEP IMAGE ANALYSIS):
 3. UNIQUE & ORIGINAL CREATION: Generate a unique, original master prompt specifically describing this exact image. Do NOT copy, imitate, or closely reproduce known stock-image prompts or generic templates. Avoid generic/template wording so different images produce genuinely unique prompts.
 4. STRICT IP & TRADEMARK SAFETY: Never include brand names, logos, trademarks, copyrighted characters, celebrities, famous artwork, or protected IP. Use generic descriptors for people and objects.
 
-STRICT OUTPUT FORMAT:
-- Title: A vivid, original master photo prompt describing: subject + objects + composition + camera framing + lighting & shadows + color palette + environment & depth + visual style (no brand names, logos, or real people).
-- Description: Comprehensive visual description of scene elements, lighting atmosphere, lens optics, depth of field, surface textures, and color mood based strictly on the uploaded image.
-- Keywords: 25-35 specific visual modifier keywords covering: photography style, lighting setup, composition tags, camera/lens parameters, surface textures.
-- Category: The photography/art genre (e.g. Portrait Photography, Landscape Photography, Street Photography, Commercial Photography, Macro Photography, 3D Render).`;
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Master Photo Prompt: Detailed visual breakdown describing subject + objects + composition + camera framing + lighting & shadows + color palette + environment & depth + visual style (no brand names, logos, or real people)",
+  "description": "Comprehensive visual description of scene elements, lighting atmosphere, lens optics, depth of field, surface textures, and color mood based strictly on the uploaded image",
+  "keywords": ["25-35 specific visual modifier keywords", "photography style", "lighting setup", "composition tags", "camera/lens parameters", "surface textures"],
+  "category": "Photography genre"
+}`;
 
   } else if (mode === 'img2prompt-video') {
     prompt = `You are a world-class AI Video Prompt Engineer specializing in commercial-safe, microstock-friendly, production-ready silent AI video prompts for Sora, Runway Gen-3, Pika Labs, Kling AI, and Stable Video Diffusion.
@@ -161,11 +164,14 @@ CRITICAL VIDEO PROMPT INSTRUCTIONS (PRODUCTION-READY MOTION CONCEPT):
 3. ABSOLUTELY NO AUDIO / SILENT VIDEO ONLY (MANDATORY): The video must contain NO SOUND: do NOT mention music, dialogue, voice, speech, narration, sound effects, ambient audio, or any audio references. Every video prompt MUST explicitly specify: "silent video, no audio, no voice, no music, no sound effects".
 4. STRICT IP & TRADEMARK SAFETY: Never include brand names, logos, trademarks, copyrighted characters, celebrities, recognizable copyrighted designs, or protected IP.
 
-STRICT OUTPUT FORMAT:
-- Title: An original, copyright-safe, silent master VIDEO prompt describing: subject + natural motion progression + camera movement + lighting & atmosphere + environment + timing. Must explicitly specify: "silent video, no audio, no voice, no music, no sound effects."
-- Description: Production-ready video concept: scene composition, camera trajectory, subject movement timing, visual progression from start to finish, color grading, atmospheric depth. Strictly silent description without audio.
-- Keywords: 25-35 visual video modifier keywords covering: motion style, camera technique, visual effects, color grading terms, mood/atmosphere, cinematic style descriptors.
-- Category: The video genre (e.g. Cinematic B-Roll, Aerial Footage, Timelapse, Slow Motion, Animation, Motion Graphics, Documentary Style, Commercial Video).`;
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "filename": "${filename}",
+  "title": "Master Video Prompt: Detailed subject + natural motion progression + camera movement + lighting & atmosphere + environment + timing. silent video, no audio, no voice, no music, no sound effects.",
+  "description": "Production-ready video concept: scene composition, camera trajectory, subject movement timing, visual progression from start to finish, color grading, atmospheric depth. Strictly silent description without audio.",
+  "keywords": ["25-35 video visual modifier keywords", "motion style", "camera technique", "visual effects", "color grading", "mood/atmosphere", "cinematic style"],
+  "category": "Video genre"
+}`;
 
   } else if (isAdobe) {
     prompt = `You are a world-renowned Microstock SEO Specialist and Adobe Stock Contributor Metadata Expert.
@@ -546,12 +552,12 @@ function extractJsonFromCandidate(candidate) {
 /**
  * Run Gemini generateContent using config.geminiModel (gemini-3.5-flash-lite).
  */
-async function runGeminiModel(requestBody, apiKey) {
-  const modelName = config.geminiModel || 'gemini-3.5-flash-lite';
+async function runGeminiModel(requestBody, apiKey, model) {
+  const modelName = model || config.geminiModel || 'gemini-3.5-flash-lite';
   const url = `${config.geminiBaseUrl}/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), 8500);
+  const timeoutId = setTimeout(() => abortController.abort(), 35000);
 
   try {
     const res = await fetch(url, {
@@ -579,12 +585,8 @@ async function runGeminiModel(requestBody, apiKey) {
   }
 }
 
-
-
 /**
  * Server-side metadata generation proxy for image / vector / video assets.
- * BUG FIX #3: Cleaned up try/catch scope — all logic is inside the single try block.
- * BUG FIX #9: isVideo now correctly passed to buildCategoryOptions.
  */
 export async function generateGeminiMetadata({ apiKey: providedKey, base64Image, mimeType = 'image/jpeg', filename = 'asset.jpg', platform, settings, mode, model }) {
   const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
@@ -608,7 +610,6 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
     const effectiveTitleLimit = settings?.titleMax ? parseInt(settings.titleMax, 10) : (parseInt(platformObj.titleMaxLen, 10) || 70);
 
     const kwTarget       = buildKwTarget(effectiveKwMax, settings?.kwMin);
-    // BUG FIX #9: pass isVideo so Shutterstock gets video categories for video files
     const categoryOptions = buildCategoryOptions(platformObj, isVideo);
     const prompt         = buildGenerationPrompt({ platformObj, kwTarget, titleLimit: effectiveTitleLimit, categoryOptions, settings, mode, filename, isVideo });
 
@@ -645,8 +646,7 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
       }
     };
 
-    console.log('[GeminiService] Using model: gemini-3.5-flash-lite');
-    const data      = await runGeminiModel(requestBody, apiKey);
+    const data      = await runGeminiModel(requestBody, apiKey, model);
     const candidate = data.candidates?.[0];
     const parsed    = extractJsonFromCandidate(candidate);
 
@@ -662,7 +662,7 @@ export async function generateGeminiMetadata({ apiKey: providedKey, base64Image,
 /**
  * Generate metadata using raw binary video data (bypassing Base64).
  */
-export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer, mimeType = 'video/mp4', filename = 'video.mp4', platform, settings, mode }) {
+export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer, mimeType = 'video/mp4', filename = 'video.mp4', platform, settings, mode, model }) {
   const apiKey = (providedKey || process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) throw new Error('Gemini API key is required.');
 
@@ -699,8 +699,7 @@ export async function generateGeminiMetadataBinary({ apiKey: providedKey, buffer
       }
     };
 
-    console.log('[GeminiService] Using model: gemini-3.5-flash-lite');
-    const data      = await runGeminiModel(requestBody, apiKey);
+    const data      = await runGeminiModel(requestBody, apiKey, model);
     const candidate = data.candidates?.[0];
     const parsed    = extractJsonFromCandidate(candidate);
 

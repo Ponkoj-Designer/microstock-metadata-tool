@@ -162,5 +162,39 @@ export const PLATFORMS = {
       'Illustrations & Clipart', 'IT & C', 'Nature', 'Object', 'People', 'Travel'
     ],
     description: 'Image Name (Title), Description, up to 80 keywords, and Primary Category.'
+  },
+  freepik: {
+    id: 'freepik',
+    name: 'Freepik',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`,
+    color: '#2563eb',
+    colorBg: 'rgba(37, 99, 235, 0.16)',
+    colorBorder: 'rgba(37, 99, 235, 0.35)',
+    titleMaxLen: 100,
+    titleMinLen: 5,
+    keywordMin: 5,
+    keywordMax: 50,
+    keywordRecommended: 30,
+    categoriesRequired: 0,
+    csvColumns: ['Filename', 'Title', 'Keywords'],
+    categories: ['Vectors', 'Photos', 'PSD', 'Icons'],
+    description: 'Title and Keywords optimized for Freepik contributor uploads.'
+  },
+  istock: {
+    id: 'istock',
+    name: 'iStock',
+    logoSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#00dbe9" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>`,
+    color: '#00dbe9',
+    colorBg: 'rgba(0, 219, 233, 0.16)',
+    colorBorder: 'rgba(0, 219, 233, 0.35)',
+    titleMaxLen: 200,
+    titleMinLen: 5,
+    keywordMin: 5,
+    keywordMax: 50,
+    keywordRecommended: 30,
+    categoriesRequired: 0,
+    csvColumns: ['Filename', 'Title', 'Description', 'Keywords'],
+    categories: [],
+    description: 'Title, Description, and Keywords for iStock / Getty Images.'
   }
 };

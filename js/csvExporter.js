@@ -32,8 +32,11 @@ export function formatRowForPlatform(item, platform) {
       const ssDesc = (description || title || '').trim().slice(0, 200);
       
       // Strict Shutterstock category resolution: 1 by default, max 2 distinct valid categories in the single 'Categories' column
-      const allowedCategories = (Array.isArray(platform.categories) && platform.categories.length > 0)
-        ? platform.categories
+      const catListSource = (item.assetType === 'video' && Array.isArray(platform.videoCategories) && platform.videoCategories.length > 0)
+        ? platform.videoCategories
+        : platform.categories;
+      const allowedCategories = (Array.isArray(catListSource) && catListSource.length > 0)
+        ? catListSource
         : [
             'Abstract', 'Animals/Wildlife', 'Arts', 'Backgrounds/Textures', 'Beauty/Fashion',
             'Buildings/Landmarks', 'Business/Finance', 'Celebrities', 'Education', 'Food and drink',

@@ -526,3 +526,8 @@
   border-color: #00dbe9 !important;
   box-shadow: 0 0 10px rgba(0, 219, 233, 0.2);
 }
+
+/* Mobile Nav Drawer active state */
+#mobile-nav-drawer.active {
+  display: flex !important;
+}

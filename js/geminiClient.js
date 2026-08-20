@@ -3,7 +3,7 @@
  * Customer API keys are held strictly in memory for this session only.
  */
 
-const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_TIMEOUT_MS = 45000;
 const VIDEO_TIMEOUT_MS = 240000;
 
 export const AI_PROVIDERS_CONFIG = {
@@ -1760,7 +1760,8 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       ],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 1024
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json'
       }
     };
 
@@ -1770,7 +1771,7 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody)
-    }, 15000);
+    }, 45000);
 
     const resJson = await res.json().catch(() => ({}));
     const candidate = resJson.candidates?.[0];
@@ -1873,51 +1874,48 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
   }
 
   if (item.assetType === 'video') {
-    const mimeType = getGeminiMimeType(item, ext);
-    if (!item.file) throw new Error('Video file object is missing.');
+    // 1. If backend server is available and user wants direct video upload, try binary endpoint
+    if (!key && item.file) {
+      const mimeType = getGeminiMimeType(item, ext);
+      const endpoints = [
+        `${getApiBase()}/api/gemini/generate-video`,
+        '/.netlify/functions/api/gemini/generate-video'
+      ];
 
-    const endpoints = [
-      `${getApiBase()}/api/gemini/generate-video`,
-      '/.netlify/functions/api/gemini/generate-video'
-    ];
+      for (const ep of endpoints) {
+        try {
+          const res = await fetchWithTimeout(ep, {
+            method: 'POST',
+            signal,
+            headers: {
+              'Content-Type': mimeType,
+              'x-ai-provider': provider,
+              'x-ai-api-key': key,
+              'x-gemini-api-key': key,
+              'x-filename': encodeURIComponent(item.name || item.file?.name || 'video.mp4'),
+              'x-platform': encodeURIComponent(JSON.stringify(platform)),
+              'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
+              'x-mode':  mode || 'metadata',
+              'x-model': selectedModel || 'gemini-3.5-flash-lite'
+            },
+            body: item.file
+          }, VIDEO_TIMEOUT_MS);
 
-    let lastError = null;
-    for (const ep of endpoints) {
-      try {
-        const res = await fetchWithTimeout(ep, {
-          method: 'POST',
-          signal,
-          headers: {
-            'Content-Type': mimeType,
-            'x-ai-provider': provider,
-            'x-ai-api-key': key,
-            'x-gemini-api-key': key,
-            'x-filename': encodeURIComponent(item.name || item.file?.name || 'video.mp4'),
-            'x-platform': encodeURIComponent(JSON.stringify(platform)),
-            'x-settings': encodeURIComponent(JSON.stringify(settings || {})),
-            'x-mode':  mode || 'metadata',
-            'x-model': selectedModel || 'gemini-3.5-flash-lite'
-          },
-          body: item.file
-        }, VIDEO_TIMEOUT_MS);
-
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok) {
-          return data.data;
-        }
-        if (data.message) lastError = new Error(data.message);
-      } catch (e) {
-        lastError = e;
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.ok) {
+            return data.data;
+          }
+        } catch (_) {}
       }
     }
-    throw lastError || new Error('Video metadata generation failed.');
   }
 
+  // 2. Extract JPEG frame/image base64 for fast, reliable AI vision processing across Client & Netlify Serverless
   const { base64, mimeType } = await getImageBase64(item, ext);
 
   let lastError = null;
 
-  // 1. Direct Browser Client generation (Strictly gemini-3.5-flash-lite directly from browser)
+  // Direct Browser Client generation
   if (key) {
     return await generateDirectClientAi({
       provider,
@@ -1933,7 +1931,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
     });
   }
 
-  // 2. Dual-Route Backend Proxy Fallback
+  // Dual-Route Backend Proxy Fallback
   const endpoints = [
     `${getApiBase()}/api/ai/generate`,
     '/.netlify/functions/api/ai/generate'
@@ -1961,7 +1959,7 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
           mode,
           model: selectedModel
         })
-      }, 12000);
+      }, 35000);
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {

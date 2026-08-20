@@ -45,7 +45,7 @@ export async function runBatchQueue({
       onItemStart && onItemStart(item, i);
 
       let attempts = 0;
-      const maxAttempts = 2; // Immediate retry with exact server cooldown
+      const maxAttempts = 4; // Managed retry with exponential backoff & exact server cooldown
       let lastErr = null;
       let result = null;
 

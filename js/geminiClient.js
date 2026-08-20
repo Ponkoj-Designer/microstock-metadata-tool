@@ -1533,8 +1533,8 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
 
   if (provider === 'gemini') {
     const candidateModels = (model === 'gemini-3.6-flash')
-      ? ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite']
-      : ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+      ? ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite']
+      : ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro'];
 
     const requestBody = {
       contents: [
@@ -1554,52 +1554,55 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
 
     let lastError = null;
     for (const curModel of candidateModels) {
-      for (const apiVer of ['v1beta', 'v1']) {
-        try {
-          const url = `https://generativelanguage.googleapis.com/${apiVer}/models/${curModel}:generateContent?key=${encodeURIComponent(key)}`;
-          const res = await fetchWithTimeout(url, {
-            method: 'POST',
-            signal,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-          }, 28000);
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${curModel}:generateContent?key=${encodeURIComponent(key)}`;
+        const res = await fetchWithTimeout(url, {
+          method: 'POST',
+          signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        }, 12000);
 
-          const resJson = await res.json().catch(() => ({}));
-          const candidate = resJson.candidates?.[0];
-          const rawText = candidate?.content?.parts?.map(p => p.text || '').join('\n') || '';
+        const resJson = await res.json().catch(() => ({}));
+        const candidate = resJson.candidates?.[0];
+        const rawText = candidate?.content?.parts?.map(p => p.text || '').join('\n') || '';
 
-          if (res.ok && rawText.trim().length > 0) {
-            let parsed;
-            try {
-              parsed = JSON.parse(rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim());
-            } catch (_) {
-              const titleMatch = rawText.match(/"title"\s*:\s*"([^"]+)"/i);
-              const descMatch  = rawText.match(/"description"\s*:\s*"([^"]+)"/i);
-              const catMatch   = rawText.match(/"category"\s*:\s*"([^"]+)"/i);
-              const kwMatches  = [...rawText.matchAll(/"([a-zA-Z][a-zA-Z0-9\s-]{1,29})"/g)]
-                .map(m => m[1].trim())
-                .filter(k => k.length > 1 && !['title','description','keywords','category','filename','json'].includes(k.toLowerCase()));
-              parsed = {
-                title: titleMatch ? titleMatch[1].trim() : '',
-                description: descMatch ? descMatch[1].trim() : '',
-                category: catMatch ? catMatch[1].trim() : 'General',
-                keywords: kwMatches.length ? kwMatches : []
-              };
-            }
-            if (parsed) {
-              return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
-            }
+        if (res.ok && rawText.trim().length > 0) {
+          let parsed;
+          try {
+            parsed = JSON.parse(rawText.replace(/^```(?:json)?\s*|\s*```$/gi, '').replace(/```/g, '').trim());
+          } catch (_) {
+            const titleMatch = rawText.match(/"title"\s*:\s*"([^"]+)"/i);
+            const descMatch  = rawText.match(/"description"\s*:\s*"([^"]+)"/i);
+            const catMatch   = rawText.match(/"category"\s*:\s*"([^"]+)"/i);
+            const kwMatches  = [...rawText.matchAll(/"([a-zA-Z][a-zA-Z0-9\s-]{1,29})"/g)]
+              .map(m => m[1].trim())
+              .filter(k => k.length > 1 && !['title','description','keywords','category','filename','json'].includes(k.toLowerCase()));
+            parsed = {
+              title: titleMatch ? titleMatch[1].trim() : '',
+              description: descMatch ? descMatch[1].trim() : '',
+              category: catMatch ? catMatch[1].trim() : 'General',
+              keywords: kwMatches.length ? kwMatches : []
+            };
           }
-          if (resJson?.error?.message) {
-            lastError = new Error(resJson.error.message);
-            // If auth error, break immediately
-            if (res.status === 401 || (res.status === 400 && resJson.error.message.toLowerCase().includes('api_key'))) {
-              throw lastError;
-            }
+          if (parsed && (parsed.title || parsed.description || (parsed.keywords && parsed.keywords.length > 0))) {
+            return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
           }
-        } catch (e) {
-          lastError = e;
-          if (e.message && e.message.toLowerCase().includes('api key')) throw e;
+        }
+        if (resJson?.error?.message) {
+          const errMsg = resJson.error.message;
+          lastError = new Error(errMsg);
+          const lower = errMsg.toLowerCase();
+          // If fatal auth or quota error, throw immediately
+          if (res.status === 401 || res.status === 403 || res.status === 429 || (res.status === 400 && (lower.includes('api_key') || lower.includes('key') || lower.includes('quota')))) {
+            throw lastError;
+          }
+        }
+      } catch (e) {
+        lastError = e;
+        const msg = (e.message || '').toLowerCase();
+        if (msg.includes('api key') || msg.includes('api_key') || msg.includes('unauthorized') || msg.includes('permission') || msg.includes('quota')) {
+          throw e;
         }
       }
     }
@@ -1730,6 +1733,10 @@ export async function generateMetadataForImage(item, platform, apiKey, settings,
       });
     } catch (directErr) {
       lastError = directErr;
+      const msg = (directErr.message || '').toLowerCase();
+      if (msg.includes('api key') || msg.includes('api_key') || msg.includes('unauthorized') || msg.includes('permission') || msg.includes('quota') || msg.includes('resource_exhausted') || msg.includes('429')) {
+        throw directErr;
+      }
       console.warn('[DirectAI Client Notice]', directErr.message, 'Trying backend proxy fallback...');
     }
   }

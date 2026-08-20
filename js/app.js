@@ -379,7 +379,11 @@ function openAuthModal(tab = 'login') {
   const modalEl = document.getElementById('modal-auth');
   const tabsContainer = document.getElementById('auth-tabs-container');
   const profileView = document.getElementById('auth-profile-view');
+  const loginErr = document.getElementById('login-error');
+  const signupErr = document.getElementById('signup-error');
 
+  if (loginErr)  { loginErr.style.display  = 'none'; loginErr.textContent  = ''; }
+  if (signupErr) { signupErr.style.display = 'none'; signupErr.textContent = ''; }
   if (tabsContainer) tabsContainer.style.display = 'flex';
   if (profileView)   profileView.style.display   = 'none';
 
@@ -1869,6 +1873,11 @@ function switchAuthTab(tab) {
   const signupTab  = document.getElementById('auth-tab-signup');
   const loginForm  = document.getElementById('auth-login-form');
   const signupForm = document.getElementById('auth-signup-form');
+  const loginErr   = document.getElementById('login-error');
+  const signupErr  = document.getElementById('signup-error');
+
+  if (loginErr)  { loginErr.style.display  = 'none'; loginErr.textContent  = ''; }
+  if (signupErr) { signupErr.style.display = 'none'; signupErr.textContent = ''; }
   
   const activeClasses = ['font-bold', 'text-background', 'bg-[#00dbe9]', 'shadow-[0_0_15px_rgba(0,219,233,0.3)]'];
   const inactiveClasses = ['font-medium', 'text-on-surface-variant', 'hover:text-on-surface'];

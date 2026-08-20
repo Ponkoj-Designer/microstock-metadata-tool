@@ -18,6 +18,42 @@ function getApiBase() {
   return '';
 }
 
+async function apiFetch(endpoint, options = {}) {
+  const base = getApiBase();
+  const fullHeaders = getAuthHeaders(options.headers || {});
+  const fetchOptions = {
+    ...options,
+    credentials: 'include',
+    headers: fullHeaders
+  };
+
+  // Primary URL
+  const primaryUrl = `${base}${endpoint}`;
+  try {
+    const res = await fetch(primaryUrl, fetchOptions);
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      return { res, data };
+    }
+  } catch (_) {}
+
+  // Fallback for Netlify if /api/* redirect proxy was bypassed
+  if (!base && endpoint.startsWith('/api/')) {
+    const fallbackEndpoint = endpoint.replace('/api/', '/.netlify/functions/api/');
+    try {
+      const res = await fetch(fallbackEndpoint, fetchOptions);
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        return { res, data };
+      }
+    } catch (_) {}
+  }
+
+  return { res: null, data: null };
+}
+
 // ── Persistent (localStorage) + In-memory session state ──────────────────────
 function getSavedUser() {
   if (typeof localStorage === 'undefined') return null;
@@ -83,27 +119,18 @@ export function isLoggedIn()     { return !!_currentUser; }
 export async function checkAuthState() {
   _currentUser = getSavedUser();
   try {
-    const res = await fetch(`${getApiBase()}/api/auth/me`, {
-      method:      'GET',
-      credentials: 'include',
-      headers:     getAuthHeaders()
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.ok && data.user) {
-        _currentUser = data.user;
-        saveUser(data.user);
-        if (data.token) saveToken(data.token);
-        return data.user;
-      }
-    } else if (res.status === 401 || res.status === 403) {
+    const { res, data } = await apiFetch('/api/auth/me', { method: 'GET' });
+    if (res && res.ok && data && data.ok && data.user) {
+      _currentUser = data.user;
+      saveUser(data.user);
+      if (data.token) saveToken(data.token);
+      return data.user;
+    } else if (res && (res.status === 401 || res.status === 403)) {
       _currentUser = null;
       saveUser(null);
       return null;
     }
-  } catch (_) {
-    // Network error or local mode — retain cached session from localStorage
-  }
+  } catch (_) {}
   return _currentUser;
 }
 
@@ -114,20 +141,17 @@ export async function checkAuthState() {
  */
 export async function signup({ fullName, email, password }) {
   try {
-    const res = await fetch(`${getApiBase()}/api/auth/signup`, {
-      method:      'POST',
-      credentials: 'include',
-      headers:     getAuthHeaders(),
-      body:        JSON.stringify({ fullName, email, password })
+    const { res, data } = await apiFetch('/api/auth/signup', {
+      method: 'POST',
+      body:   JSON.stringify({ fullName, email, password })
     });
-    const data = await res.json();
-    if (res.ok && data.ok && data.user) {
+    if (res && res.ok && data && data.ok && data.user) {
       _currentUser = data.user;
       saveUser(data.user);
       if (data.token) saveToken(data.token);
       return { ok: true, user: data.user };
     }
-    return { ok: false, message: data.message || 'Signup failed. Please try again.' };
+    return { ok: false, message: data?.message || 'Signup failed. Please check details and try again.' };
   } catch (_) {
     return { ok: false, message: 'Network error. Please check your connection and try again.' };
   }
@@ -140,20 +164,17 @@ export async function signup({ fullName, email, password }) {
  */
 export async function login({ email, password }) {
   try {
-    const res = await fetch(`${getApiBase()}/api/auth/login`, {
-      method:      'POST',
-      credentials: 'include',
-      headers:     getAuthHeaders(),
-      body:        JSON.stringify({ email, password })
+    const { res, data } = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      body:   JSON.stringify({ email, password })
     });
-    const data = await res.json();
-    if (res.ok && data.ok && data.user) {
+    if (res && res.ok && data && data.ok && data.user) {
       _currentUser = data.user;
       saveUser(data.user);
       if (data.token) saveToken(data.token);
       return { ok: true, user: data.user };
     }
-    return { ok: false, message: data.message || 'Login failed. Please try again.' };
+    return { ok: false, message: data?.message || 'Invalid email or password.' };
   } catch (_) {
     return { ok: false, message: 'Network error. Please check your connection and try again.' };
   }
@@ -167,14 +188,8 @@ export async function logout() {
   _currentUser = null;
   saveUser(null);
   try {
-    await fetch(`${getApiBase()}/api/auth/logout`, {
-      method:      'POST',
-      credentials: 'include',
-      headers:     getAuthHeaders()
-    });
-  } catch (_) {
-    // Even if the request fails, clear local state
-  }
+    await apiFetch('/api/auth/logout', { method: 'POST' });
+  } catch (_) {}
 }
 
 /**
@@ -182,17 +197,10 @@ export async function logout() {
  */
 export async function fetchUserProfile() {
   try {
-    const res = await fetch(`${getApiBase()}/api/user/profile`, {
-      method:      'GET',
-      credentials: 'include',
-      headers:     getAuthHeaders()
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.ok && data.user) {
-        _currentUser = data.user;
-        return data;
-      }
+    const { res, data } = await apiFetch('/api/user/profile', { method: 'GET' });
+    if (res && res.ok && data && data.ok && data.user) {
+      _currentUser = data.user;
+      return data;
     }
   } catch (_) {}
   return null;
@@ -203,18 +211,15 @@ export async function fetchUserProfile() {
  */
 export async function updateProfile({ fullName }) {
   try {
-    const res = await fetch(`${getApiBase()}/api/user/profile`, {
-      method:      'PUT',
-      credentials: 'include',
-      headers:     getAuthHeaders(),
-      body:        JSON.stringify({ fullName })
+    const { res, data } = await apiFetch('/api/user/profile', {
+      method: 'PUT',
+      body:   JSON.stringify({ fullName })
     });
-    const data = await res.json();
-    if (res.ok && data.ok && data.user) {
+    if (res && res.ok && data && data.ok && data.user) {
       _currentUser = data.user;
       return { ok: true, user: data.user };
     }
-    return { ok: false, message: data.message || 'Failed to update profile.' };
+    return { ok: false, message: data?.message || 'Failed to update profile.' };
   } catch (_) {
     return { ok: false, message: 'Network error. Please try again.' };
   }
@@ -225,18 +230,15 @@ export async function updateProfile({ fullName }) {
  */
 export async function selectUserPlan(plan) {
   try {
-    const res = await fetch(`${getApiBase()}/api/user/plan`, {
-      method:      'POST',
-      credentials: 'include',
-      headers:     getAuthHeaders(),
-      body:        JSON.stringify({ plan })
+    const { res, data } = await apiFetch('/api/user/plan', {
+      method: 'POST',
+      body:   JSON.stringify({ plan })
     });
-    const data = await res.json();
-    if (res.ok && data.ok && data.user) {
+    if (res && res.ok && data && data.ok && data.user) {
       _currentUser = data.user;
       return { ok: true, user: data.user, subscription: data.subscription, message: data.message };
     }
-    return { ok: false, message: data.message || 'Failed to update plan.' };
+    return { ok: false, message: data?.message || 'Failed to update plan.' };
   } catch (_) {
     return { ok: false, message: 'Network error. Please try again.' };
   }
@@ -247,18 +249,15 @@ export async function selectUserPlan(plan) {
  */
 export async function deductCredit(amount = 1, description = 'Metadata generation') {
   try {
-    const res = await fetch(`${getApiBase()}/api/user/credits/deduct`, {
-      method:      'POST',
-      credentials: 'include',
-      headers:     getAuthHeaders(),
-      body:        JSON.stringify({ amount, description })
+    const { res, data } = await apiFetch('/api/user/credits/deduct', {
+      method: 'POST',
+      body:   JSON.stringify({ amount, description })
     });
-    const data = await res.json();
-    if (res.ok && data.ok && data.user) {
+    if (res && res.ok && data && data.ok && data.user) {
       _currentUser = data.user;
       return { ok: true, user: data.user, credits: data.credits };
     }
-    return { ok: false, message: data.message || 'Credit deduction failed.' };
+    return { ok: false, message: data?.message || 'Credit deduction failed.' };
   } catch (_) {
     return { ok: false, message: 'Network error during credit deduction.' };
   }
@@ -269,14 +268,9 @@ export async function deductCredit(amount = 1, description = 'Metadata generatio
 export async function adminFetchUsers(search = '') {
   try {
     const q = search ? `?search=${encodeURIComponent(search)}` : '';
-    const res = await fetch(`${getApiBase()}/api/admin/users${q}`, {
-      method: 'GET',
-      credentials: 'include',
-      headers: getAuthHeaders()
-    });
-    const data = await res.json();
-    if (res.ok && data.ok) return { ok: true, users: data.users, count: data.count };
-    return { ok: false, message: data.message || 'Failed to fetch users' };
+    const { res, data } = await apiFetch(`/api/admin/users${q}`, { method: 'GET' });
+    if (res && res.ok && data && data.ok) return { ok: true, users: data.users, count: data.count };
+    return { ok: false, message: data?.message || 'Failed to fetch users' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
@@ -284,14 +278,9 @@ export async function adminFetchUsers(search = '') {
 
 export async function adminGetUserDetail(userId) {
   try {
-    const res = await fetch(`${getApiBase()}/api/admin/users/${userId}`, {
-      method: 'GET',
-      credentials: 'include',
-      headers: getAuthHeaders()
-    });
-    const data = await res.json();
-    if (res.ok && data.ok) return { ok: true, user: data.user, subscription: data.subscription, transactions: data.transactions };
-    return { ok: false, message: data.message || 'Failed to fetch user details' };
+    const { res, data } = await apiFetch(`/api/admin/users/${userId}`, { method: 'GET' });
+    if (res && res.ok && data && data.ok) return { ok: true, user: data.user, subscription: data.subscription, transactions: data.transactions };
+    return { ok: false, message: data?.message || 'Failed to fetch user details' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
@@ -299,15 +288,12 @@ export async function adminGetUserDetail(userId) {
 
 export async function adminUpdateUserPlan(userId, plan) {
   try {
-    const res = await fetch(`${getApiBase()}/api/admin/users/${userId}/plan`, {
+    const { res, data } = await apiFetch(`/api/admin/users/${userId}/plan`, {
       method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ plan })
     });
-    const data = await res.json();
-    if (res.ok && data.ok) return { ok: true, user: data.user, subscription: data.subscription, message: data.message };
-    return { ok: false, message: data.message || 'Failed to update plan' };
+    if (res && res.ok && data && data.ok) return { ok: true, user: data.user, subscription: data.subscription, message: data.message };
+    return { ok: false, message: data?.message || 'Failed to update plan' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
@@ -315,15 +301,12 @@ export async function adminUpdateUserPlan(userId, plan) {
 
 export async function adminToggleUserStatus(userId, isActive) {
   try {
-    const res = await fetch(`${getApiBase()}/api/admin/users/${userId}/status`, {
+    const { res, data } = await apiFetch(`/api/admin/users/${userId}/status`, {
       method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ isActive })
     });
-    const data = await res.json();
-    if (res.ok && data.ok) return { ok: true, user: data.user, message: data.message };
-    return { ok: false, message: data.message || 'Failed to toggle status' };
+    if (res && res.ok && data && data.ok) return { ok: true, user: data.user, message: data.message };
+    return { ok: false, message: data?.message || 'Failed to toggle status' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
@@ -331,15 +314,12 @@ export async function adminToggleUserStatus(userId, isActive) {
 
 export async function adminAdjustCredits(userId, amount, description) {
   try {
-    const res = await fetch(`${getApiBase()}/api/admin/users/${userId}/credits`, {
+    const { res, data } = await apiFetch(`/api/admin/users/${userId}/credits`, {
       method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ amount, description })
     });
-    const data = await res.json();
-    if (res.ok && data.ok) return { ok: true, user: data.user, credits: data.credits, transaction: data.transaction, message: data.message };
-    return { ok: false, message: data.message || 'Failed to adjust credits' };
+    if (res && res.ok && data && data.ok) return { ok: true, user: data.user, credits: data.credits, transaction: data.transaction, message: data.message };
+    return { ok: false, message: data?.message || 'Failed to adjust credits' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
@@ -349,13 +329,9 @@ export async function adminAdjustCredits(userId, amount, description) {
 
 export async function fetchPricingPlans() {
   try {
-    const res = await fetch(`${getApiBase()}/api/payment/plans`, {
-      credentials: 'include',
-      headers: getAuthHeaders()
-    });
-    const data = await res.json();
-    if (res.ok && data.ok) return { ok: true, plans: data.plans };
-    return { ok: false, message: data.message || 'Failed to load plans' };
+    const { res, data } = await apiFetch('/api/payment/plans', { method: 'GET' });
+    if (res && res.ok && data && data.ok) return { ok: true, plans: data.plans };
+    return { ok: false, message: data?.message || 'Failed to load plans' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
@@ -363,31 +339,25 @@ export async function fetchPricingPlans() {
 
 export async function initiateCheckout(plan, paymentMethod = 'bkash') {
   try {
-    const res = await fetch(`${getApiBase()}/api/payment/checkout`, {
+    const { res, data } = await apiFetch('/api/payment/checkout', {
       method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ plan, paymentMethod })
     });
-    const data = await res.json();
-    if (res.ok && data.ok) return data;
-    return { ok: false, message: data.message || 'Checkout failed' };
+    if (res && res.ok && data && data.ok) return data;
+    return { ok: false, message: data?.message || 'Checkout failed' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
 }
 
-export async function submitManualPayment(data) {
+export async function submitManualPayment(formData) {
   try {
-    const res = await fetch(`${getApiBase()}/api/payment/submit`, {
+    const { res, data } = await apiFetch('/api/payment/submit', {
       method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data)
+      body: JSON.stringify(formData)
     });
-    const result = await res.json();
-    if (res.ok && result.ok) return result;
-    return { ok: false, message: result.message || 'Payment submission failed' };
+    if (res && res.ok && data && data.ok) return data;
+    return { ok: false, message: data?.message || 'Payment submission failed' };
   } catch (err) {
     return { ok: false, message: 'Network error submitting payment' };
   }
@@ -395,14 +365,10 @@ export async function submitManualPayment(data) {
 
 export async function adminFetchPayments(status) {
   try {
-    const url = status ? `${getApiBase()}/api/admin/payments?status=${status}` : `${getApiBase()}/api/admin/payments`;
-    const res = await fetch(url, {
-      credentials: 'include',
-      headers: getAuthHeaders()
-    });
-    const data = await res.json();
-    if (res.ok && data.ok) return { ok: true, payments: data.payments, count: data.count };
-    return { ok: false, message: data.message || 'Failed to fetch payments' };
+    const url = status ? `/api/admin/payments?status=${status}` : '/api/admin/payments';
+    const { res, data } = await apiFetch(url, { method: 'GET' });
+    if (res && res.ok && data && data.ok) return { ok: true, payments: data.payments, count: data.count };
+    return { ok: false, message: data?.message || 'Failed to fetch payments' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
@@ -410,15 +376,12 @@ export async function adminFetchPayments(status) {
 
 export async function adminApprovePayment(paymentId, adminNotes = '') {
   try {
-    const res = await fetch(`${getApiBase()}/api/admin/payments/${paymentId}/approve`, {
+    const { res, data } = await apiFetch(`/api/admin/payments/${paymentId}/approve`, {
       method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ adminNotes })
     });
-    const data = await res.json();
-    if (res.ok && data.ok) return data;
-    return { ok: false, message: data.message || 'Payment approval failed' };
+    if (res && res.ok && data && data.ok) return data;
+    return { ok: false, message: data?.message || 'Payment approval failed' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }
@@ -426,15 +389,12 @@ export async function adminApprovePayment(paymentId, adminNotes = '') {
 
 export async function adminRejectPayment(paymentId, adminNotes = '') {
   try {
-    const res = await fetch(`${getApiBase()}/api/admin/payments/${paymentId}/reject`, {
+    const { res, data } = await apiFetch(`/api/admin/payments/${paymentId}/reject`, {
       method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ adminNotes })
     });
-    const data = await res.json();
-    if (res.ok && data.ok) return data;
-    return { ok: false, message: data.message || 'Payment rejection failed' };
+    if (res && res.ok && data && data.ok) return data;
+    return { ok: false, message: data?.message || 'Payment rejection failed' };
   } catch (err) {
     return { ok: false, message: 'Network error' };
   }

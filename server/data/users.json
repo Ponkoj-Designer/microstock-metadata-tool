@@ -22,5 +22,29 @@
     "is_active": true,
     "created_at": "2026-08-19T06:58:35.143Z",
     "updated_at": "2026-08-19T06:58:35.143Z"
+  },
+  {
+    "id": "usr_1787212961211_0c520837",
+    "email": "netlify_user_1787212960885@example.com",
+    "password_hash": "$2a$12$7IV3X88d3u7C.sNdfna0PuWG4IQUzqUNj5e7WUGMYf257uFgjN2S.",
+    "full_name": "Netlify Creator",
+    "role": "user",
+    "plan": "free",
+    "credits": 10,
+    "is_active": true,
+    "created_at": "2026-08-20T08:02:41.211Z",
+    "updated_at": "2026-08-20T08:02:41.211Z"
+  },
+  {
+    "id": "usr_1787213121494_c5eab2f5",
+    "email": "netlify_user_1787213121168@example.com",
+    "password_hash": "$2a$12$IiI5rNR8nq9MjwEqEXOQSul1cFs3UXCA7m8NSxPEy/2k2ZInEEQb2",
+    "full_name": "Netlify Creator",
+    "role": "user",
+    "plan": "free",
+    "credits": 10,
+    "is_active": true,
+    "created_at": "2026-08-20T08:05:21.494Z",
+    "updated_at": "2026-08-20T08:05:21.494Z"
   }
 ]

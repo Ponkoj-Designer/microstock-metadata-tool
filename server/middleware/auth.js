@@ -19,7 +19,14 @@ import { findSession, findUserById } from '../services/userService.js';
 export async function authMiddleware(req, res, next) {
   req.user = null;
 
-  const token = req.cookies?.auth_token;
+  let token = req.cookies?.auth_token;
+  if (!token && req.headers.authorization) {
+    const parts = req.headers.authorization.split(' ');
+    if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
+      token = parts[1];
+    }
+  }
+
   if (!token) return next();
 
   try {

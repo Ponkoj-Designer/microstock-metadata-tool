@@ -105,7 +105,7 @@ authRouter.post('/signup', async (req, res) => {
     });
 
     res.cookie('auth_token', token, COOKIE_OPTIONS);
-    return res.status(201).json({ ok: true, user: safeUser(user) });
+    return res.status(201).json({ ok: true, user: safeUser(user), token });
 
   } catch (err) {
     console.error('[Auth /signup]', err.message);
@@ -149,7 +149,7 @@ authRouter.post('/login', async (req, res) => {
     });
 
     res.cookie('auth_token', token, COOKIE_OPTIONS);
-    return res.status(200).json({ ok: true, user: safeUser(user) });
+    return res.status(200).json({ ok: true, user: safeUser(user), token });
 
   } catch (err) {
     console.error('[Auth /login]', err.message);
@@ -159,7 +159,13 @@ authRouter.post('/login', async (req, res) => {
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
 authRouter.post('/logout', async (req, res) => {
-  const token = req.cookies?.auth_token;
+  let token = req.cookies?.auth_token;
+  if (!token && req.headers.authorization) {
+    const parts = req.headers.authorization.split(' ');
+    if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
+      token = parts[1];
+    }
+  }
 
   if (token) {
     const tokenHash = createHash('sha256').update(token).digest('hex');

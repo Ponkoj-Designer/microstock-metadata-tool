@@ -6,11 +6,23 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../data');
+const BUNDLED_DATA_DIR = path.resolve(__dirname, '../data');
+
+const isServerless = !!(
+  process.env.NETLIFY ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.VERCEL
+);
+
+const DATA_DIR = isServerless 
+  ? path.join(os.tmpdir(), 'microstock-data')
+  : BUNDLED_DATA_DIR;
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -23,14 +35,27 @@ function getFilePath(collection) {
   return path.join(DATA_DIR, `${collection}.json`);
 }
 
+function getBundledFilePath(collection) {
+  return path.join(BUNDLED_DATA_DIR, `${collection}.json`);
+}
+
 export function readCollection(collection) {
   const filePath = getFilePath(collection);
   try {
-    if (!fs.existsSync(filePath)) {
-      return [];
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      return JSON.parse(raw) || [];
     }
-    const raw = fs.readFileSync(filePath, 'utf8');
-    return JSON.parse(raw) || [];
+    // In serverless, fallback to bundled static file if tmp not yet populated
+    const bundledPath = getBundledFilePath(collection);
+    if (fs.existsSync(bundledPath)) {
+      const raw = fs.readFileSync(bundledPath, 'utf8');
+      const parsed = JSON.parse(raw) || [];
+      // Copy to writable DATA_DIR for subsequent writes
+      writeCollection(collection, parsed);
+      return parsed;
+    }
+    return [];
   } catch (err) {
     console.warn(`[LocalStore] Failed to read ${collection}:`, err.message);
     return [];

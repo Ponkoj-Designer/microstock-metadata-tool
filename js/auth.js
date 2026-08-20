@@ -36,8 +36,38 @@ function saveUser(user) {
       localStorage.setItem('pk_auth_user', JSON.stringify(user));
     } else {
       localStorage.removeItem('pk_auth_user');
+      localStorage.removeItem('pk_auth_token');
     }
   } catch (_) {}
+}
+
+function getSavedToken() {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    return localStorage.getItem('pk_auth_token') || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveToken(token) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (token) {
+      localStorage.setItem('pk_auth_token', token);
+    } else {
+      localStorage.removeItem('pk_auth_token');
+    }
+  } catch (_) {}
+}
+
+function getAuthHeaders(extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
+  const token = getSavedToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 let _currentUser = getSavedUser();
@@ -56,13 +86,14 @@ export async function checkAuthState() {
     const res = await fetch(`${getApiBase()}/api/auth/me`, {
       method:      'GET',
       credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' }
+      headers:     getAuthHeaders()
     });
     if (res.ok) {
       const data = await res.json();
       if (data.ok && data.user) {
         _currentUser = data.user;
         saveUser(data.user);
+        if (data.token) saveToken(data.token);
         return data.user;
       }
     } else if (res.status === 401 || res.status === 403) {
@@ -86,13 +117,14 @@ export async function signup({ fullName, email, password }) {
     const res = await fetch(`${getApiBase()}/api/auth/signup`, {
       method:      'POST',
       credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' },
+      headers:     getAuthHeaders(),
       body:        JSON.stringify({ fullName, email, password })
     });
     const data = await res.json();
     if (res.ok && data.ok && data.user) {
       _currentUser = data.user;
       saveUser(data.user);
+      if (data.token) saveToken(data.token);
       return { ok: true, user: data.user };
     }
     return { ok: false, message: data.message || 'Signup failed. Please try again.' };
@@ -111,13 +143,14 @@ export async function login({ email, password }) {
     const res = await fetch(`${getApiBase()}/api/auth/login`, {
       method:      'POST',
       credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' },
+      headers:     getAuthHeaders(),
       body:        JSON.stringify({ email, password })
     });
     const data = await res.json();
     if (res.ok && data.ok && data.user) {
       _currentUser = data.user;
       saveUser(data.user);
+      if (data.token) saveToken(data.token);
       return { ok: true, user: data.user };
     }
     return { ok: false, message: data.message || 'Login failed. Please try again.' };
@@ -137,7 +170,7 @@ export async function logout() {
     await fetch(`${getApiBase()}/api/auth/logout`, {
       method:      'POST',
       credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' }
+      headers:     getAuthHeaders()
     });
   } catch (_) {
     // Even if the request fails, clear local state
@@ -149,10 +182,10 @@ export async function logout() {
  */
 export async function fetchUserProfile() {
   try {
-    const res = await fetch('/api/user/profile', {
+    const res = await fetch(`${getApiBase()}/api/user/profile`, {
       method:      'GET',
-      credentials: 'same-origin',
-      headers:     { 'Content-Type': 'application/json' }
+      credentials: 'include',
+      headers:     getAuthHeaders()
     });
     if (res.ok) {
       const data = await res.json();
@@ -170,10 +203,10 @@ export async function fetchUserProfile() {
  */
 export async function updateProfile({ fullName }) {
   try {
-    const res = await fetch('/api/user/profile', {
+    const res = await fetch(`${getApiBase()}/api/user/profile`, {
       method:      'PUT',
-      credentials: 'same-origin',
-      headers:     { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers:     getAuthHeaders(),
       body:        JSON.stringify({ fullName })
     });
     const data = await res.json();
@@ -192,10 +225,10 @@ export async function updateProfile({ fullName }) {
  */
 export async function selectUserPlan(plan) {
   try {
-    const res = await fetch('/api/user/plan', {
+    const res = await fetch(`${getApiBase()}/api/user/plan`, {
       method:      'POST',
-      credentials: 'same-origin',
-      headers:     { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers:     getAuthHeaders(),
       body:        JSON.stringify({ plan })
     });
     const data = await res.json();
@@ -214,10 +247,10 @@ export async function selectUserPlan(plan) {
  */
 export async function deductCredit(amount = 1, description = 'Metadata generation') {
   try {
-    const res = await fetch('/api/user/credits/deduct', {
+    const res = await fetch(`${getApiBase()}/api/user/credits/deduct`, {
       method:      'POST',
-      credentials: 'same-origin',
-      headers:     { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers:     getAuthHeaders(),
       body:        JSON.stringify({ amount, description })
     });
     const data = await res.json();
@@ -236,10 +269,10 @@ export async function deductCredit(amount = 1, description = 'Metadata generatio
 export async function adminFetchUsers(search = '') {
   try {
     const q = search ? `?search=${encodeURIComponent(search)}` : '';
-    const res = await fetch(`/api/admin/users${q}`, {
+    const res = await fetch(`${getApiBase()}/api/admin/users${q}`, {
       method: 'GET',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' }
+      credentials: 'include',
+      headers: getAuthHeaders()
     });
     const data = await res.json();
     if (res.ok && data.ok) return { ok: true, users: data.users, count: data.count };
@@ -251,10 +284,10 @@ export async function adminFetchUsers(search = '') {
 
 export async function adminGetUserDetail(userId) {
   try {
-    const res = await fetch(`/api/admin/users/${userId}`, {
+    const res = await fetch(`${getApiBase()}/api/admin/users/${userId}`, {
       method: 'GET',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' }
+      credentials: 'include',
+      headers: getAuthHeaders()
     });
     const data = await res.json();
     if (res.ok && data.ok) return { ok: true, user: data.user, subscription: data.subscription, transactions: data.transactions };
@@ -266,10 +299,10 @@ export async function adminGetUserDetail(userId) {
 
 export async function adminUpdateUserPlan(userId, plan) {
   try {
-    const res = await fetch(`/api/admin/users/${userId}/plan`, {
+    const res = await fetch(`${getApiBase()}/api/admin/users/${userId}/plan`, {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getAuthHeaders(),
       body: JSON.stringify({ plan })
     });
     const data = await res.json();
@@ -282,10 +315,10 @@ export async function adminUpdateUserPlan(userId, plan) {
 
 export async function adminToggleUserStatus(userId, isActive) {
   try {
-    const res = await fetch(`/api/admin/users/${userId}/status`, {
+    const res = await fetch(`${getApiBase()}/api/admin/users/${userId}/status`, {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getAuthHeaders(),
       body: JSON.stringify({ isActive })
     });
     const data = await res.json();
@@ -298,10 +331,10 @@ export async function adminToggleUserStatus(userId, isActive) {
 
 export async function adminAdjustCredits(userId, amount, description) {
   try {
-    const res = await fetch(`/api/admin/users/${userId}/credits`, {
+    const res = await fetch(`${getApiBase()}/api/admin/users/${userId}/credits`, {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getAuthHeaders(),
       body: JSON.stringify({ amount, description })
     });
     const data = await res.json();
@@ -316,7 +349,10 @@ export async function adminAdjustCredits(userId, amount, description) {
 
 export async function fetchPricingPlans() {
   try {
-    const res = await fetch('/api/payment/plans');
+    const res = await fetch(`${getApiBase()}/api/payment/plans`, {
+      credentials: 'include',
+      headers: getAuthHeaders()
+    });
     const data = await res.json();
     if (res.ok && data.ok) return { ok: true, plans: data.plans };
     return { ok: false, message: data.message || 'Failed to load plans' };
@@ -327,10 +363,10 @@ export async function fetchPricingPlans() {
 
 export async function initiateCheckout(plan, paymentMethod = 'bkash') {
   try {
-    const res = await fetch('/api/payment/checkout', {
+    const res = await fetch(`${getApiBase()}/api/payment/checkout`, {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getAuthHeaders(),
       body: JSON.stringify({ plan, paymentMethod })
     });
     const data = await res.json();
@@ -343,10 +379,10 @@ export async function initiateCheckout(plan, paymentMethod = 'bkash') {
 
 export async function submitManualPayment(data) {
   try {
-    const res = await fetch('/api/payment/submit', {
+    const res = await fetch(`${getApiBase()}/api/payment/submit`, {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getAuthHeaders(),
       body: JSON.stringify(data)
     });
     const result = await res.json();
@@ -359,8 +395,11 @@ export async function submitManualPayment(data) {
 
 export async function adminFetchPayments(status) {
   try {
-    const url = status ? `/api/admin/payments?status=${status}` : '/api/admin/payments';
-    const res = await fetch(url, { credentials: 'same-origin' });
+    const url = status ? `${getApiBase()}/api/admin/payments?status=${status}` : `${getApiBase()}/api/admin/payments`;
+    const res = await fetch(url, {
+      credentials: 'include',
+      headers: getAuthHeaders()
+    });
     const data = await res.json();
     if (res.ok && data.ok) return { ok: true, payments: data.payments, count: data.count };
     return { ok: false, message: data.message || 'Failed to fetch payments' };
@@ -371,10 +410,10 @@ export async function adminFetchPayments(status) {
 
 export async function adminApprovePayment(paymentId, adminNotes = '') {
   try {
-    const res = await fetch(`/api/admin/payments/${paymentId}/approve`, {
+    const res = await fetch(`${getApiBase()}/api/admin/payments/${paymentId}/approve`, {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getAuthHeaders(),
       body: JSON.stringify({ adminNotes })
     });
     const data = await res.json();
@@ -387,10 +426,10 @@ export async function adminApprovePayment(paymentId, adminNotes = '') {
 
 export async function adminRejectPayment(paymentId, adminNotes = '') {
   try {
-    const res = await fetch(`/api/admin/payments/${paymentId}/reject`, {
+    const res = await fetch(`${getApiBase()}/api/admin/payments/${paymentId}/reject`, {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getAuthHeaders(),
       body: JSON.stringify({ adminNotes })
     });
     const data = await res.json();

@@ -2229,8 +2229,6 @@ function setupEventListeners() {
   document.getElementById('auth-tab-signup')?.addEventListener('click',   () => switchAuthTab('signup'));
   document.getElementById('auth-login-form')?.addEventListener('submit',  handleLoginSubmit);
   document.getElementById('auth-signup-form')?.addEventListener('submit', handleSignupSubmit);
-  document.getElementById('btn-login-submit')?.addEventListener('click',  handleLoginSubmit);
-  document.getElementById('btn-signup-submit')?.addEventListener('click', handleSignupSubmit);
 
   // AI Settings Modal
   document.getElementById('btn-close-ai-settings')?.addEventListener('click', () => closeModal(modal('modal-ai-settings')));

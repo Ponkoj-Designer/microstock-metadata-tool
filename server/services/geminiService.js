@@ -48,17 +48,17 @@ function classifyGeminiError(status, body) {
     return 'Gemini API quota or rate limit exceeded. Please wait a moment before trying again.';
   }
 
-  // 2. Authentication / Invalid Key (HTTP 400 / 401)
+  // 2. Authentication / Invalid Key (HTTP 400 / 401 / 403)
   if (
     status === 401 ||
-    (status === 400 && (msgLower.includes('api_key') || msgLower.includes('key') || msgLower.includes('invalid')))
+    (status === 400 && (msgLower.includes('api_key_invalid') || msgLower.includes('api key not valid') || msgLower.includes('invalid api key')))
   ) {
     return 'Invalid Gemini API key. Please check your API key settings.';
   }
 
   // 3. Forbidden / Billing (HTTP 403)
-  if (status === 403) {
-    return 'Gemini API key unauthorized (403). Check API key restrictions and billing setup.';
+  if (status === 403 && (msgLower.includes('unregistered callers') || msgLower.includes('permission_denied') || msgLower.includes('api consumer identity'))) {
+    return 'Invalid Gemini API key. Please check your API key settings.';
   }
 
   if (apiMsg) return `Gemini API Error (${status}): ${apiMsg}`;
@@ -553,9 +553,22 @@ async function uploadVideoToGemini(buffer, effectiveMime, apiKey) {
  */
 function buildCandidateModels(primaryModel = 'gemini-3.5-flash-lite') {
   if (primaryModel === 'gemini-3.6-flash') {
-    return ['gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+    return [
+      'gemini-3.6-flash',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-3.5-flash-lite'
+    ];
   }
-  return ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+  return [
+    'gemini-3.5-flash-lite',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-3.6-flash'
+  ];
 }
 
 /**
@@ -639,16 +652,16 @@ async function runGeminiWithFallback(candidateModels, requestBody, apiKey) {
           const safeErrorMsg = sanitizeErrorMessage(classified, apiKey);
           lastError = new Error(safeErrorMsg);
 
+          // Model not found (404) or model-related 400 — immediately try next candidate model
+          if (res.status === 404 || (res.status === 400 && (safeErrorMsg.toLowerCase().includes('model') || safeErrorMsg.toLowerCase().includes('not found') || safeErrorMsg.toLowerCase().includes('not supported')))) {
+            console.warn(`[GeminiService] '${curModel}' model unavailable (${res.status}), switching to next candidate model...`);
+            continue;
+          }
+
           // FATAL: bad API key — stop everything immediately
           if (res.status === 401 || res.status === 403 ||
               (res.status === 400 && safeErrorMsg.toLowerCase().includes('invalid gemini api key'))) {
             throw lastError;
-          }
-
-          // Model not found (404) — immediately try next model
-          if (res.status === 404) {
-            console.warn(`[GeminiService] '${curModel}' returned 404, switching to backup model...`);
-            continue;
           }
 
           // 503 / 500 Overloaded / 429 Rate limited — back off and try next

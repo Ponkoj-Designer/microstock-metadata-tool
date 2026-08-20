@@ -1356,9 +1356,9 @@ function buildDetailCardHtml(item, index, p) {
 
           ${item.status === 'failed' ? `
             <div class="bg-rose-950/60 border border-rose-500/50 rounded-xl p-3 text-rose-300 text-xs flex items-center justify-between gap-3 shadow-inner">
-              <div class="flex items-center gap-2 overflow-hidden">
-                <span class="material-symbols-outlined text-rose-400 text-base flex-shrink-0">error</span>
-                <span class="truncate"><strong>Error:</strong> ${escHtml(item._error || 'Generation failed. Check your API Key in Settings.')}</span>
+              <div class="flex items-start gap-2 overflow-hidden flex-1">
+                <span class="material-symbols-outlined text-rose-400 text-base flex-shrink-0 mt-0.5">error</span>
+                <span class="break-words text-xs leading-relaxed text-rose-200"><strong>Error:</strong> ${escHtml(item._error || 'Generation failed. Check your API Key in Settings.')}</span>
               </div>
               <button class="btn-retry-single bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer whitespace-nowrap flex-shrink-0" data-id="${item.id}">Retry</button>
             </div>

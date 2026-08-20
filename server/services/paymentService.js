@@ -8,11 +8,9 @@
 import { getDbClient, isDbConfigured } from './dbClient.js';
 import { getPlanDetails } from '../config/plans.js';
 import { updateUserPlan, grantCredits, findUserById } from './userService.js';
+import { readCollection, writeCollection } from './localStore.js';
 
 export const MANUAL_PAYMENT_NUMBER = '+8801741783521';
-
-// Fallback in-memory store for manual payments if table isn't created in DB
-const fallbackPaymentsStore = new Map();
 
 /**
  * Submit manual bKash/Nagad payment details for admin review.
@@ -52,60 +50,38 @@ export async function submitManualPayment({ userId, plan: planId, amount, paymen
 
   // 1. Persist in database
   if (isDbConfigured()) {
-    const db = getDbClient();
+    try {
+      const db = getDbClient();
+      const { data, error } = await db
+        .from('manual_payments')
+        .insert({
+          user_id: userId,
+          plan: plan.id,
+          amount: numAmount,
+          payment_method: method,
+          sender_number: String(senderNumber).trim(),
+          trx_id: String(trxId).trim().toUpperCase(),
+          status: 'pending'
+        })
+        .select()
+        .maybeSingle();
 
-    // Try inserting into manual_payments table
-    const { data, error } = await db
-      .from('manual_payments')
-      .insert({
-        user_id: userId,
-        plan: plan.id,
-        amount: numAmount,
-        payment_method: method,
-        sender_number: String(senderNumber).trim(),
-        trx_id: String(trxId).trim().toUpperCase(),
-        status: 'pending'
-      })
-      .select()
-      .maybeSingle();
-
-    if (!error && data) {
-      paymentRecord.id = data.id;
-    } else {
-      // BUG FIX #1: Properly await fallback Supabase calls so errors surface correctly.
-      // Fallback: update subscriptions to pending and log audit transaction
-      const subResult = await db.from('subscriptions').upsert({
-        user_id: userId,
-        plan: plan.id,
-        status: 'pending'
-      });
-      if (subResult.error) {
-        console.warn('[PaymentService] Fallback subscription upsert failed:', subResult.error.message);
+      if (!error && data) {
+        paymentRecord.id = data.id;
       }
-
-      const txnResult = await db.from('credit_transactions').insert({
-        user_id: userId,
-        amount: 0,
-        type: 'purchase',
-        description: `MANUAL_PAYMENT_PENDING [${method.toUpperCase()}] Sender: ${senderNumber} | TrxID: ${trx_id_format(trxId)} | Plan: ${plan.id.toUpperCase()} | Amount: ৳${numAmount}`
-      });
-      if (txnResult.error) {
-        console.warn('[PaymentService] Fallback credit_transactions insert failed:', txnResult.error.message);
-      }
-
-      fallbackPaymentsStore.set(paymentRecord.id, {
-        ...paymentRecord,
-        user_email: user.email,
-        user_name: user.full_name
-      });
+    } catch (err) {
+      console.warn('[PaymentService] Supabase manual_payments insert failed:', err.message);
     }
-  } else {
-    fallbackPaymentsStore.set(paymentRecord.id, {
-      ...paymentRecord,
-      user_email: user.email,
-      user_name: user.full_name
-    });
   }
+
+  // Always persist to local collection
+  const payments = readCollection('payments');
+  payments.push({
+    ...paymentRecord,
+    user_email: user.email,
+    user_name: user.full_name
+  });
+  writeCollection('payments', payments);
 
   return {
     ok: true,
@@ -142,8 +118,8 @@ export async function listPaymentsAdmin({ status } = {}) {
     }
   }
 
-  // Fallback memory store array
-  const items = Array.from(fallbackPaymentsStore.values());
+  // Fallback persistent store array
+  const items = readCollection('payments');
   if (status) return items.filter(i => i.status === status);
   return items;
 }
@@ -156,13 +132,17 @@ export async function approveManualPaymentAdmin(paymentId, adminNotes = '') {
   let payment = null;
 
   if (isDbConfigured()) {
-    const db = getDbClient();
-    const { data: dbPayment } = await db.from('manual_payments').select('*').eq('id', paymentId).maybeSingle();
-    if (dbPayment) payment = dbPayment;
+    try {
+      const db = getDbClient();
+      const { data: dbPayment } = await db.from('manual_payments').select('*').eq('id', paymentId).maybeSingle();
+      if (dbPayment) payment = dbPayment;
+    } catch (_) {}
   }
 
-  if (!payment && fallbackPaymentsStore.has(paymentId)) {
-    payment = fallbackPaymentsStore.get(paymentId);
+  const payments = readCollection('payments');
+  const localPayment = payments.find(p => p.id === paymentId);
+  if (!payment && localPayment) {
+    payment = localPayment;
   }
 
   if (!payment) {
@@ -189,17 +169,20 @@ export async function approveManualPaymentAdmin(paymentId, adminNotes = '') {
 
   // 3. Update payment record status in database
   if (isDbConfigured()) {
-    const db = getDbClient();
-    await db.from('manual_payments').update({
-      status: 'approved',
-      admin_notes: adminNotes || 'Approved by admin'
-    }).eq('id', paymentId);
+    try {
+      const db = getDbClient();
+      await db.from('manual_payments').update({
+        status: 'approved',
+        admin_notes: adminNotes || 'Approved by admin'
+      }).eq('id', paymentId);
+    } catch (_) {}
   }
 
-  if (fallbackPaymentsStore.has(paymentId)) {
-    const item = fallbackPaymentsStore.get(paymentId);
-    item.status = 'approved';
-    item.admin_notes = adminNotes || 'Approved by admin';
+  if (localPayment) {
+    localPayment.status = 'approved';
+    localPayment.admin_notes = adminNotes || 'Approved by admin';
+    localPayment.updated_at = new Date().toISOString();
+    writeCollection('payments', payments);
   }
 
   return {
@@ -218,20 +201,23 @@ export async function rejectManualPaymentAdmin(paymentId, adminNotes = '') {
   let payment = null;
 
   if (isDbConfigured()) {
-    const db = getDbClient();
-    const { data: dbPayment } = await db.from('manual_payments').select('*').eq('id', paymentId).maybeSingle();
-    if (dbPayment) payment = dbPayment;
+    try {
+      const db = getDbClient();
+      const { data: dbPayment } = await db.from('manual_payments').select('*').eq('id', paymentId).maybeSingle();
+      if (dbPayment) payment = dbPayment;
+    } catch (_) {}
   }
 
-  if (!payment && fallbackPaymentsStore.has(paymentId)) {
-    payment = fallbackPaymentsStore.get(paymentId);
+  const payments = readCollection('payments');
+  const localPayment = payments.find(p => p.id === paymentId);
+  if (!payment && localPayment) {
+    payment = localPayment;
   }
 
   if (!payment) {
     throw new Error('Payment submission record not found.');
   }
 
-  // BUG FIX #8: Guard against double-rejection (mirrors the approved guard in approveManualPaymentAdmin)
   if (payment.status === 'rejected') {
     throw new Error('This payment submission has already been rejected.');
   }
@@ -242,17 +228,20 @@ export async function rejectManualPaymentAdmin(paymentId, adminNotes = '') {
 
   // Update status to rejected
   if (isDbConfigured()) {
-    const db = getDbClient();
-    await db.from('manual_payments').update({
-      status: 'rejected',
-      admin_notes: adminNotes || 'Rejected by admin'
-    }).eq('id', paymentId);
+    try {
+      const db = getDbClient();
+      await db.from('manual_payments').update({
+        status: 'rejected',
+        admin_notes: adminNotes || 'Rejected by admin'
+      }).eq('id', paymentId);
+    } catch (_) {}
   }
 
-  if (fallbackPaymentsStore.has(paymentId)) {
-    const item = fallbackPaymentsStore.get(paymentId);
-    item.status = 'rejected';
-    item.admin_notes = adminNotes || 'Rejected by admin';
+  if (localPayment) {
+    localPayment.status = 'rejected';
+    localPayment.admin_notes = adminNotes || 'Rejected by admin';
+    localPayment.updated_at = new Date().toISOString();
+    writeCollection('payments', payments);
   }
 
   return {

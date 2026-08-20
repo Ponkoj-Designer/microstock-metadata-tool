@@ -75,18 +75,6 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-/** Guard: return 503 if database is not configured. */
-function requireDb(res) {
-  if (!isDbConfigured()) {
-    res.status(503).json({
-      ok:      false,
-      message: 'Auth service unavailable — database not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
-    });
-    return true; // caller should return
-  }
-  return false;
-}
-
 // ── POST /api/auth/signup ─────────────────────────────────────────────────────
 authRouter.post('/signup', async (req, res) => {
   try {
@@ -97,9 +85,6 @@ authRouter.post('/signup', async (req, res) => {
     if (!isValidEmail(email))      return res.status(400).json({ ok: false, message: 'Please enter a valid email address.' });
     if (password.length < 8)       return res.status(400).json({ ok: false, message: 'Password must be at least 8 characters long.' });
     if (fullName.trim().length < 2) return res.status(400).json({ ok: false, message: 'Please enter your full name (at least 2 characters).' });
-
-    // Guard: DB must be configured before we try any DB operations
-    if (requireDb(res)) return;
 
     // Check for duplicate
     const existing = await findUserByEmail(email);
@@ -137,12 +122,7 @@ authRouter.post('/login', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'Email and password are required.' });
     }
 
-    // Guard: DB must be configured before we try any DB operations
-    if (requireDb(res)) return;
-
     const user = await findUserByEmail(email);
-    // Use the same generic error for both "user not found" and "wrong password"
-    // to prevent email enumeration attacks.
     if (!user) {
       return res.status(401).json({ ok: false, message: 'Invalid email or password.' });
     }
@@ -181,7 +161,7 @@ authRouter.post('/login', async (req, res) => {
 authRouter.post('/logout', async (req, res) => {
   const token = req.cookies?.auth_token;
 
-  if (token && isDbConfigured()) {
+  if (token) {
     const tokenHash = createHash('sha256').update(token).digest('hex');
     await deleteSession(tokenHash).catch(() => {}); // Non-fatal
   }

@@ -22,12 +22,6 @@ export async function authMiddleware(req, res, next) {
   const token = req.cookies?.auth_token;
   if (!token) return next();
 
-  // Bail gracefully if DB is not configured (e.g., missing .env in dev)
-  if (!isDbConfigured()) {
-    console.warn('[Auth] DB not configured — skipping session verification.');
-    return next();
-  }
-
   try {
     // 1. Verify JWT signature and expiry
     const payload = jwt.verify(token, config.jwtSecret);

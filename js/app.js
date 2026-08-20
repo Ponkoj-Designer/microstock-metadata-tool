@@ -3048,8 +3048,8 @@ async function processImg2PromptQueue() {
     }
   });
 
-  const hasWaiting = img2promptState.items.some(i => i.status === 'waiting');
-  if (!hasWaiting) {
+  const toProcess = img2promptState.items.filter(i => i.status === 'waiting');
+  if (toProcess.length === 0) {
     if (img2promptState.items.length > 0) {
       showToast('All image prompts are already generated.', 'info');
     }
@@ -3071,109 +3071,62 @@ async function processImg2PromptQueue() {
 
   const isBatchStopped = () => img2promptState.stopBatch || state.stopBatch || img2promptState._batchSessionId !== currentBatchSession;
 
-  const processSingleItem = async (item) => {
-    if (isBatchStopped()) {
-      if (item.status === 'processing') {
-        item.status = 'waiting';
+  try {
+    await runBatchQueue({
+      items: toProcess,
+      concurrencyLimit: 2,
+      shouldStop: isBatchStopped,
+
+      onItemStart: (item) => {
+        item.status = 'processing';
         item.error = null;
-        item.prompt = null;
-      }
-      return;
-    }
+        renderImg2PromptCards();
+      },
 
-    let attempts = 0;
-    const maxAttempts = 3;
-    let lastErr = null;
-
-    while (attempts < maxAttempts) {
-      if (isBatchStopped()) break;
-
-      try {
+      processFn: async (item) => {
         const platformSpec = PLATFORMS.general || {
           id: 'general', name: 'General',
           keywordMax: 50, keywordMin: 5, titleMaxLen: 200, categories: []
         };
-
         const itemMode = (item.promptType || img2promptState.promptType) === 'video' ? 'img2prompt-video' : 'img2prompt-photo';
         const key = getSessionKey(provider);
-        const d = await generateMetadataForImage(item, platformSpec, key, null, itemMode, promptSignal);
+        return await generateMetadataForImage(item, platformSpec, key, null, itemMode, promptSignal);
+      },
 
-        if (isBatchStopped()) break;
+      onItemDone: (item, idx, result, err) => {
+        if (isBatchStopped()) {
+          item.status = 'waiting';
+          item.error = null;
+          item.prompt = null;
+          return;
+        }
 
-        if (d) {
-          const kwStr = Array.isArray(d.keywords) ? d.keywords.slice(0, 25).join(', ') : '';
-
+        if (err) {
+          item.status = 'failed';
+          item.error = err.message || 'Image to prompt conversion failed';
+        } else if (result) {
+          const kwStr = Array.isArray(result.keywords) ? result.keywords.slice(0, 25).join(', ') : '';
           const promptParts = [];
-          if (d.title) promptParts.push(d.title);
-          if (d.description && d.description !== d.title) promptParts.push(d.description);
-          if (d.category && d.category !== 'General') promptParts.push(`Style: ${d.category}`);
+          if (result.title) promptParts.push(result.title);
+          if (result.description && result.description !== result.title) promptParts.push(result.description);
+          if (result.category && result.category !== 'General') promptParts.push(`Style: ${result.category}`);
           if (kwStr) promptParts.push(`Visual details: ${kwStr}`);
 
           item.prompt = promptParts.join('. ') + '.';
           item.status = 'ready';
           item.error = null;
-          lastErr = null;
-          break;
-        } else {
-          lastErr = new Error('Generation returned no data');
-          attempts++;
-          if (attempts < maxAttempts && !isBatchStopped()) {
-            await new Promise(r => setTimeout(r, 1200 * attempts));
-          }
         }
-      } catch (err) {
-        lastErr = err;
-        if (err.name === 'AbortError' || isBatchStopped()) {
-          break;
-        }
-        attempts++;
-        if (attempts < maxAttempts && !isBatchStopped()) {
-          await new Promise(r => setTimeout(r, 1200 * attempts));
-        }
+        renderImg2PromptCards();
+      },
+
+      onProgress: () => {
+        renderImg2PromptCards();
       }
-    }
-
-    if (isBatchStopped()) {
-      if (item.status === 'processing') {
-        item.status = 'waiting';
-        item.error = null;
-        item.prompt = null;
-      }
-      return;
-    }
-
-    if (lastErr && item.status !== 'ready') {
-      item.status = 'failed';
-      item.error = lastErr.message || 'Image to prompt conversion failed';
-    }
-
-    if (!isBatchStopped()) {
-      renderImg2PromptCards();
-    }
-  };
-
-  // Run 3 parallel concurrent workers for optimal throughput within API limits
-  const CONCURRENCY = 3;
-  const worker = async () => {
-    while (!isBatchStopped()) {
-      // Synchronously reserve next waiting item
-      const item = img2promptState.items.find(i => i.status === 'waiting');
-      if (!item) break;
-
-      item.status = 'processing';
-      renderImg2PromptCards();
-
-      await processSingleItem(item);
-    }
-  };
-
-  try {
-    const workers = Array.from({ length: CONCURRENCY }, () => worker());
-    await Promise.all(workers);
+    });
   } finally {
     if (img2promptState._batchSessionId === currentBatchSession) {
       img2promptState.items.forEach(i => {
-        if (i.status === 'processing' && (img2promptState.stopBatch || state.stopBatch)) {
+        if (i.status === 'processing' && isBatchStopped()) {
           i.status = 'waiting';
           i.error = null;
           i.prompt = null;

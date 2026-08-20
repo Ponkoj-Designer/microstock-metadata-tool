@@ -266,8 +266,8 @@ function renderPlatforms() {
     const isSelected = platform.id === state.currentPlatform.id;
     const tab = document.createElement('button');
     tab.className = isSelected 
-      ? 'bg-[#222442] border-2 border-[#6366f1] text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-[0_0_15px_rgba(99,102,241,0.4)] flex items-center gap-2 cursor-pointer transition-all hover:brightness-110'
-      : 'bg-[#0f172a]/95 hover:bg-[#1e293b] border border-[#1e293b] hover:border-[#334155] text-[#cbd5e1] hover:text-white px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 cursor-pointer';
+      ? 'bg-[#191c1f] border-2 border-[#00dbe9] text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-[0_0_14px_rgba(0,219,233,0.4)] flex items-center gap-2 cursor-pointer transition-all hover:brightness-110'
+      : 'bg-[#191c1f]/80 hover:bg-[#1d2023] border border-[#3b494b] hover:border-[#00dbe9]/60 text-on-surface-variant hover:text-white px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 cursor-pointer';
     tab.dataset.id = platform.id;
     tab.type = 'button';
     tab.title = `${platform.name} — ${platform.description}`;
@@ -2713,7 +2713,10 @@ setTimeout(() => {
 
 // ─── Auto Initialization ───────────────────────────────────────────────────
 if (typeof window !== 'undefined') {
+  window.initApp = initApp;
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    initApp();
   }
 }

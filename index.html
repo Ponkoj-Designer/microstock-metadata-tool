@@ -605,7 +605,12 @@
           <div class="flex flex-col gap-1.5">
             <label id="ai-provider-key-label" class="text-xs font-medium text-on-surface-variant">Add New API Key</label>
             <div class="flex gap-2">
-              <input type="password" id="gemini-api-key-input" class="cyber-input bg-[#161c27] border-[#262f3d] rounded-lg px-3 py-2.5 font-mono text-xs text-on-surface flex-1 focus:border-[#00dbe9]" placeholder="AIza...">
+              <div class="relative flex-1 flex items-center">
+                <input type="password" id="gemini-api-key-input" class="cyber-input bg-[#161c27] border-[#262f3d] rounded-lg pl-3 pr-9 py-2.5 font-mono text-xs text-on-surface w-full focus:border-[#00dbe9]" placeholder="AIza...">
+                <button type="button" id="btn-toggle-key-visibility" class="absolute right-2.5 text-on-surface-variant hover:text-white transition-colors cursor-pointer" title="Toggle key visibility">
+                  <span class="material-symbols-outlined text-[18px]">visibility</span>
+                </button>
+              </div>
               <button type="button" id="btn-save-api-key" class="bg-[#00dbe9] text-background px-4 py-2.5 rounded-lg text-xs font-bold hover:bg-[#00f0ff] transition-all glow-cyan cursor-pointer whitespace-nowrap">Save</button>
             </div>
           </div>
@@ -774,13 +779,7 @@
     </div>
   </div>
 
-  <!-- Application Controller Scripts -->
-  <script type="module">
-    import { initApp } from './js/app.js';
-    
-    document.addEventListener('DOMContentLoaded', () => {
-      initApp();
-    });
-  </script>
+  <!-- Application Controller Script -->
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -75,7 +75,6 @@ export async function runBatchQueue({
             lowerMsg.includes('401') ||
             lowerMsg.includes('403') ||
             lowerMsg.includes('not supported for ai analysis') ||
-            lowerMsg.includes('insufficient credits') ||
             err?.name === 'AbortError'
           );
 

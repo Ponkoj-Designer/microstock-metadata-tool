@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
-import { isDbConfigured } from '../services/dbClient.js';
 import { testAiKey, generateAiMetadata } from '../services/aiService.js';
 import { generateGeminiMetadataBinary } from '../services/geminiService.js';
 
@@ -10,7 +8,7 @@ export const apiRouter = Router();
 apiRouter.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    database: isDbConfigured() ? 'supabase' : 'local_fallback',
+    mode: 'free',
     timestamp: new Date().toISOString(),
     version: '2.0.0'
   });

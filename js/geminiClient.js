@@ -1530,8 +1530,8 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
 
   if (provider === 'gemini') {
     const candidateModels = (model === 'gemini-3.6-flash')
-      ? ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.5-flash-lite']
-      : ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.6-flash'];
+      ? ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite']
+      : ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
 
     const requestBody = {
       contents: [
@@ -1573,15 +1573,38 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
 
         const resJson = await res.json().catch(() => ({}));
         if (res.ok && resJson.candidates?.[0]?.content?.parts?.[0]?.text) {
-          const text = resJson.candidates[0].content.parts[0].text;
-          const parsed = JSON.parse(text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim());
-          return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
+          const rawText = resJson.candidates[0].content.parts[0].text;
+          let parsed;
+          try {
+            parsed = JSON.parse(rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim());
+          } catch (_) {
+            const titleMatch = rawText.match(/"title"\s*:\s*"([^"]+)"/i);
+            const descMatch  = rawText.match(/"description"\s*:\s*"([^"]+)"/i);
+            const catMatch   = rawText.match(/"category"\s*:\s*"([^"]+)"/i);
+            const kwMatches  = [...rawText.matchAll(/"([a-zA-Z][a-zA-Z0-9\s-]{1,29})"/g)]
+              .map(m => m[1].trim())
+              .filter(k => k.length > 1 && !['title','description','keywords','category','filename','json'].includes(k.toLowerCase()));
+            parsed = {
+              title: titleMatch ? titleMatch[1].trim() : '',
+              description: descMatch ? descMatch[1].trim() : '',
+              category: catMatch ? catMatch[1].trim() : 'General',
+              keywords: kwMatches.length ? kwMatches : []
+            };
+          }
+          if (parsed) {
+            return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
+          }
         }
         if (resJson?.error?.message) {
           lastError = new Error(resJson.error.message);
+          // If auth error, break immediately
+          if (res.status === 401 || (res.status === 400 && resJson.error.message.toLowerCase().includes('api_key'))) {
+            throw lastError;
+          }
         }
       } catch (e) {
         lastError = e;
+        if (e.message && e.message.toLowerCase().includes('api key')) throw e;
       }
     }
     throw lastError || new Error('Direct Gemini generation failed.');

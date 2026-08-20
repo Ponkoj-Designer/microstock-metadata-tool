@@ -1528,6 +1528,9 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
   }
   cleanBase64 = cleanBase64.replace(/[\r\n\s]/g, '');
 
+  const validMimes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+  const effectiveMime = validMimes.has((mimeType || '').toLowerCase()) ? mimeType.toLowerCase() : 'image/jpeg';
+
   if (provider === 'gemini') {
     const candidateModels = (model === 'gemini-3.6-flash')
       ? ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite']
@@ -1537,7 +1540,7 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
       contents: [
         {
           parts: [
-            { inline_data: { mime_type: mimeType || 'image/jpeg', data: cleanBase64 } },
+            { inline_data: { mime_type: effectiveMime, data: cleanBase64 } },
             { text: prompt }
           ]
         }
@@ -1561,8 +1564,10 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
         }, 28000);
 
         const resJson = await res.json().catch(() => ({}));
-        if (res.ok && resJson.candidates?.[0]?.content?.parts?.[0]?.text) {
-          const rawText = resJson.candidates[0].content.parts[0].text;
+        const candidate = resJson.candidates?.[0];
+        const rawText = candidate?.content?.parts?.map(p => p.text || '').join('\n') || '';
+
+        if (res.ok && rawText.trim().length > 0) {
           let parsed;
           try {
             parsed = JSON.parse(rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim());

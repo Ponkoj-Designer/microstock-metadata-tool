@@ -1319,6 +1319,16 @@ function buildDetailCardHtml(item, index, p) {
             </button>
           </div>
 
+          ${item.status === 'failed' ? `
+            <div class="bg-rose-950/60 border border-rose-500/50 rounded-xl p-3 text-rose-300 text-xs flex items-center justify-between gap-3 shadow-inner">
+              <div class="flex items-center gap-2 overflow-hidden">
+                <span class="material-symbols-outlined text-rose-400 text-base flex-shrink-0">error</span>
+                <span class="truncate"><strong>Error:</strong> ${escHtml(item._error || 'Generation failed. Check your API Key in Settings.')}</span>
+              </div>
+              <button class="btn-retry-single bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer whitespace-nowrap flex-shrink-0" data-id="${item.id}">Retry</button>
+            </div>
+          ` : ''}
+
           <!-- Filename -->
           <div>
             <div class="flex items-center justify-between text-amber-400 font-semibold text-xs mb-1">
@@ -1611,6 +1621,14 @@ function setupDetailViewEventDelegation() {
           setTimeout(() => { _isExportingCsv = false; }, 800);
         }
       }
+      return;
+    }
+
+    // Single item retry button
+    const retryBtn = e.target.closest('.btn-retry-single');
+    if (retryBtn) {
+      const itemId = retryBtn.dataset.id;
+      if (itemId) regenerateSingleItem(itemId);
       return;
     }
 

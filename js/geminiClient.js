@@ -119,8 +119,8 @@ export function setApiKey(key, provider = _activeProvider) {
 }
 
 export function hasApiKey(provider = _activeProvider) {
-  const key = _providerKeys[provider];
-  return !!key && key.trim().length > 0;
+  const key = _providerKeys[provider] || getSessionKey(provider);
+  return !!key && String(key).trim().length > 0;
 }
 
 export function clearApiKey(provider = _activeProvider) {
@@ -1554,51 +1554,53 @@ async function generateDirectClientAi({ provider, key, base64, mimeType, filenam
 
     let lastError = null;
     for (const curModel of candidateModels) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${curModel}:generateContent?key=${encodeURIComponent(key)}`;
-        const res = await fetchWithTimeout(url, {
-          method: 'POST',
-          signal,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
-        }, 28000);
+      for (const apiVer of ['v1beta', 'v1']) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/${apiVer}/models/${curModel}:generateContent?key=${encodeURIComponent(key)}`;
+          const res = await fetchWithTimeout(url, {
+            method: 'POST',
+            signal,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+          }, 28000);
 
-        const resJson = await res.json().catch(() => ({}));
-        const candidate = resJson.candidates?.[0];
-        const rawText = candidate?.content?.parts?.map(p => p.text || '').join('\n') || '';
+          const resJson = await res.json().catch(() => ({}));
+          const candidate = resJson.candidates?.[0];
+          const rawText = candidate?.content?.parts?.map(p => p.text || '').join('\n') || '';
 
-        if (res.ok && rawText.trim().length > 0) {
-          let parsed;
-          try {
-            parsed = JSON.parse(rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim());
-          } catch (_) {
-            const titleMatch = rawText.match(/"title"\s*:\s*"([^"]+)"/i);
-            const descMatch  = rawText.match(/"description"\s*:\s*"([^"]+)"/i);
-            const catMatch   = rawText.match(/"category"\s*:\s*"([^"]+)"/i);
-            const kwMatches  = [...rawText.matchAll(/"([a-zA-Z][a-zA-Z0-9\s-]{1,29})"/g)]
-              .map(m => m[1].trim())
-              .filter(k => k.length > 1 && !['title','description','keywords','category','filename','json'].includes(k.toLowerCase()));
-            parsed = {
-              title: titleMatch ? titleMatch[1].trim() : '',
-              description: descMatch ? descMatch[1].trim() : '',
-              category: catMatch ? catMatch[1].trim() : 'General',
-              keywords: kwMatches.length ? kwMatches : []
-            };
+          if (res.ok && rawText.trim().length > 0) {
+            let parsed;
+            try {
+              parsed = JSON.parse(rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim());
+            } catch (_) {
+              const titleMatch = rawText.match(/"title"\s*:\s*"([^"]+)"/i);
+              const descMatch  = rawText.match(/"description"\s*:\s*"([^"]+)"/i);
+              const catMatch   = rawText.match(/"category"\s*:\s*"([^"]+)"/i);
+              const kwMatches  = [...rawText.matchAll(/"([a-zA-Z][a-zA-Z0-9\s-]{1,29})"/g)]
+                .map(m => m[1].trim())
+                .filter(k => k.length > 1 && !['title','description','keywords','category','filename','json'].includes(k.toLowerCase()));
+              parsed = {
+                title: titleMatch ? titleMatch[1].trim() : '',
+                description: descMatch ? descMatch[1].trim() : '',
+                category: catMatch ? catMatch[1].trim() : 'General',
+                keywords: kwMatches.length ? kwMatches : []
+              };
+            }
+            if (parsed) {
+              return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
+            }
           }
-          if (parsed) {
-            return formatClientCategoryAndMeta(parsed, platformObj, false, effectiveTitleLimit, effectiveKwMax, filename, mode);
+          if (resJson?.error?.message) {
+            lastError = new Error(resJson.error.message);
+            // If auth error, break immediately
+            if (res.status === 401 || (res.status === 400 && resJson.error.message.toLowerCase().includes('api_key'))) {
+              throw lastError;
+            }
           }
+        } catch (e) {
+          lastError = e;
+          if (e.message && e.message.toLowerCase().includes('api key')) throw e;
         }
-        if (resJson?.error?.message) {
-          lastError = new Error(resJson.error.message);
-          // If auth error, break immediately
-          if (res.status === 401 || (res.status === 400 && resJson.error.message.toLowerCase().includes('api_key'))) {
-            throw lastError;
-          }
-        }
-      } catch (e) {
-        lastError = e;
-        if (e.message && e.message.toLowerCase().includes('api key')) throw e;
       }
     }
     throw lastError || new Error('Direct Gemini generation failed.');

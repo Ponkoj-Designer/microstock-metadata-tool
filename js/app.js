@@ -366,24 +366,24 @@ function updateAuthNav() {
 
 // ─── Profile & Plan View Helpers ───────────────────────────────────────────
 function openAuthModal(tab = 'login') {
+  if (tab === 'profile') {
+    const user = getCurrentUser();
+    if (user) {
+      renderProfileView(user);
+      openModal(document.getElementById('modal-user-profile'));
+      return;
+    }
+    tab = 'login';
+  }
+
   const modalEl = document.getElementById('modal-auth');
   const tabsContainer = document.getElementById('auth-tabs-container');
-  const loginForm = document.getElementById('auth-login-form');
-  const signupForm = document.getElementById('auth-signup-form');
   const profileView = document.getElementById('auth-profile-view');
-  const user = getCurrentUser();
 
-  if (user) {
-    if (tabsContainer) tabsContainer.style.display = 'none';
-    if (loginForm)     loginForm.style.display     = 'none';
-    if (signupForm)    signupForm.style.display    = 'none';
-    if (profileView)   profileView.style.display   = 'flex';
-    renderProfileView(user);
-  } else {
-    if (tabsContainer) tabsContainer.style.display = 'flex';
-    if (profileView)   profileView.style.display   = 'none';
-    switchAuthTab(tab);
-  }
+  if (tabsContainer) tabsContainer.style.display = 'flex';
+  if (profileView)   profileView.style.display   = 'none';
+
+  switchAuthTab(tab);
   openModal(modalEl);
 }
 
@@ -2578,45 +2578,67 @@ function updateConnectionStatus(state_str, message) {
 // ─── Auth Handlers (real API calls) ────────────────────────────────────────
 
 async function handleLoginSubmit(e) {
-  e.preventDefault();
+  if (e && e.preventDefault) e.preventDefault();
   const emailEl    = document.getElementById('login-email');
   const passEl     = document.getElementById('login-password');
   const errorEl    = document.getElementById('login-error');
-  const submitBtn  = document.getElementById('btn-login-submit') || e.target.querySelector('button[type="submit"]');
+  const submitBtn  = document.getElementById('btn-login-submit') || document.querySelector('#auth-login-form button[type="submit"]');
 
-  const emailVal = emailEl?.value.trim()    || '';
-  const passVal  = passEl?.value            || '';
+  const emailVal = (emailEl?.value || '').trim();
+  const passVal  = passEl?.value || '';
+
+  if (!emailVal || !passVal) {
+    if (errorEl) {
+      errorEl.textContent = 'Please enter both email and password.';
+      errorEl.style.display = 'block';
+    }
+    return;
+  }
 
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
   setBtnLoading(submitBtn, true);
 
-  const result = await login({ email: emailVal, password: passVal });
+  try {
+    const result = await login({ email: emailVal, password: passVal });
+    console.log('[handleLoginSubmit] login result:', result);
+    setBtnLoading(submitBtn, false);
 
-  setBtnLoading(submitBtn, false);
-
-  if (result.ok) {
-    closeModal(document.getElementById('modal-auth'));
-    updateAuthNav();
-    showToast(`Welcome back, ${result.user.fullName || result.user.email}!`, 'success');
-    if (emailEl) emailEl.value = '';
-    if (passEl)  passEl.value  = '';
-  } else {
-    if (errorEl) { errorEl.textContent = result.message; errorEl.style.display = 'block'; }
-    showToast(result.message, 'error');
+    if (result.ok) {
+      closeModal(document.getElementById('modal-auth'));
+      updateAuthNav();
+      showToast(`Welcome back, ${result.user.fullName || result.user.email}!`, 'success');
+      if (emailEl) emailEl.value = '';
+      if (passEl)  passEl.value  = '';
+    } else {
+      if (errorEl) { errorEl.textContent = result.message; errorEl.style.display = 'block'; }
+      showToast(result.message, 'error');
+    }
+  } catch (err) {
+    console.error('[handleLoginSubmit] caught error:', err);
+    setBtnLoading(submitBtn, false);
+    if (errorEl) { errorEl.textContent = err.message || 'Login failed.'; errorEl.style.display = 'block'; }
   }
 }
 
 async function handleSignupSubmit(e) {
-  e.preventDefault();
-  const nameEl    = document.getElementById('signup-fullname') || document.getElementById('signup-name');
+  if (e && e.preventDefault) e.preventDefault();
+  const nameEl    = document.getElementById('signup-name') || document.getElementById('signup-fullname');
   const emailEl   = document.getElementById('signup-email');
   const passEl    = document.getElementById('signup-password');
   const errorEl   = document.getElementById('signup-error');
-  const submitBtn = document.getElementById('btn-signup-submit') || e.target.querySelector('button[type="submit"]');
+  const submitBtn = document.getElementById('btn-signup-submit') || document.querySelector('#auth-signup-form button[type="submit"]');
 
-  const nameVal  = nameEl?.value.trim()  || '';
-  const emailVal = emailEl?.value.trim() || '';
-  const passVal  = passEl?.value         || '';
+  const nameVal  = (nameEl?.value || '').trim();
+  const emailVal = (emailEl?.value || '').trim();
+  const passVal  = passEl?.value || '';
+
+  if (!nameVal || !emailVal || !passVal) {
+    if (errorEl) {
+      errorEl.textContent = 'Please fill in all fields.';
+      errorEl.style.display = 'block';
+    }
+    return;
+  }
 
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
   setBtnLoading(submitBtn, true);

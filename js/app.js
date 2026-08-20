@@ -3003,8 +3003,21 @@ async function processImg2PromptQueue() {
     return;
   }
 
+  // Reset failed items so clicking Generate All can process them
+  img2promptState.items.forEach(i => {
+    if (i.status === 'failed') {
+      i.status = 'waiting';
+      i.error = null;
+    }
+  });
+
   const hasWaiting = img2promptState.items.some(i => i.status === 'waiting');
-  if (!hasWaiting) return;
+  if (!hasWaiting) {
+    if (img2promptState.items.length > 0) {
+      showToast('All image prompts are already generated.', 'info');
+    }
+    return;
+  }
 
   img2promptState.isProcessing = true;
   img2promptState.stopBatch = false;

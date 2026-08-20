@@ -5,7 +5,7 @@
 
 import { PLATFORMS } from './platforms.js';
 import { generateCsvContent, downloadCsvFile, validateBatch, generateCsvPreviewHtml } from './csvExporter.js';
-import { setApiKey, hasApiKey, clearApiKey, clearAllApiKeys, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, optimizeImageForAi, compressImageFile, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
+import { setApiKey, hasApiKey, isProviderVerified, setProviderVerified, clearApiKey, clearAllApiKeys, getSessionKey, getRedactedKey, testConnection, generateMetadataForImage, isGeminiAnalyzable, rasterizeSvgToJpegBase64, optimizeImageForAi, compressImageFile, setAiProvider, getActiveProvider, setProviderModel, getProviderModel, AI_PROVIDERS_CONFIG } from './geminiClient.js';
 import { runBatchQueue } from './batchProcessor.js';
 import { checkAuthState, login, signup, logout, getCurrentUser, isLoggedIn, fetchUserProfile, updateProfile, selectUserPlan, deductCredit, adminFetchUsers, adminGetUserDetail, adminUpdateUserPlan, adminToggleUserStatus, adminAdjustCredits, submitManualPayment, adminFetchPayments, adminApprovePayment, adminRejectPayment } from './auth.js';
 
@@ -238,7 +238,7 @@ function updateAiStatusBadge() {
   const provider = getActiveProvider();
   const providerConfig = AI_PROVIDERS_CONFIG[provider] || AI_PROVIDERS_CONFIG.gemini;
 
-  if (hasApiKey(provider)) {
+  if (isProviderVerified(provider)) {
     badge.innerHTML = `<span class="ai-dot ai-dot-connected"></span> ${providerConfig.name} ON`;
     badge.className = 'ai-status-badge connected hidden md:inline-flex';
   } else {
@@ -2268,9 +2268,13 @@ function selectAiProvider(providerId) {
   setAiProvider(providerId);
   const config = AI_PROVIDERS_CONFIG[providerId] || AI_PROVIDERS_CONFIG.gemini;
 
-  // Update Top Tabs styling
+  // Update Top Tabs styling with live verified indicators
   document.querySelectorAll('.ai-provider-tab').forEach(tab => {
-    const isThis = tab.dataset.provider === providerId;
+    const p = tab.dataset.provider;
+    const isThis = p === providerId;
+    const isVerified = isProviderVerified(p);
+    const dot = isVerified ? ' <span class="text-emerald-400">●</span>' : '';
+
     if (isThis) {
       tab.className = 'ai-provider-tab active flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer bg-[#00dbe9] text-background shadow-[0_0_15px_rgba(0,219,233,0.3)]';
     } else {
@@ -2314,7 +2318,7 @@ function selectAiProvider(providerId) {
   renderStoredKeys(providerId);
 
   // Update Status Indicator
-  if (hasApiKey(providerId)) {
+  if (isProviderVerified(providerId)) {
     state.geminiConnected = true;
     updateConnectionStatus('connected');
   } else {
@@ -2330,8 +2334,9 @@ function renderStoredKeys(providerId = getActiveProvider()) {
 
   const key = getSessionKey(providerId);
   const config = AI_PROVIDERS_CONFIG[providerId] || AI_PROVIDERS_CONFIG.gemini;
+  const isVerified = isProviderVerified(providerId);
 
-  if (key) {
+  if (key && isVerified) {
     const redacted = getRedactedKey(key, providerId);
     container.innerHTML = `
       <div class="w-full flex items-center justify-between p-3.5 rounded-xl bg-[#161c27] border border-[#00dbe9]/40 shadow-sm">
@@ -2356,7 +2361,7 @@ function renderStoredKeys(providerId = getActiveProvider()) {
       <div class="flex flex-col items-center justify-center py-6 text-center text-on-surface-variant/60">
         <span class="material-symbols-outlined text-[36px] text-outline mb-1">key_off</span>
         <span class="text-xs font-semibold text-slate-300">No Key Connected</span>
-        <span class="text-[11px] text-slate-500 mt-0.5">Enter your ${escHtml(config.name)} API key to connect</span>
+        <span class="text-[11px] text-slate-500 mt-0.5">Enter your ${escHtml(config.name)} API key and click Save to connect</span>
       </div>
     `;
   }

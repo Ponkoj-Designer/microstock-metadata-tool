@@ -46,22 +46,25 @@ export const AI_PROVIDERS_CONFIG = {
 const STORAGE_KEYS = {
   activeProvider: 'pk_ai_active_provider',
   keys: 'pk_ai_provider_keys',
-  models: 'pk_ai_provider_models'
+  models: 'pk_ai_provider_models',
+  verified: 'pk_ai_provider_verified'
 };
 
 function loadStoredData() {
-  if (typeof localStorage === 'undefined') return { activeProvider: 'gemini', keys: {}, models: {} };
+  if (typeof localStorage === 'undefined') return { activeProvider: 'gemini', keys: {}, models: {}, verified: {} };
   try {
     const active = localStorage.getItem(STORAGE_KEYS.activeProvider);
     const keysStr = localStorage.getItem(STORAGE_KEYS.keys);
     const modelsStr = localStorage.getItem(STORAGE_KEYS.models);
+    const verifiedStr = localStorage.getItem(STORAGE_KEYS.verified);
     return {
       activeProvider: active || 'gemini',
       keys: keysStr ? JSON.parse(keysStr) : {},
-      models: modelsStr ? JSON.parse(modelsStr) : {}
+      models: modelsStr ? JSON.parse(modelsStr) : {},
+      verified: verifiedStr ? JSON.parse(verifiedStr) : {}
     };
   } catch (_) {
-    return { activeProvider: 'gemini', keys: {}, models: {} };
+    return { activeProvider: 'gemini', keys: {}, models: {}, verified: {} };
   }
 }
 
@@ -72,6 +75,11 @@ let _providerKeys = {
   gemini: _initialData.keys?.gemini || null,
   openrouter: _initialData.keys?.openrouter || null,
   openai: _initialData.keys?.openai || null
+};
+let _verifiedProviders = {
+  gemini: Boolean(_initialData.verified?.gemini),
+  openrouter: Boolean(_initialData.verified?.openrouter),
+  openai: Boolean(_initialData.verified?.openai)
 };
 let _selectedModels = {
   gemini: 'gemini-3.5-flash',
@@ -87,6 +95,7 @@ function saveStorage() {
     localStorage.setItem(STORAGE_KEYS.activeProvider, _activeProvider);
     localStorage.setItem(STORAGE_KEYS.keys, JSON.stringify(_providerKeys));
     localStorage.setItem(STORAGE_KEYS.models, JSON.stringify(_selectedModels));
+    localStorage.setItem(STORAGE_KEYS.verified, JSON.stringify(_verifiedProviders));
   } catch (_) {}
 }
 
@@ -120,17 +129,29 @@ export function hasApiKey(provider = _activeProvider) {
   return !!key && String(key).trim().length > 0;
 }
 
+export function isProviderVerified(provider = _activeProvider) {
+  return hasApiKey(provider) && Boolean(_verifiedProviders[provider]);
+}
+
+export function setProviderVerified(verified, provider = _activeProvider) {
+  _verifiedProviders[provider] = Boolean(verified);
+  saveStorage();
+}
+
 export function clearApiKey(provider = _activeProvider) {
   _providerKeys[provider] = null;
+  _verifiedProviders[provider] = false;
   saveStorage();
 }
 
 export function clearAllApiKeys() {
   _providerKeys = { gemini: null, openrouter: null, openai: null };
+  _verifiedProviders = { gemini: false, openrouter: false, openai: false };
   _activeProvider = 'gemini';
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem(STORAGE_KEYS.keys);
     localStorage.removeItem(STORAGE_KEYS.activeProvider);
+    localStorage.removeItem(STORAGE_KEYS.verified);
   }
 }
 
@@ -244,13 +265,16 @@ export async function testConnection(key, provider = _activeProvider) {
       }, 10000);
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        setProviderVerified(true, 'gemini');
         return { ok: true, message: 'Successfully connected to Google Gemini API (gemini-3.5-flash)!' };
       }
+      setProviderVerified(false, 'gemini');
       if (data?.error?.message) {
         return { ok: false, message: data.error.message };
       }
       return { ok: false, message: `Gemini API returned status ${res.status}` };
     } catch (e) {
+      setProviderVerified(false, 'gemini');
       return { ok: false, message: e.message || 'Unable to reach Google Gemini API' };
     }
   } else if (provider === 'openrouter') {
@@ -261,12 +285,16 @@ export async function testConnection(key, provider = _activeProvider) {
       }, 10000);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.data) {
+        setProviderVerified(true, 'openrouter');
         return { ok: true, message: 'Successfully connected to OpenRouter API!' };
       }
+      setProviderVerified(false, 'openrouter');
       if (data?.error?.message) {
         return { ok: false, message: data.error.message };
       }
+      return { ok: false, message: `OpenRouter returned status ${res.status}` };
     } catch (e) {
+      setProviderVerified(false, 'openrouter');
       return { ok: false, message: e.message || 'Unable to reach OpenRouter API' };
     }
   } else if (provider === 'openai') {
@@ -277,12 +305,16 @@ export async function testConnection(key, provider = _activeProvider) {
       }, 10000);
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        setProviderVerified(true, 'openai');
         return { ok: true, message: 'Successfully connected to OpenAI API!' };
       }
+      setProviderVerified(false, 'openai');
       if (data?.error?.message) {
         return { ok: false, message: data.error.message };
       }
+      return { ok: false, message: `OpenAI returned status ${res.status}` };
     } catch (e) {
+      setProviderVerified(false, 'openai');
       return { ok: false, message: e.message || 'Unable to reach OpenAI API' };
     }
   }

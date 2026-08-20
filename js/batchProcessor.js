@@ -44,7 +44,7 @@ export async function runBatchQueue({
       onItemStart && onItemStart(item, i);
 
       let attempts = 0;
-      const maxAttempts = 3;
+      const maxAttempts = 4; // Up to 4 attempts with exponential backoff for bulk 100-200+ files
       let lastErr = null;
       let result = null;
 
@@ -68,7 +68,10 @@ export async function runBatchQueue({
             lowerMsg.includes('invalid gemini api key') ||
             lowerMsg.includes('invalid api key') ||
             lowerMsg.includes('api key is required') ||
+            lowerMsg.includes('api_key_invalid') ||
             lowerMsg.includes('unauthorized') ||
+            lowerMsg.includes('permission_denied') ||
+            lowerMsg.includes('401') ||
             lowerMsg.includes('403') ||
             lowerMsg.includes('not supported for ai analysis') ||
             lowerMsg.includes('insufficient credits') ||
@@ -79,27 +82,30 @@ export async function runBatchQueue({
             break;
           }
 
-          // Rate limit & temporary quota recovery
+          // Rate limit & temporary server recovery (429, 503, Resource Exhausted)
           const isRateLimit = (
             lowerMsg.includes('rate limit') ||
             lowerMsg.includes('quota') ||
             lowerMsg.includes('429') ||
+            lowerMsg.includes('503') ||
             lowerMsg.includes('resource_exhausted') ||
+            lowerMsg.includes('overloaded') ||
             lowerMsg.includes('too many requests')
           );
 
           if (isRateLimit) {
             if (!globalPausePromise) {
-              console.warn('[BatchProcessor] Rate limit encountered. Brief 2.5s backoff for all workers...');
-              globalPausePromise = new Promise(resolve => setTimeout(resolve, 2500));
+              const backoffMs = Math.min(10000, 3000 * Math.pow(1.4, attempts - 1) + Math.random() * 500);
+              console.warn(`[BatchProcessor] Rate limit / 503 encountered. Pausing queue for ${Math.round(backoffMs)}ms...`);
+              globalPausePromise = new Promise(resolve => setTimeout(resolve, backoffMs));
               globalPausePromise.then(() => { globalPausePromise = null; });
             }
             await globalPausePromise;
           }
 
           if (attempts < maxAttempts && (!shouldStop || !shouldStop())) {
-            // Progressive jittered delay: attempt 1 -> ~1000ms, attempt 2 -> ~2200ms
-            const delay = Math.round(1000 * Math.pow(1.8, attempts - 1) + Math.random() * 400);
+            // Progressive jittered delay: attempt 1 -> ~1500ms, attempt 2 -> ~3000ms, attempt 3 -> ~6000ms
+            const delay = Math.round(1500 * Math.pow(2, attempts - 1) + Math.random() * 500);
             await new Promise(r => setTimeout(r, delay));
           }
         }

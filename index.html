@@ -170,31 +170,33 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- TopNavBar (Fixed 68px) -->
-  <nav class="fixed top-0 w-full h-[68px] z-50 border-b border-outline-variant bg-surface-container dark:bg-surface-container flex justify-between items-center px-margin_desktop">
+  <nav class="fixed top-0 w-full h-[68px] z-50 border-b border-outline-variant bg-[#191c1f] flex justify-between items-center px-4 md:px-margin_desktop">
     <div class="flex items-center gap-3">
       <a href="#" class="flex items-center gap-2 select-none group">
         <img src="Logo/logo.png" alt="Microstock Tool Logo" class="h-10 md:h-12 w-auto object-contain select-none group-hover:scale-[1.02] transition-transform">
       </a>
     </div>
 
-
     <!-- Right Controls Group -->
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-3">
       <!-- Desktop Navigation Links -->
-      <div class="hidden md:flex items-center gap-3 mr-2">
+      <div class="hidden md:flex items-center gap-3">
         <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all cursor-pointer" id="nav-btn-tutorial">
           Tutorial
         </button>
-    <!-- Right Header Actions (AI Status, Auth & Hamburger) -->
-    <div class="flex items-center gap-3">
-      <!-- AI Engine Status Badge -->
-      <div class="ai-status-badge cursor-pointer transition-all hover:border-[#00dbe9]" id="ai-status-badge" title="Click to configure AI Provider & API Keys">
+        <button class="bg-[#191c1f] border border-[#3b494b] text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:border-[#00dbe9] hover:text-[#00dbe9] hover:shadow-[0_0_10px_rgba(0,219,233,0.2)] transition-all cursor-pointer" id="nav-btn-contact">
+          Contact
+        </button>
+      </div>
+
+      <!-- AI Engine Status Badge (Desktop Only) -->
+      <div class="ai-status-badge cursor-pointer transition-all hover:border-[#00dbe9] hidden md:inline-flex" id="ai-status-badge" title="Click to configure AI Provider & API Keys">
         <span class="ai-dot ai-dot-disconnected"></span> AI OFF
       </div>
 
-      <!-- Mobile Hamburger Toggle (3-line Menu) -->
-      <button class="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-white bg-[#191c1f] border border-[#3b494b] hover:border-[#00dbe9] transition-all md:hidden cursor-pointer" id="hamburger-btn" onclick="const drawer = document.getElementById('mobile-nav-drawer'); const overlay = document.getElementById('mobile-overlay'); drawer.classList.toggle('active'); overlay.classList.toggle('hidden', !drawer.classList.contains('active'));" aria-label="Open Navigation Menu">
-        <span class="material-symbols-outlined text-[22px]">menu</span>
+      <!-- Mobile 3-Line Hamburger Menu Button (Right Side, Mobile Only) -->
+      <button class="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface-variant hover:text-white bg-[#191c1f] border border-[#3b494b] hover:border-[#00dbe9] transition-all md:hidden cursor-pointer" id="hamburger-btn" aria-label="Open Navigation Menu">
+        <span class="material-symbols-outlined text-[24px]">menu</span>
       </button>
     </div>
   </nav>

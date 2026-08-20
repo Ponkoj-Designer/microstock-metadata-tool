@@ -1547,9 +1547,16 @@ function saveSettings() {
 
 // ─── Event Listeners ────────────────────────────────────────────────────────
 function setupEventListeners() {
-  // Hamburger
-  document.getElementById('hamburger-btn')?.addEventListener('click', () =>
-    document.getElementById('mobile-nav-drawer')?.classList.toggle('active'));
+  // Hamburger menu toggle
+  document.getElementById('hamburger-btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const drawer = document.getElementById('mobile-nav-drawer');
+    const overlay = document.getElementById('mobile-overlay');
+    if (!drawer) return;
+    const isActive = drawer.classList.toggle('active');
+    if (overlay) overlay.classList.toggle('hidden', !isActive);
+  });
 
   // Nav
   const modal = id => document.getElementById(id);

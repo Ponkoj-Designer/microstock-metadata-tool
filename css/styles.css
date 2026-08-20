@@ -527,7 +527,10 @@
   box-shadow: 0 0 10px rgba(0, 219, 233, 0.2);
 }
 
-/* Mobile Nav Drawer active state */
+/* Mobile Nav Drawer state — hidden by default, flex when active */
+#mobile-nav-drawer {
+  display: none !important;
+}
 #mobile-nav-drawer.active {
   display: flex !important;
 }
